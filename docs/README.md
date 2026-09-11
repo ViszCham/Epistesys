@@ -17,6 +17,7 @@ Epistesysはv6.3.1のsource cloneとして、receipt検証、TL/TLDG、256×8 wo
 - [Assurance-Compiler status](assurance-compiler-status.md)：16KiB以下Rust単位の補助監査
 - [Known limitations](known-limitations.md)：未観測、Unavailable、Hold、Clarify、fallback
 - [RepoSeiri audit](reposeiri-audit.md)：repository scopeの構成・文言・hold記録
+- [Initial clone release](initial-clone-release-record.md)：initial commitとmain bootstrap
 
 ### 継承元記録の扱い
 
@@ -43,6 +44,7 @@ As a v6.3.1 source clone, Epistesys inherits executable surfaces for receipt ver
 - [Assurance-Compiler status](assurance-compiler-status.md): bounded review of Rust units no larger than 16 KiB
 - [Known limitations](known-limitations.md): unobserved, Unavailable, Hold, Clarify, and fallback states
 - [RepoSeiri audit](reposeiri-audit.md): repository-scope structure, wording, and hold record
+- [Initial clone release](initial-clone-release-record.md): initial commit and main bootstrap
 
 ### Treatment of inherited records
 
