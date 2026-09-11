@@ -63,6 +63,7 @@ Epistesys（エピステシス）`6.3.2-alpha.1`は、Labyrinth-Codex v6.3.1の�
 - [Assurance boundary](docs/assurance-compiler-status.md)：bounded static reviewのstatus
 - [Known limitations](docs/known-limitations.md)：alphaの未観測・保留・再検証条件
 - [RepoSeiri audit](docs/reposeiri-audit.md)：構成・文言・保留状態の監査記録
+- [Initial clone release](docs/initial-clone-release-record.md)：root commitとmain bootstrapの記録
 
 `docs/`内のv6.3.1文書は継承元の履歴的な設計・監査記録です。Epistesys独自の機能追加を示すものではなく、現在のidentityと状態は本README、clone verification、known limitationsを基準にします。
 
@@ -135,6 +136,7 @@ These capabilities execute and can be inspected in the clone. Missing external r
 - [Assurance boundary](docs/assurance-compiler-status.md): bounded static-review status
 - [Known limitations](docs/known-limitations.md): alpha observations, holds, and revalidation conditions
 - [RepoSeiri audit](docs/reposeiri-audit.md): repository-structure, wording, and hold observations
+- [Initial clone release](docs/initial-clone-release-record.md): root commit and main-bootstrap record
 
 The v6.3.1 documents under `docs/` are inherited historical design and audit records. They do not describe new Epistesys features; the current identity and state are defined by this README, clone verification, and known limitations.
 
