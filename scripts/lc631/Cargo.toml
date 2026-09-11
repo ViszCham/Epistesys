@@ -1,0 +1,30 @@
+[workspace]
+members = [
+    "crates/lc631-receipt-kernel",
+    "crates/lc631-core",
+    "crates/lc631-analysis",
+    "crates/lc631-tl",
+    "crates/lc631-tldg",
+    "crates/lc631-world",
+    "crates/lc631-accelerator",
+    "crates/lc631-media",
+    "crates/lc631-host",
+    "crates/lc631-compat",
+    "crates/lc631-wire",
+    "crates/lc631-cli",
+]
+resolver = "2"
+
+[workspace.package]
+version = "6.3.2-alpha.1"
+edition = "2021"
+license = "UNLICENSED"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.11"
+getrandom = "0.3"
+cubecl-core = { version = "=0.10.0", default-features = false, features = ["std"] }
+cubecl-wgpu = { version = "=0.10.0", default-features = false, features = ["std"] }
+wgpu = { version = "=29.0.4", default-features = false }

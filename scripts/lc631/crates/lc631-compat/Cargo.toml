@@ -1,0 +1,9 @@
+[package]
+name = "lc631-compat"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+sha2.workspace = true

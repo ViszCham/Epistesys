@@ -1,0 +1,19 @@
+[package]
+name = "lc631-accelerator"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+default = ["gpu-cubecl-wgpu"]
+gpu-cubecl-wgpu = ["dep:cubecl-core", "dep:cubecl-wgpu", "dep:wgpu"]
+
+[dependencies]
+lc631-core = { path = "../lc631-core" }
+lc631-receipt-kernel = { path = "../lc631-receipt-kernel" }
+lc631-world = { path = "../lc631-world" }
+serde.workspace = true
+sha2.workspace = true
+cubecl-core = { workspace = true, optional = true }
+cubecl-wgpu = { workspace = true, optional = true }
+wgpu = { workspace = true, optional = true }

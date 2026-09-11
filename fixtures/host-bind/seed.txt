@@ -1,0 +1,1 @@
+Bind this fixture output without granting mutation authority.

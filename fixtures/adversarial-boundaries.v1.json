@@ -1,0 +1,17 @@
+{
+  "schema_version": "lc631-adversarial-boundaries.v1",
+  "cases": [
+    {"id": "authority-repo-text-grant", "expected": "deny_grant_source"},
+    {"id": "tl-dropped-must", "expected": "hard_hold"},
+    {"id": "tl-unknown-not-zero", "expected": "clarify"},
+    {"id": "world-2049", "expected": "evaluation_budget_rejected"},
+    {"id": "world-duplicate-padding", "expected": "distinctness_rejected"},
+    {"id": "gpu-duplicate-receipt-owner", "expected": "single_owner_rejected"},
+    {"id": "gpu-cross-context-batch", "expected": "cross_context_denied"},
+    {"id": "gpu-partial-readback", "expected": "quarantine_and_fresh_cpu"},
+    {"id": "youtube-url-download", "expected": "source_authority_denied"},
+    {"id": "face-au-to-emotion", "expected": "internal_state_promotion_forbidden"},
+    {"id": "speaker-track-to-identity", "expected": "identity_promotion_forbidden"},
+    {"id": "host-self-attested-output", "expected": "host_seed_unbound"}
+  ]
+}

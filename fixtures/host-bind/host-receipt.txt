@@ -1,0 +1,1 @@
+external-host-receipt-fixture-integrity-only-not-authentication

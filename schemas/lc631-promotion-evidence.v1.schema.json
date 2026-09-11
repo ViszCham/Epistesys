@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "lc631-promotion-evidence.v1.schema.json",
+  "title": "LC631 promotion evidence",
+  "type": "object",
+  "required": ["schema_version", "binding", "receipts"],
+  "properties": {
+    "schema_version": { "const": "lc631-promotion-evidence.v1" },
+    "binding": {
+      "type": "object",
+      "required": [
+        "candidate_commit",
+        "worktree_clean",
+        "engine_version",
+        "v630_baseline_commit",
+        "package_binary_sha256",
+        "installed_binary_sha256",
+        "host_identity_sha256",
+        "platform",
+        "device_identity_sha256",
+        "driver_sha256",
+        "corpus_sha256",
+        "benchmark_settings_sha256"
+      ],
+      "properties": {
+        "candidate_commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "worktree_clean": { "const": true },
+        "engine_version": { "type": "string", "minLength": 1 },
+        "v630_baseline_commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "package_binary_sha256": { "$ref": "#/$defs/sha256" },
+        "installed_binary_sha256": { "$ref": "#/$defs/sha256" },
+        "host_identity_sha256": { "$ref": "#/$defs/sha256" },
+        "platform": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "device_identity_sha256": { "$ref": "#/$defs/sha256" },
+        "driver_sha256": { "$ref": "#/$defs/sha256" },
+        "corpus_sha256": { "$ref": "#/$defs/sha256" },
+        "benchmark_settings_sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "additionalProperties": false
+    },
+    "receipts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["predicate", "slot", "receipt"],
+        "properties": {
+          "predicate": {
+            "enum": [
+              "v630_frozen",
+              "namespace_collision_free",
+              "translation_witness_end_to_end",
+              "world_budget_exact_2048",
+              "world_distinctness",
+              "gpu_mandatory_lane_coverage",
+              "gpu_fault_contained",
+              "media_source_authority",
+              "media_backends_observed",
+              "host_output_bound",
+              "paired_v630_v631_regression",
+              "full_validation",
+              "package_installed_host_pickup"
+            ]
+          },
+          "slot": { "type": "string", "minLength": 1, "maxLength": 64 },
+          "receipt": { "$ref": "lc631-authenticated-receipt.v1.schema.json" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+  },
+  "additionalProperties": false
+}

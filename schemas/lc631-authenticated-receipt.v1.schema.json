@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "lc631-authenticated-receipt.v1.schema.json",
+  "title": "Labyrinth-Codex v6.3.1 Untrusted Receipt Wire Envelope",
+  "type": "object",
+  "required": ["claims", "mac_sha256"],
+  "properties": {
+    "claims": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "issuer",
+        "class",
+        "subject_revision",
+        "scope",
+        "nonce_hex",
+        "payload_digest",
+        "issued_at_epoch",
+        "expires_at_epoch",
+        "parent_receipt_digest"
+      ],
+      "properties": {
+        "schema_version": { "const": "lc631-authenticated-receipt.v1" },
+        "issuer": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "class": {
+          "enum": [
+            "accelerator",
+            "authority",
+            "baseline",
+            "closure",
+            "host_output",
+            "host_seed",
+            "media_backend",
+            "media_source",
+            "package",
+            "remote_ci",
+            "release_evaluation",
+            "stage_completion",
+            "tldg_backend",
+            "tool_execution",
+            "validation",
+            "verifier_capability"
+          ]
+        },
+        "subject_revision": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "scope": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "nonce_hex": { "type": "string", "pattern": "^[0-9a-fA-F]{32}$" },
+        "payload_digest": { "$ref": "#/$defs/sha256" },
+        "issued_at_epoch": { "type": "integer", "minimum": 0 },
+        "expires_at_epoch": {
+          "oneOf": [{ "type": "integer", "minimum": 0 }, { "type": "null" }]
+        },
+        "parent_receipt_digest": {
+          "oneOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }]
+        }
+      },
+      "additionalProperties": false
+    },
+    "mac_sha256": { "$ref": "#/$defs/sha256" }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^sha256:[0-9a-fA-F]{64}$" }
+  },
+  "additionalProperties": false
+}

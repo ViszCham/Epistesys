@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "lc631-program-analysis.v1.schema.json",
+  "title": "Labyrinth-Codex v6.3.1 Program Analysis Report",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "version",
+    "shadow_only",
+    "corpora",
+    "languages",
+    "target",
+    "stages",
+    "directional_loss",
+    "dependency_order_valid",
+    "wiring_complete",
+    "observed_count",
+    "unresolved_count",
+    "release_complete",
+    "creates_authority",
+    "creates_output_commit",
+    "residual_risks",
+    "claim_boundary"
+  ],
+  "properties": {
+    "schema_version": { "const": "lc631-program-analysis.v1" },
+    "version": { "const": "6.3.1" },
+    "shadow_only": { "const": true },
+    "corpora": { "type": "array", "minItems": 3 },
+    "languages": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "enum": ["rust", "python", "assembly"] }
+    },
+    "target": {
+      "type": "object",
+      "required": [
+        "languages",
+        "selection_owner",
+        "selection_authoritative",
+        "selection_conflicts",
+        "unknowns"
+      ],
+      "properties": {
+        "selection_authoritative": { "type": "boolean" },
+        "selection_conflicts": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "stages": {
+      "type": "array",
+      "minItems": 40,
+      "maxItems": 40,
+      "items": {
+        "type": "object",
+        "required": [
+          "stage_id",
+          "group",
+          "dependencies",
+          "state",
+          "evidence_digests",
+          "blockers",
+          "creates_authority",
+          "creates_output_commit"
+        ],
+        "properties": {
+          "stage_id": { "pattern": "^RPA-(0[0-9]|[12][0-9]|3[0-9])$" },
+          "state": {
+            "enum": [
+              "observed",
+              "not_applicable",
+              "candidate",
+              "needs_evidence",
+              "not_authorized",
+              "unavailable",
+              "refuted"
+            ]
+          },
+          "closure_state": {
+            "enum": ["open", "candidate", "satisfied", "blocked", "not_applicable"]
+          },
+          "creates_authority": { "const": false },
+          "creates_output_commit": { "const": false }
+        }
+      }
+    },
+    "directional_loss": { "type": "array", "minItems": 1 },
+    "canonical_translation": {
+      "type": "object",
+      "properties": {
+        "schema_version": { "const": "lc631-translation-envelope.v3" },
+        "scalar_aggregate_used": { "const": false }
+      },
+      "additionalProperties": true
+    },
+    "dependency_order_valid": { "type": "boolean" },
+    "wiring_complete": { "type": "boolean" },
+    "observed_count": { "type": "integer", "minimum": 0 },
+    "unresolved_count": { "type": "integer", "minimum": 0 },
+    "satisfied_count": { "type": "integer", "minimum": 0 },
+    "blocked_count": { "type": "integer", "minimum": 0 },
+    "release_complete": { "type": "boolean" },
+    "creates_authority": { "const": false },
+    "creates_output_commit": { "const": false },
+    "residual_risks": { "type": "array", "items": { "type": "string" } },
+    "claim_boundary": { "type": "string", "minLength": 1 }
+  },
+  "additionalProperties": true
+}

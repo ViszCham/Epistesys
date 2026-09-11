@@ -1,0 +1,9 @@
+[package]
+name = "lc631-world"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+lc631-core = { path = "../lc631-core" }
+serde.workspace = true

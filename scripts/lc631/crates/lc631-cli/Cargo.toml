@@ -1,0 +1,28 @@
+[package]
+name = "lc631-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+default = ["gpu-cubecl-wgpu"]
+gpu-cubecl-wgpu = ["lc631-accelerator/gpu-cubecl-wgpu", "lc631-tldg/gpu-cubecl-wgpu"]
+
+[[bin]]
+name = "lc631"
+path = "src/main.rs"
+
+[dependencies]
+lc631-accelerator = { path = "../lc631-accelerator", default-features = false }
+lc631-analysis = { path = "../lc631-analysis" }
+lc631-compat = { path = "../lc631-compat" }
+lc631-core = { path = "../lc631-core" }
+lc631-host = { path = "../lc631-host" }
+lc631-media = { path = "../lc631-media" }
+lc631-receipt-kernel = { path = "../lc631-receipt-kernel" }
+lc631-tl = { path = "../lc631-tl" }
+lc631-tldg = { path = "../lc631-tldg" }
+lc631-wire = { path = "../lc631-wire" }
+lc631-world = { path = "../lc631-world" }
+serde.workspace = true
+serde_json.workspace = true

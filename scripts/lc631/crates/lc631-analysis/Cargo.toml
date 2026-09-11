@@ -1,0 +1,13 @@
+[package]
+name = "lc631-analysis"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+lc631-core = { path = "../lc631-core" }
+lc631-receipt-kernel = { path = "../lc631-receipt-kernel" }
+lc631-tl = { path = "../lc631-tl" }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true

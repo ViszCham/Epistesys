@@ -1,0 +1,16 @@
+# Build and generated state
+target/
+scripts/lc631/target/
+**/target/
+.codex/
+.cache/
+*.local
+
+# Local credentials, receipts, replay state, and benchmark output
+credentials/
+secrets/
+receipt-root/
+replay-ledger/
+benchmarks/results/
+*.secret
+*.token

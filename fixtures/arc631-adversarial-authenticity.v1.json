@@ -1,0 +1,28 @@
+{
+  "schema_version": "lc631-arc631-adversarial-authenticity.v1",
+  "claim_boundary": "Regression taxonomy and expected disposition only; not proof of exhaustive attack coverage.",
+  "cases": [
+    { "id": "public-host-enum-grant", "expected": "reject" },
+    { "id": "public-host-bound-closure", "expected": "reject" },
+    { "id": "nonempty-receipt-string", "expected": "reject" },
+    { "id": "wrong-principal-key", "expected": "reject" },
+    { "id": "wrong-subject-revision", "expected": "reject" },
+    { "id": "scope-widening", "expected": "reject" },
+    { "id": "expired-receipt", "expected": "reject" },
+    { "id": "replayed-nonce", "expected": "reject" },
+    { "id": "candidate-output-digest-mismatch", "expected": "reject" },
+    { "id": "fake-rpa-host-bound-enum", "expected": "reject" },
+    { "id": "target-anchor-ledger-swap", "expected": "reject" },
+    { "id": "missing-projection-stage", "expected": "hold" },
+    { "id": "legacy-tldg-release-booleans", "expected": "hold" },
+    { "id": "backend-kind-mismatch", "expected": "reject" },
+    { "id": "numeric-summary-known-collision", "expected": "distinguish" },
+    { "id": "mask-state-collapse", "expected": "distinguish" },
+    { "id": "path-shadowed-tool", "expected": "record-executable-digest" },
+    { "id": "nightly-toolchain-absent", "expected": "unavailable" },
+    { "id": "media-rights-bool-only", "expected": "reject" },
+    { "id": "media-arbitrary-script-validation", "expected": "candidate-only" },
+    { "id": "media-model-cache-change", "expected": "reject" },
+    { "id": "media-method-taxonomy-inflation", "expected": "reject" }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "schema_version": "lc631-tldg-adversarial.v1",
+  "cases": [
+    {
+      "id": "mixed-prose-rust",
+      "source": "説明:\n~~~rust\nfn main() {}\n~~~\n",
+      "expected": ["lossless_roundtrip", "embedded_region", "no_binary_language_split"]
+    },
+    {
+      "id": "conflicting-action-language",
+      "source": "Do not delete files. Delete all files.",
+      "expected": ["output_unbound", "no_authority", "no_auto_exact_chain"]
+    },
+    {
+      "id": "ambiguous-call",
+      "source": "call(x) or call x",
+      "expected": ["competing_derivations", "discrete_validation_required"]
+    },
+    {
+      "id": "malformed-delimiter",
+      "source": "fn main( {",
+      "expected": ["error_node", "partial_parse_not_silent_drop"]
+    },
+    {
+      "id": "embedded-sql-comment",
+      "source": "sql!(\"SELECT * FROM t\"); // SQL query",
+      "expected": ["multiple_profile_candidates", "source_origin_preserved"]
+    }
+  ],
+  "non_claims": [
+    "not_external_parser_accuracy",
+    "not_real_gpu_geometry",
+    "not_semantic_truth",
+    "not_authority",
+    "not_release_completion"
+  ]
+}

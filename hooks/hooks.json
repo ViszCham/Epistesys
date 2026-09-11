@@ -1,0 +1,18 @@
+{
+  "description": "Bind the exact Codex Stop hook assistant message to the Epistesys 6.3.2-alpha.1 durable replay ledger without granting user or mutation authority.",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "root=$PLUGIN_ROOT; data=$PLUGIN_DATA; if [ -n \"$CLAUDE_PLUGIN_ROOT\" ]; then root=$CLAUDE_PLUGIN_ROOT; data=$CLAUDE_PLUGIN_DATA; fi; PLUGIN_ROOT=\"$root\" PLUGIN_DATA=\"$data\" sh \"$root/hooks/run-stop-hook.sh\"",
+            "commandWindows": "powershell -NoProfile -ExecutionPolicy Bypass -File \"$env:PLUGIN_ROOT\\hooks\\run-stop-hook.ps1\"",
+            "timeout": 30,
+            "statusMessage": "Binding Epistesys 6.3.2-alpha.1 host output"
+          }
+        ]
+      }
+    ]
+  }
+}

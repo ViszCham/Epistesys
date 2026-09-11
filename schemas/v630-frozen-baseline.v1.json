@@ -1,0 +1,10 @@
+{
+  "schema_version": "lc631-v630-frozen-baseline.v1",
+  "commit_sha": "0d933982fa392043c2fe825644a3a560963b6615",
+  "protected_files": [
+    {"path": ".codex-plugin/plugin.json", "sha256": "172961d5f06f1d8ccd395133e1a67ccf5c230e874be4a1e5199e0362"},
+    {"path": "scripts/reasoning-helper/Cargo.toml", "sha256": "0ae97c5556baab8b1e80967877c37b13632bfb42d1cc50a40649a5baaf680fac"},
+    {"path": "scripts/reasoning-helper/Cargo.lock", "sha256": "261b3653b855e0dcf76ac8c977c2ec6ae85372b8a63b6a04e6267a171dac2823"}
+  ],
+  "claim_boundary": "A matching digest is baseline identity evidence, not proof of repository-wide equivalence or safety."
+}

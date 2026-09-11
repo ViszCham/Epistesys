@@ -1,0 +1,1 @@
+external-host-callback-fixture-not-automatic-host-interception

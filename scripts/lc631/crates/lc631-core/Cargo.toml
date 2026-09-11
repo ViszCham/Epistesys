@@ -1,0 +1,13 @@
+[package]
+name = "lc631-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+lc631-receipt-kernel = { path = "../lc631-receipt-kernel" }
+serde.workspace = true
+sha2.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

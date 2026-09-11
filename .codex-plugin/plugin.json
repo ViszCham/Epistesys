@@ -1,0 +1,24 @@
+{
+  "name": "epistesys",
+  "version": "6.3.2-alpha.1",
+  "description": "Epistesys (エピステシス) 6.3.2-alpha.1: a private clone of the v6.3.1 implementation with authenticated receipts, ProjectionDefectGraph v3, 2,048-evaluation GPU decision parity, bounded local-media candidates, and fail-closed release gates.",
+  "author": {
+    "name": "Labyrinth-Codex authors"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Epistesys 6.3.2-alpha.1",
+    "shortDescription": "Run the private Epistesys clone of the v6.3.1 implementation.",
+    "longDescription": "An independent private clone that preserves the v6.3.1 implementation surface: principal/subject/scope-bound receipt verification, ProjectionDefectGraph v3 witnesses, shared natural/program syntax, revisioned discrete-continuous distillation, exact 256x8 world-evaluation materialization, eight-lane bounded-readback GPU decision parity, authority-attested local-media candidates, and authenticated durable-replay source paths.",
+    "developerName": "Epistesys authors",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Read"
+    ],
+    "defaultPrompt": [
+      "Audit this request through the Epistesys 6.3.2-alpha.1 clone.",
+      "Inspect inherited v6.3.1 behavior without changing files."
+    ]
+  }
+}
