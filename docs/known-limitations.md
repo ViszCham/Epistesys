@@ -2,6 +2,8 @@
 
 ## 日本語
 
+[研究目標・設計目標・研究仮説](research-hypotheses.md)を区別する。hallucination containment、constraint preservation、long-horizon instruction integrity、failure observability、reliable complexity frontierの研究効果はbenchmark pending / independent evaluation pendingである。
+
 - 初回版はLabyrinth-Codex v6.3.1のクローンであり、Epistesys独自の推論改善を含まない。
 - packaged binaryはclone・依存crate・toolchainのabsolute build path監査が未完了のため、source-only扱いである。
 - `lc631-tl-doctor`は入力によって`Clarify`、parse defect、Program IRまたはhost output未bindingを返し得る。source roundtrip exactはsemantic exactnessではない。
@@ -14,6 +16,8 @@
 次のalpha検証では、sourceからの再現可能binary、別cwd起動、fixture出力、schema互換性、receipt/replay分離を再確認する。問題があればclone契約を更新し、Epistesys-7へ機能変更を混ぜない。
 
 ## English
+
+Distinguish [research goals, design objectives, and research hypotheses](research-hypotheses.md). Research effects for hallucination containment, constraint preservation, long-horizon instruction integrity, failure observability, and the reliable complexity frontier remain benchmark pending / independent evaluation pending.
 
 - The initial version is a clone of Labyrinth-Codex v6.3.1 and contains no Epistesys-specific reasoning improvement.
 - It remains source-only because absolute build paths in the clone, dependency crates, and toolchain have not completed the distribution audit.

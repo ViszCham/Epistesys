@@ -4,6 +4,10 @@
 
 Epistesys 6.3.2-alpha.1の文書は、clone契約、採否、実行検証、証拠境界、既知の制約を入口から追跡できるように整理します。説明文は日本語を前半、対応する英語を後半に置きます。
 
+### 研究目的と設計
+
+研究目標は、定義した信頼性を維持できる範囲の把握と拡張可能性の検証です。設計目標は制約・権限・状態・証拠の明示保持、defectの可観測性、commit前の再検証です。その結果として信頼性が改善するかは未検証の研究仮説です。[研究仮説と評価方針](research-hypotheses.md)に五つの研究課題・設計手段・測定項目を整理しています。benchmarkと独立評価は未実施です。
+
 ### 実装能力の入口
 
 Epistesysはv6.3.1のsource cloneとして、receipt検証、TL/TLDG、256×8 world budget、RPA-00〜39、candidate-only Media、Host replay v2を実行可能な形で継承しています。build/test/clippy/CLIの検証記録は、単なる計画ではなくcloneで観測した実行結果です。外部receiptやhost pickupが未成立でも、これらのsource経路を未実装とは扱いません。
@@ -30,6 +34,10 @@ local test、低loss、schemaの存在、GPU実行、source hash、Assurance sta
 ## English
 
 Epistesys 6.3.2-alpha.1 documentation is organized so that clone contract, disposition, execution validation, evidence boundaries, and known limitations can be followed from the entry point. Explanatory prose places Japanese first and equivalent English second.
+
+### Research purpose and design
+
+The research goal is to characterize reliable coverage and test its possible expansion. Design objectives are explicit retention of constraints, authority, state, and evidence, observable defects, and revalidation before commitment. Whether these improve reliability is an untested research hypothesis. The [research hypotheses and evaluation plan](research-hypotheses.md) maps five research questions to design mechanisms and measurements. Benchmarking and independent evaluation are pending.
 
 ### Entry point for implemented capabilities
 
