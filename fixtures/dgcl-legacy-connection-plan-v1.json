@@ -1,0 +1,20 @@
+{
+  "schema_version": "epistesys-coding-connection-plan.v1",
+  "source": "Please parse this source.",
+  "source_revision": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+  "requirement_id": 1,
+  "expected_polarity": "positive",
+  "expected_condition_kind": null,
+  "expected_scope": null,
+  "implementation_path": "src/lib.rs",
+  "implementation_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+  "implementation_symbol": "target",
+  "router_path": "src/main.rs",
+  "router_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+  "executable_path": "target/debug/lc631.exe",
+  "executable_digest": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+  "command": "lc631-dg1-doctor",
+  "arguments": ["--prompt", "Please parse this source."],
+  "expected_json_pointer": "/payload/schema_version",
+  "expected_json_value": "epistesys-dg1-parse.v1"
+}

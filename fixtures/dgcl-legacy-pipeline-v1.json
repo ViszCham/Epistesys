@@ -1,0 +1,10 @@
+{
+  "schema_version": "epistesys-dgcl-pipeline.v1",
+  "source_revision": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "dg1": {},
+  "language_regions": [],
+  "unsupported_operative_region_ids": [],
+  "requirement_bindings": [],
+  "authority_created": false,
+  "complete_instruction_grammar_claim": false
+}

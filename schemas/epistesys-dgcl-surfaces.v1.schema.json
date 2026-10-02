@@ -1,0 +1,1061 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://epistesys.invalid/schemas/epistesys-dgcl-surfaces.v1.schema.json",
+  "title": "DGCL additive analysis and closure surfaces",
+  "oneOf": [
+    { "$ref": "#/$defs/nlp_observation" },
+    { "$ref": "#/$defs/pipeline" },
+    { "$ref": "#/$defs/instruction_parse" },
+    { "$ref": "#/$defs/gold_corpus" },
+    { "$ref": "#/$defs/gold_evaluation" },
+    { "$ref": "#/$defs/gold_provenance" },
+    { "$ref": "#/$defs/gold_provenance_report" },
+    { "$ref": "#/$defs/gold_decision_observation" },
+    { "$ref": "#/$defs/gold_decision_evaluation" },
+    { "$ref": "#/$defs/connection_plan" },
+    { "$ref": "#/$defs/connection_report" },
+    { "$ref": "#/$defs/lifecycle_snapshot" },
+    { "$ref": "#/$defs/evidence_lease" },
+    { "$ref": "#/$defs/lifecycle_observation" },
+    { "$ref": "#/$defs/checkpoint" },
+    { "$ref": "#/$defs/checkpoint_v2" },
+    { "$ref": "#/$defs/checkpoint_head" },
+    { "$ref": "#/$defs/resume_observation" },
+    { "$ref": "#/$defs/repair_request" },
+    { "$ref": "#/$defs/repair_application" },
+    { "$ref": "#/$defs/repair_validation" },
+    { "$ref": "#/$defs/repair_loop_report" },
+    { "$ref": "#/$defs/standalone_candidate" },
+    { "$ref": "#/$defs/host_output_stage_ledger" },
+    { "$ref": "#/$defs/finalization" },
+    { "$ref": "#/$defs/standalone_run" },
+    { "$ref": "#/$defs/cargo_validation_plan" },
+    { "$ref": "#/$defs/package_validation_bundle" },
+    { "$ref": "#/$defs/package_finalization" },
+    { "$ref": "#/$defs/package_repair_bundle" },
+    { "$ref": "#/$defs/package_repair" },
+    { "$ref": "#/$defs/package_resume" },
+    { "$ref": "#/$defs/consumer_view_v1" },
+    { "$ref": "#/$defs/consumer_view_v2" },
+    { "$ref": "#/$defs/structural_distillation" }
+  ],
+  "$defs": {
+    "structural_distillation": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema_version", "input_constraints_digest", "run", "constraint_witnesses", "claim_boundary"],
+      "properties": {
+        "schema_version": { "const": "epistesys-dgcl-structural-distillation.v1" },
+        "input_constraints_digest": { "$ref": "#/$defs/digest" },
+        "run": { "type": ["object", "null"] },
+        "constraint_witnesses": { "type": "array", "maxItems": 4096, "items": {
+          "type": "object", "additionalProperties": false,
+          "required": ["requirement_id", "ast_digest", "constraint_edge_index", "materialization_id", "semantic_truth_claim", "authority_created"],
+          "properties": { "requirement_id": { "$ref": "#/$defs/digest" }, "ast_digest": { "$ref": "#/$defs/digest" },
+            "constraint_edge_index": { "type": "integer", "minimum": 0 }, "materialization_id": { "$ref": "#/$defs/digest" },
+            "semantic_truth_claim": { "const": false }, "authority_created": { "const": false } }
+        } },
+        "claim_boundary": { "type": "string" }
+      }
+    },
+    "consumer_view_v1": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema_version", "source_revision", "candidate_digest", "implementation_complete_candidate", "host_send_authorized", "output_commit_allowed"],
+      "properties": { "schema_version": { "const": "epistesys-dgcl-consumer-view.v1" },
+        "source_revision": { "$ref": "#/$defs/digest" }, "candidate_digest": { "$ref": "#/$defs/digest" },
+        "implementation_complete_candidate": { "const": false }, "host_send_authorized": { "const": false }, "output_commit_allowed": { "const": false } }
+    },
+    "consumer_view_v2": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema_version", "source_revision", "candidate_digest", "reported_implementation_complete_candidate", "requirement_realizations", "host_observation", "host_send_authorized", "output_commit_allowed", "authority_created", "claim_boundary"],
+      "properties": { "schema_version": { "const": "epistesys-dgcl-consumer-view.v2" },
+        "source_revision": { "$ref": "#/$defs/digest" }, "candidate_digest": { "$ref": "#/$defs/digest" },
+        "reported_implementation_complete_candidate": { "type": "boolean" }, "requirement_realizations": { "type": "array" },
+        "host_observation": { "type": "object" }, "host_send_authorized": { "const": false },
+        "output_commit_allowed": { "const": false }, "authority_created": { "const": false }, "claim_boundary": { "type": "string" } }
+    },
+    "package_resume": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema_version", "candidate", "claims", "processes", "journal", "repair_reapplied", "completion_restored_from_checkpoint", "authority_created", "host_send_authorized", "output_commit_allowed", "host_observation", "research_evaluation"],
+      "properties": { "schema_version": { "const": "epistesys-dgcl-package-resume.v1" },
+        "candidate": { "$ref": "#/$defs/standalone_candidate" }, "claims": { "type": "array", "maxItems": 40 },
+        "processes": { "type": "array", "maxItems": 32 }, "journal": { "$ref": "#/$defs/resume_observation" },
+        "repair_reapplied": { "const": false }, "completion_restored_from_checkpoint": { "const": false },
+        "authority_created": { "const": false }, "host_send_authorized": { "const": false }, "output_commit_allowed": { "const": false },
+        "host_observation": { "const": "pending" }, "research_evaluation": { "const": "pending_no_corpus" } }
+    },
+    "cargo_validation_plan": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema_version", "source_revision", "completion_plan_digest", "requirement_id", "task_id", "kind", "cargo_path", "cargo_digest", "manifest_path", "manifest_digest", "repository_root_digest", "acceptance_target", "acceptance_test", "timeout_ms"],
+      "properties": {
+        "schema_version": { "const": "epistesys-dgcl-cargo-validation-plan.v1" },
+        "source_revision": { "$ref": "#/$defs/digest" }, "completion_plan_digest": { "$ref": "#/$defs/digest" },
+        "requirement_id": { "$ref": "#/$defs/digest" }, "task_id": { "$ref": "#/$defs/digest" },
+        "kind": { "enum": ["static_validation", "runtime_validation", "production_connection", "acceptance_test"] },
+        "cargo_path": { "type": "string", "minLength": 1 }, "cargo_digest": { "$ref": "#/$defs/digest" },
+        "manifest_path": { "type": "string", "minLength": 1 }, "manifest_digest": { "$ref": "#/$defs/digest" },
+        "repository_root_digest": { "$ref": "#/$defs/digest" },
+        "acceptance_target": { "type": ["string", "null"] }, "acceptance_test": { "type": ["string", "null"] },
+        "timeout_ms": { "type": "integer", "minimum": 1, "maximum": 120000 },
+        "tool_registration": { "type": ["object", "null"] }
+      }
+    },
+    "package_seed_receipt": {
+      "type": "object", "additionalProperties": false,
+      "required": ["artifact_id", "turn_id", "user_start", "user_end", "receipt"],
+      "properties": {
+        "artifact_id": { "type": "integer", "minimum": 0 }, "turn_id": { "type": "integer", "minimum": 0 },
+        "user_start": { "type": "integer", "minimum": 0 }, "user_end": { "type": "integer", "minimum": 0 },
+        "receipt": { "type": "object" }, "authority_receipt": { "type": ["object", "null"] }
+      }
+    },
+    "package_validation_bundle": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema_version", "authority_revision", "revocation_revision", "plans", "seeds", "binding_receipt"],
+      "properties": {
+        "schema_version": { "const": "epistesys-dgcl-package-validation-bundle.v1" },
+        "authority_revision": { "type": "integer", "minimum": 0 }, "revocation_revision": { "type": "integer", "minimum": 0 },
+        "plans": { "type": "array", "minItems": 4, "maxItems": 32, "items": { "$ref": "#/$defs/cargo_validation_plan" } },
+        "seeds": { "type": "array", "minItems": 4, "maxItems": 32, "items": { "$ref": "#/$defs/package_seed_receipt" } },
+        "binding_receipt": { "type": "object" }, "binding_receipts": { "type": "array", "maxItems": 7, "items": { "type": "object" } }
+      }
+    },
+    "package_finalization": {
+      "type": "object", "required": ["schema_version", "source_revision", "completion_plan_digest", "candidate", "claims", "processes", "authority_created", "host_send_authorized", "output_commit_allowed", "host_observation", "research_evaluation"],
+      "properties": {
+        "schema_version": { "const": "epistesys-dgcl-package-finalization.v1" },
+        "source_revision": { "$ref": "#/$defs/digest" }, "completion_plan_digest": { "$ref": "#/$defs/digest" },
+        "candidate": { "$ref": "#/$defs/standalone_candidate" }, "claims": { "type": "array", "maxItems": 40 },
+        "snapshot": { "$ref": "#/$defs/lifecycle_snapshot" },
+        "consumer_views": { "type": "object", "additionalProperties": false, "required": ["legacy_v1", "bounded_v2"],
+          "properties": { "legacy_v1": { "$ref": "#/$defs/consumer_view_v1" }, "bounded_v2": { "$ref": "#/$defs/consumer_view_v2" } } },
+        "processes": { "type": "array", "maxItems": 32 }, "authority_created": { "const": false },
+        "host_send_authorized": { "const": false }, "output_commit_allowed": { "const": false },
+        "host_observation": { "const": "pending" }, "research_evaluation": { "const": "pending_no_corpus" }
+      }
+    },
+    "package_repair_bundle": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema_version", "request", "replacement_utf8", "edit_seed", "validation"],
+      "properties": {
+        "schema_version": { "const": "epistesys-dgcl-package-repair-bundle.v1" },
+        "request": { "$ref": "#/$defs/repair_request" }, "replacement_utf8": { "type": "string", "maxLength": 1048576 },
+        "edit_seed": { "$ref": "#/$defs/package_seed_receipt" }, "validation": { "$ref": "#/$defs/package_validation_bundle" }
+      }
+    },
+    "package_repair": {
+      "type": "object", "required": ["schema_version", "repair", "authority_created", "host_send_authorized", "output_commit_allowed"],
+      "properties": {
+        "schema_version": { "const": "epistesys-dgcl-package-repair.v1" }, "repair": { "$ref": "#/$defs/repair_loop_report" },
+        "journal": { "$ref": "#/$defs/resume_observation" },
+        "authority_created": { "const": false }, "host_send_authorized": { "const": false }, "output_commit_allowed": { "const": false }
+      }
+    },
+    "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "lifecycle_target": {
+      "type": "object",
+      "required": ["target_ref", "target_digest"],
+      "properties": {
+        "target_ref": { "type": "string", "minLength": 1, "maxLength": 1024 },
+        "target_digest": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "lifecycle_snapshot": {
+      "type": "object",
+      "required": ["schema_version", "source_revision", "build_input_digest", "profile_digest", "validator_digest", "authority_revision_digest", "targets_digest", "targets", "snapshot_digest", "observed_boundary"],
+      "properties": {
+        "schema_version": { "const": "epistesys-dgcl-evidence-lifecycle.v1" },
+        "source_revision": { "$ref": "#/$defs/digest" },
+        "build_input_digest": { "$ref": "#/$defs/digest" },
+        "profile_digest": { "$ref": "#/$defs/digest" },
+        "validator_digest": { "$ref": "#/$defs/digest" },
+        "authority_revision_digest": { "$ref": "#/$defs/digest" },
+        "targets_digest": { "$ref": "#/$defs/digest" },
+        "targets": { "type": "array", "maxItems": 4096, "items": { "$ref": "#/$defs/lifecycle_target" } },
+        "snapshot_digest": { "$ref": "#/$defs/digest" },
+        "observed_boundary": { "type": "string" }
+      }
+    },
+    "evidence_lease": {
+      "type": "object",
+      "required": ["schema_version", "snapshot_digest", "source_revision", "build_input_digest", "profile_digest", "validator_digest", "authority_revision_digest", "targets_digest", "issued_at_epoch", "expires_at_epoch", "lease_digest"],
+      "properties": {
+        "schema_version": { "const": "epistesys-dgcl-evidence-lifecycle.v1" },
+        "snapshot_digest": { "$ref": "#/$defs/digest" },
+        "source_revision": { "$ref": "#/$defs/digest" },
+        "build_input_digest": { "$ref": "#/$defs/digest" },
+        "profile_digest": { "$ref": "#/$defs/digest" },
+        "validator_digest": { "$ref": "#/$defs/digest" },
+        "authority_revision_digest": { "$ref": "#/$defs/digest" },
+        "targets_digest": { "$ref": "#/$defs/digest" },
+        "issued_at_epoch": { "type": "integer", "minimum": 0 },
+        "expires_at_epoch": { "type": "integer", "minimum": 1 },
+        "lease_digest": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "lifecycle_observation": {
+      "type": "object",
+      "required": ["state", "expected_snapshot_digest", "observed_snapshot_digest", "lease_digest", "claim_boundary"],
+      "properties": {
+        "state": { "enum": ["current", "expired", "invalid_lease", "stale_source", "stale_build", "stale_profile", "stale_validator", "stale_authority", "stale_targets", "target_not_bound"] },
+        "expected_snapshot_digest": { "$ref": "#/$defs/digest" },
+        "observed_snapshot_digest": { "$ref": "#/$defs/digest" },
+        "lease_digest": { "$ref": "#/$defs/digest" },
+        "claim_boundary": { "type": "string" }
+      }
+    },
+    "span": {
+      "type": "object",
+      "required": ["start", "end"],
+      "properties": {
+        "start": { "type": "integer", "minimum": 0 },
+        "end": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "dependency_sentences": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "tokens": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "text": { "type": "string" },
+                "start_byte": { "type": "integer", "minimum": 0 },
+                "end_byte": { "type": "integer", "minimum": 0 },
+                "words": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": { "type": "integer", "minimum": 1 },
+                      "text": { "type": "string" },
+                      "head": { "type": "integer", "minimum": 0 },
+                      "deprel": { "type": "string" },
+                      "upos": { "type": ["string", "null"] },
+                      "lemma": { "type": ["string", "null"] },
+                      "feats": { "type": ["string", "null"] }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "instruction_ast": {
+      "type": "object",
+      "required": ["production_id", "language", "marker", "source_span", "marker_span", "body_span", "body", "actions", "coordination", "coordination_state", "polarity_scopes", "conditions", "scopes", "references", "constraint_graph", "shared_argument_state"],
+      "properties": {
+        "production_id": { "type": "integer", "minimum": 1 },
+        "language": { "enum": ["english", "japanese"] },
+        "marker": { "enum": ["please", "must", "must_not", "should", "should_not", "may", "do_not", "japanese_request", "japanese_forbidden", "japanese_permission", "japanese_must"] },
+        "source_span": { "$ref": "#/$defs/span" },
+        "marker_span": { "$ref": "#/$defs/span" },
+        "body_span": { "$ref": "#/$defs/span" },
+        "body": { "type": "string" },
+        "actions": { "type": "array", "items": { "$ref": "#/$defs/instruction_action" } },
+        "coordination": { "type": "array", "items": { "$ref": "#/$defs/instruction_coordination" } },
+        "coordination_state": { "enum": ["resolved", "unresolved"] },
+        "polarity_scopes": { "type": "array", "items": { "$ref": "#/$defs/instruction_polarity_scope" } },
+        "conditions": { "type": "array", "items": { "$ref": "#/$defs/instruction_condition" } },
+        "scopes": { "type": "array", "items": { "$ref": "#/$defs/instruction_scope" } },
+        "references": { "type": "array", "items": { "$ref": "#/$defs/instruction_reference" } },
+        "constraint_graph": { "$ref": "#/$defs/instruction_constraint_graph" },
+        "shared_argument_state": { "enum": ["not_applicable", "unresolved_candidate"] }
+      }
+    },
+    "instruction_action": {
+      "type": "object",
+      "required": ["source_span", "text", "marker_span", "modality", "polarity", "connector_before"],
+      "properties": {
+        "source_span": { "$ref": "#/$defs/span" },
+        "text": { "type": "string" },
+        "marker_span": { "oneOf": [{ "$ref": "#/$defs/span" }, { "type": "null" }] },
+        "modality": { "enum": ["requested", "required", "recommended", "permitted", "unknown"] },
+        "polarity": { "enum": ["positive", "forbidden", "unknown", "conflict"] },
+        "connector_before": { "oneOf": [{ "enum": ["and", "or", "xor", "but", "then", "japanese_te", "japanese_comma"] }, { "type": "null" }] }
+      }
+    },
+    "instruction_coordination": {
+      "type": "object",
+      "required": ["left_action_index", "right_action_index", "kind", "source_span"],
+      "properties": {
+        "left_action_index": { "type": "integer", "minimum": 0 },
+        "right_action_index": { "type": "integer", "minimum": 1 },
+        "kind": { "enum": ["and", "or", "xor", "but", "then", "japanese_te", "japanese_comma"] },
+        "source_span": { "$ref": "#/$defs/span" }
+      }
+    },
+    "instruction_polarity_scope": {
+      "type": "object",
+      "required": ["action_indices", "polarity", "marker_span", "state"],
+      "properties": {
+        "action_indices": { "$ref": "#/$defs/span" },
+        "polarity": { "enum": ["positive", "forbidden", "unknown", "conflict"] },
+        "marker_span": { "$ref": "#/$defs/span" },
+        "state": { "enum": ["local_action", "unresolved_group"] }
+      }
+    },
+    "condition_predicate": {
+      "type": "object",
+      "required": ["source_span", "text"],
+      "properties": {
+        "source_span": { "$ref": "#/$defs/span" },
+        "text": { "type": "string" }
+      }
+    },
+    "condition_expression": {
+      "oneOf": [
+        { "type": "object", "required": ["kind", "operands"], "properties": { "kind": { "const": "predicate" }, "operands": { "$ref": "#/$defs/condition_predicate" } } },
+        { "type": "object", "required": ["kind", "operands"], "properties": { "kind": { "const": "unresolved" }, "operands": { "$ref": "#/$defs/condition_predicate" } } },
+        { "type": "object", "required": ["kind", "operands"], "properties": { "kind": { "const": "all" }, "operands": { "type": "array", "minItems": 2, "items": { "$ref": "#/$defs/condition_expression" } } } },
+        { "type": "object", "required": ["kind", "operands"], "properties": { "kind": { "const": "any" }, "operands": { "type": "array", "minItems": 2, "items": { "$ref": "#/$defs/condition_expression" } } } },
+        { "type": "object", "required": ["kind", "operands"], "properties": { "kind": { "const": "not" }, "operands": { "$ref": "#/$defs/condition_expression" } } }
+      ]
+    },
+    "instruction_condition": {
+      "type": "object",
+      "required": ["source_span", "marker_span", "relation", "temporal_relation", "expression", "applies_to_action_indices", "scope_state", "evidence_state", "exception_precedence"],
+      "properties": {
+        "source_span": { "$ref": "#/$defs/span" },
+        "marker_span": { "$ref": "#/$defs/span" },
+        "relation": { "enum": ["sufficient", "necessary", "exception", "temporal"] },
+        "temporal_relation": { "oneOf": [{ "enum": ["before", "after", "until", "when"] }, { "type": "null" }] },
+        "expression": { "$ref": "#/$defs/condition_expression" },
+        "applies_to_action_indices": { "$ref": "#/$defs/span" },
+        "scope_state": { "enum": ["resolved", "unresolved"] },
+        "evidence_state": { "enum": ["supported", "refuted", "unknown", "conflict"] },
+        "exception_precedence": { "type": ["integer", "null"], "minimum": 0 }
+      }
+    },
+    "instruction_scope": {
+      "type": "object",
+      "required": ["kind", "value", "source_span", "action_indices", "state"],
+      "properties": {
+        "kind": { "enum": ["resource", "branch", "environment", "time"] },
+        "value": { "type": "string" },
+        "source_span": { "$ref": "#/$defs/span" },
+        "action_indices": { "$ref": "#/$defs/span" },
+        "state": { "enum": ["candidate", "ambiguous", "unresolved"] }
+      }
+    },
+    "instruction_reference": {
+      "type": "object",
+      "required": ["text", "source_span", "candidate_action_indices", "state"],
+      "properties": {
+        "text": { "type": "string" },
+        "source_span": { "$ref": "#/$defs/span" },
+        "candidate_action_indices": { "type": "array", "items": { "type": "integer", "minimum": 0 }, "uniqueItems": true },
+        "state": { "enum": ["candidate", "ambiguous", "unresolved"] }
+      }
+    },
+    "instruction_constraint_graph": {
+      "type": "object",
+      "required": ["nodes", "edges", "cycles"],
+      "properties": {
+        "nodes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["action_index", "source_span", "surface"],
+            "properties": {
+              "action_index": { "type": "integer", "minimum": 0 },
+              "source_span": { "$ref": "#/$defs/span" },
+              "surface": { "type": "string" }
+            }
+          }
+        },
+        "edges": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["from_action_indices", "to_action_indices", "kind", "source_span", "target_span", "state"],
+            "properties": {
+              "from_action_indices": { "$ref": "#/$defs/span" },
+              "to_action_indices": { "$ref": "#/$defs/span" },
+              "kind": { "enum": ["requires", "before", "after", "until", "when", "conditional", "exception", "conflicts"] },
+              "source_span": { "$ref": "#/$defs/span" },
+              "target_span": { "oneOf": [{ "$ref": "#/$defs/span" }, { "type": "null" }] },
+              "state": { "enum": ["candidate", "unresolved", "conflict"] }
+            }
+          }
+        },
+        "cycles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["action_indices", "edge_indices", "reason"],
+            "properties": {
+              "action_indices": { "type": "array", "items": { "type": "integer", "minimum": 0 }, "uniqueItems": true },
+              "edge_indices": { "type": "array", "items": { "type": "integer", "minimum": 0 }, "uniqueItems": true },
+              "reason": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "instruction_parse": {
+      "type": "object",
+      "required": ["schema_version", "source_revision", "grammar_revision", "state", "selected", "alternatives", "forest", "chart_item_count", "claim_boundary"],
+      "properties": {
+        "schema_version": { "const": "epistesys-instruction-parse.v1" },
+        "source_revision": { "$ref": "#/$defs/digest" },
+        "grammar_revision": { "type": "string" },
+        "state": { "enum": ["parsed", "ambiguous", "unresolved", "unsupported"] },
+        "selected": { "oneOf": [{ "$ref": "#/$defs/instruction_ast" }, { "type": "null" }] },
+        "alternatives": { "type": "array", "items": { "$ref": "#/$defs/instruction_ast" } },
+        "forest": {
+          "type": "object",
+          "required": ["roots", "nodes"],
+          "properties": {
+            "roots": { "type": "array", "items": { "type": "integer", "minimum": 0 }, "uniqueItems": true },
+            "nodes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["id", "symbol", "source_span", "token_span", "production_ids", "children"],
+                "properties": {
+                  "id": { "type": "integer", "minimum": 0 },
+                  "symbol": { "type": "string" },
+                  "source_span": { "$ref": "#/$defs/span" },
+                  "token_span": { "$ref": "#/$defs/span" },
+                  "production_ids": { "type": "array", "items": { "type": "integer", "minimum": 0 }, "uniqueItems": true },
+                  "children": { "type": "array", "items": { "type": "integer", "minimum": 0 } }
+                }
+              }
+            }
+          }
+        },
+        "chart_item_count": { "type": "integer", "minimum": 0 },
+        "claim_boundary": { "type": "string" }
+      }
+    },
+    "nlp_observation": {
+      "type": "object",
+      "required": ["schema_version", "source_revision", "language", "backend_revision", "model_manifest_digest", "payload_digest", "sentences", "semantic_truth_claim"],
+      "properties": {
+        "schema_version": { "const": "epistesys-dgcl-nlp.v1" },
+        "source_revision": { "$ref": "#/$defs/digest" },
+        "language": { "enum": ["ja", "en"] },
+        "backend_revision": { "const": "stanza-1.14.0" },
+        "model_manifest_digest": { "$ref": "#/$defs/digest" },
+        "runtime_manifest_digest": { "$ref": "#/$defs/digest" },
+        "requirements_lock_digest": { "$ref": "#/$defs/digest" },
+        "python_version": { "type": "string", "maxLength": 64 },
+        "payload_digest": { "$ref": "#/$defs/digest" },
+        "sentences": { "$ref": "#/$defs/dependency_sentences" },
+        "semantic_truth_claim": { "const": false }
+      }
+    },
+    "pipeline": {
+      "type": "object",
+      "required": ["schema_version", "source_revision", "dg1", "language_regions", "unsupported_operative_region_ids", "requirement_bindings", "authority_created", "complete_instruction_grammar_claim"],
+      "properties": {
+        "schema_version": { "const": "epistesys-dgcl-pipeline.v1" },
+        "source_revision": { "$ref": "#/$defs/digest" },
+        "dg1": { "type": "object" },
+        "language_regions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "region_id": { "type": "integer", "minimum": 0 },
+              "language_span_id": { "type": "integer", "minimum": 0 },
+              "source_span": { "$ref": "#/$defs/span" },
+              "runtime_manifest_digest": { "$ref": "#/$defs/digest" },
+              "requirements_lock_digest": { "$ref": "#/$defs/digest" },
+              "python_version": { "type": "string", "maxLength": 64 },
+              "payload_binding_revision": { "const": "epistesys-dgcl-language-region-payload.v2" },
+              "sentences": { "$ref": "#/$defs/dependency_sentences" }
+            }
+          }
+        },
+        "unsupported_operative_region_ids": { "type": "array", "items": { "type": "integer", "minimum": 0 } },
+        "requirement_bindings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "dependency_language_span_ids": { "type": "array", "items": { "type": "integer", "minimum": 0 }, "uniqueItems": true },
+              "dependency_payload_digests": { "type": "array", "items": { "$ref": "#/$defs/digest" }, "uniqueItems": true }
+            }
+          }
+        },
+        "instruction_parses": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["region_id", "legacy_requirement_ids", "root_source_revision", "source_span", "state", "report", "error"],
+            "properties": {
+              "region_id": { "type": "integer", "minimum": 0 },
+              "legacy_requirement_ids": { "type": "array", "items": { "type": "integer", "minimum": 1 }, "uniqueItems": true },
+              "root_source_revision": { "$ref": "#/$defs/digest" },
+              "source_span": { "$ref": "#/$defs/span" },
+              "state": { "enum": ["parsed", "ambiguous", "unresolved", "unsupported", "budget_rejected"] },
+              "report": { "oneOf": [{ "$ref": "#/$defs/instruction_parse" }, { "type": "null" }] },
+              "error": { "type": ["string", "null"] }
+            }
+          }
+        },
+        "program_ir": {
+          "type": "object",
+          "required": ["schema_version", "source_revision", "grammar_revision", "program_digest", "requirements", "residuals", "semantic_truth_claim", "authority_created"],
+          "properties": {
+            "schema_version": { "const": "epistesys-dgcl-program-ir.v1" },
+            "source_revision": { "$ref": "#/$defs/digest" },
+            "grammar_revision": { "type": "string" },
+            "structural_distillation": { "$ref": "#/$defs/structural_distillation" },
+            "program_digest": { "$ref": "#/$defs/digest" },
+            "requirements": { "type": "array", "items": { "type": "object", "required": ["requirement_id", "region_id", "root_source_revision", "source_span", "source_digest", "parse_state", "legacy_candidate_references", "contract_digest", "contract", "selected_alternative_id", "alternatives", "dependencies", "semantic_truth_claim", "authority_grant"], "properties": { "requirement_id": { "$ref": "#/$defs/digest" }, "root_source_revision": { "$ref": "#/$defs/digest" }, "source_span": { "$ref": "#/$defs/span" }, "source_digest": { "$ref": "#/$defs/digest" }, "contract_digest": { "$ref": "#/$defs/digest" }, "legacy_candidate_references": { "type": "array", "items": { "type": "integer", "minimum": 1 }, "uniqueItems": true }, "contract": { "type": "object" }, "selected_alternative_id": { "type": ["string", "null"] }, "alternatives": { "type": "array", "items": { "type": "object", "required": ["alternative_id", "production_id", "language", "parser_ast_digest", "region_offset", "root_source_span", "ast"], "properties": { "alternative_id": { "$ref": "#/$defs/digest" }, "parser_ast_digest": { "$ref": "#/$defs/digest" }, "root_source_span": { "$ref": "#/$defs/span" }, "ast": { "$ref": "#/$defs/instruction_ast" } } } }, "dependencies": { "type": "array", "items": { "type": "object", "required": ["language_span_id", "source_span", "backend_revision", "model_manifest_digest", "runtime_manifest_digest", "requirements_lock_digest", "payload_binding_revision", "payload_digest", "semantic_truth_claim"], "properties": { "source_span": { "$ref": "#/$defs/span" }, "model_manifest_digest": { "$ref": "#/$defs/digest" }, "runtime_manifest_digest": { "$ref": "#/$defs/digest" }, "requirements_lock_digest": { "$ref": "#/$defs/digest" }, "payload_digest": { "$ref": "#/$defs/digest" }, "semantic_truth_claim": { "const": false } } } }, "semantic_truth_claim": { "const": false }, "authority_grant": { "const": false } } } },
+            "residuals": { "type": "array", "items": { "type": "object", "required": ["residual_id", "region_id", "source_span", "source_digest", "state", "legacy_candidate_references", "reason", "blocking_requirement"], "properties": { "residual_id": { "$ref": "#/$defs/digest" }, "source_span": { "$ref": "#/$defs/span" }, "source_digest": { "$ref": "#/$defs/digest" }, "legacy_candidate_references": { "type": "array", "items": { "type": "integer", "minimum": 1 } }, "blocking_requirement": { "type": "boolean" } } } },
+            "semantic_truth_claim": { "const": false },
+            "authority_created": { "const": false }
+          }
+        },
+        "translation_projection": {
+          "type": "object",
+          "required": ["schema_version", "source_revision", "program_ir_digest", "envelope", "loss_events", "gate", "empty_requirement_set_held", "scalar_aggregate_used", "authority_created", "output_commit_allowed"],
+          "properties": {
+            "schema_version": { "const": "epistesys-dgcl-translation-projection.v1" },
+            "source_revision": { "$ref": "#/$defs/digest" },
+            "program_ir_digest": { "$ref": "#/$defs/digest" },
+            "envelope": { "type": "object", "required": ["schema_version", "source_ledger_id", "source_revision", "source_digest", "target_claims", "edges", "domain_payloads", "gate", "scalar_aggregate_used"], "properties": { "schema_version": { "const": "lc631-translation-envelope.v3" }, "source_revision": { "$ref": "#/$defs/digest" }, "source_digest": { "$ref": "#/$defs/digest" }, "target_claims": { "type": "array" }, "edges": { "type": "array" }, "domain_payloads": { "type": "array" }, "gate": { "enum": ["candidate_commit", "review", "clarify", "hard_hold"] }, "scalar_aggregate_used": { "const": false } } },
+            "loss_events": { "type": "array", "items": { "type": "object", "required": ["requirement_id", "stage", "input_digest", "output_digest", "stage_event_digest", "state", "kind", "reason"], "properties": { "input_digest": { "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }] }, "output_digest": { "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }] }, "stage_event_digest": { "$ref": "#/$defs/digest" }, "stage": { "enum": ["seed_to_contract", "contract_to_program", "program_to_candidate", "candidate_to_output", "audio_to_transcript", "frame_to_observation", "observation_to_event"] }, "state": { "enum": ["exact", "refinement", "weakened", "strengthened", "contradicted", "dropped", "introduced_without_source", "unresolved", "incomparable"] } } } },
+            "gate": { "enum": ["candidate_commit", "review", "clarify", "hard_hold"] },
+            "empty_requirement_set_held": { "type": "boolean" },
+            "scalar_aggregate_used": { "const": false },
+            "authority_created": { "const": false },
+            "output_commit_allowed": { "const": false }
+          }
+        },
+        "completion_plan": { "$ref": "#/$defs/completion_plan" },
+        "implementation_closure": { "$ref": "#/$defs/implementation_closure" },
+        "authority_created": { "const": false },
+        "complete_instruction_grammar_claim": { "const": false }
+      }
+    },
+    "completion_plan": {
+      "type": "object",
+      "required": ["schema_version", "source_revision", "program_ir_digest", "translation_projection_digest", "plan_digest", "status", "requirements", "tasks", "blockers", "nonblocking_residual_count", "authority_created", "evidence_issued", "coding_closure_allowed", "claim_boundary"],
+      "properties": {
+        "schema_version": { "const": "epistesys-dgcl-completion-plan.v1" },
+        "source_revision": { "$ref": "#/$defs/digest" },
+        "program_ir_digest": { "$ref": "#/$defs/digest" },
+        "translation_projection_digest": { "$ref": "#/$defs/digest" },
+        "plan_digest": { "$ref": "#/$defs/digest" },
+        "status": { "enum": ["ready_for_evidence", "condition_evidence_pending", "needs_clarification", "empty_requirement_set"] },
+        "requirements": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["requirement_id", "parent_program_requirement_id", "alternative_id", "region_id", "action_index", "source_span", "source_digest", "action_text", "modality", "polarity", "target_ref", "target_candidates", "conditions", "tasks", "ready_for_evidence"],
+            "properties": {
+              "requirement_id": { "$ref": "#/$defs/digest" },
+              "parent_program_requirement_id": { "$ref": "#/$defs/digest" },
+              "alternative_id": { "$ref": "#/$defs/digest" },
+              "source_span": { "$ref": "#/$defs/span" },
+              "source_digest": { "$ref": "#/$defs/digest" },
+              "modality": { "enum": ["requested", "required", "recommended", "permitted", "unknown"] },
+              "polarity": { "enum": ["positive", "forbidden", "unknown", "conflict"] },
+              "target_candidates": { "type": "array" },
+              "conditions": { "type": "array", "items": { "type": "object", "required": ["condition_id", "source_span", "source_digest", "marker_span", "marker_digest", "relation", "expression", "scope_resolved", "truth_state"], "properties": { "condition_id": { "$ref": "#/$defs/digest" }, "source_span": { "$ref": "#/$defs/span" }, "source_digest": { "$ref": "#/$defs/digest" }, "marker_span": { "$ref": "#/$defs/span" }, "marker_digest": { "$ref": "#/$defs/digest" }, "truth_state": { "enum": ["supported", "refuted", "unknown", "conflict"] } } } },
+              "tasks": { "type": "array", "items": { "$ref": "#/$defs/completion_task" } },
+              "ready_for_evidence": { "type": "boolean" }
+            }
+          }
+        },
+        "tasks": { "type": "array", "items": { "$ref": "#/$defs/completion_task" } },
+        "blockers": { "type": "array", "items": { "type": "object", "required": ["blocker_id", "requirement_id", "parent_program_requirement_id", "source_span", "source_digest", "kind", "reason"], "properties": { "blocker_id": { "$ref": "#/$defs/digest" }, "requirement_id": { "type": ["string", "null"] }, "parent_program_requirement_id": { "type": ["string", "null"] }, "source_span": { "oneOf": [{ "$ref": "#/$defs/span" }, { "type": "null" }] }, "source_digest": { "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }] } } } },
+        "nonblocking_residual_count": { "type": "integer", "minimum": 0 },
+        "authority_created": { "const": false },
+        "evidence_issued": { "const": false },
+        "coding_closure_allowed": { "const": false }
+      }
+    },
+    "completion_task": {
+      "type": "object",
+      "required": ["task_id", "requirement_id", "evidence_kind", "applicability", "not_applicable_basis", "producer", "producer_revision", "target_ref", "target_digest", "acceptance_criterion", "condition_ids"],
+      "properties": {
+        "task_id": { "$ref": "#/$defs/digest" },
+        "requirement_id": { "$ref": "#/$defs/digest" },
+        "evidence_kind": { "enum": ["implementation_binding", "production_connection", "static_validation", "runtime_validation", "acceptance_test"] },
+        "applicability": { "enum": ["required", "conditional", "not_applicable", "unresolved"] },
+        "not_applicable_basis": { "type": ["string", "null"] },
+        "producer": { "enum": ["structural_observation", "declared_connection_observer", "compiler_observed", "runtime_observed", "acceptance_oracle_observed"] },
+        "target_digest": { "$ref": "#/$defs/digest" },
+        "condition_ids": { "type": "array", "items": { "$ref": "#/$defs/digest" } }
+      }
+    },
+    "implementation_closure": {
+      "type": "object",
+      "required": ["schema_version", "source_revision", "program_ir_digest", "completion_plan_digest", "requirement_count", "gaps", "blockers", "rejected_claim_count", "rejected_claims", "duplicate_claim_count", "requirements", "status", "evidence_complete_for_declared_requirements", "implementation_complete_candidate", "authority_created", "output_commit_allowed", "claim_boundary"],
+      "properties": {
+        "schema_version": { "const": "epistesys-dgcl-implementation-closure.v1" },
+        "source_revision": { "$ref": "#/$defs/digest" },
+        "program_ir_digest": { "$ref": "#/$defs/digest" },
+        "completion_plan_digest": { "$ref": "#/$defs/digest" },
+        "requirement_count": { "type": "integer", "minimum": 0 },
+        "status": { "enum": ["implementation_closed", "no_action", "hold", "clarify", "conflict"] },
+        "evidence_complete_for_declared_requirements": { "type": "boolean" },
+        "implementation_complete_candidate": { "type": "boolean" },
+        "authority_created": { "const": false },
+        "output_commit_allowed": { "const": false },
+        "gaps": { "type": "array", "items": { "type": "object", "required": ["gap_id", "requirement_id", "evidence_task_id", "evidence_kind", "state", "applicability", "not_applicable_basis", "target_ref", "target_digest", "evidence_digest", "reason"], "properties": { "gap_id": { "$ref": "#/$defs/digest" }, "requirement_id": { "type": ["string", "null"] }, "evidence_task_id": { "type": ["string", "null"] }, "evidence_kind": { "type": ["string", "null"] }, "state": { "enum": ["verified_receipt", "not_applicable", "unavailable", "rejected", "stale", "conditional_pending", "unresolved"] }, "applicability": { "oneOf": [{ "enum": ["required", "conditional", "not_applicable", "unresolved"] }, { "type": "null" }] }, "not_applicable_basis": { "type": ["string", "null"] }, "target_ref": { "type": ["string", "null"] }, "target_digest": { "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }] }, "evidence_digest": { "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }] }, "reason": { "type": "string" } } } },
+        "blockers": { "type": "array", "items": { "type": "object" } },
+        "rejected_claim_count": { "type": "integer", "minimum": 0 },
+        "rejected_claims": { "type": "array", "items": { "type": "object" } },
+        "duplicate_claim_count": { "type": "integer", "minimum": 0 },
+        "requirements": { "type": "array", "items": { "type": "object", "required": ["requirement_id", "parent_program_requirement_id", "source_span", "status", "gap_ids"], "properties": { "requirement_id": { "$ref": "#/$defs/digest" }, "parent_program_requirement_id": { "$ref": "#/$defs/digest" }, "source_span": { "$ref": "#/$defs/span" }, "status": { "enum": ["implementation_closed", "hold", "clarify", "conflict"] }, "gap_ids": { "type": "array", "items": { "$ref": "#/$defs/digest" } } } } }
+      }
+    },
+    "gold_corpus": {
+      "type": "object",
+      "required": ["schema_version", "cases"],
+      "properties": {
+        "schema_version": { "const": "epistesys-dgcl-gold.v1" },
+        "cases": { "type": "array", "minItems": 1, "items": {
+          "type": "object",
+          "required": ["id", "family_id", "partition", "language", "source", "source_revision", "annotators", "adjudicator", "gold_requirements", "critical"],
+          "properties": {
+            "partition": { "enum": ["dev", "holdout"] },
+            "language": { "enum": ["japanese", "english"] },
+            "source_revision": { "$ref": "#/$defs/digest" },
+            "annotators": { "type": "array", "minItems": 2 },
+            "gold_requirements": { "type": "array", "items": { "type": "object", "required": ["span", "polarity", "condition", "scope"], "properties": {
+              "span": { "$ref": "#/$defs/span" },
+              "polarity": { "enum": ["positive", "negative", "unknown", "conflict"] }
+            } } }
+          }
+        } }
+      }
+    },
+    "gold_evaluation": {
+      "type": "object",
+      "required": ["schema_version", "corpus_digest", "metrics", "gate", "independent_review_verified"],
+      "properties": {
+        "schema_version": { "const": "epistesys-dgcl-gold-evaluation.v1" },
+        "corpus_digest": { "$ref": "#/$defs/digest" },
+        "metrics": { "type": "array", "minItems": 2 },
+        "gate": { "enum": ["corpus_insufficient", "threshold_unmet", "pending_independent_review"] },
+        "independent_review_verified": { "const": false }
+      }
+    },
+    "untrusted_receipt": {
+      "type": "object",
+      "required": ["claims", "mac_sha256"],
+      "properties": {
+        "claims": { "type": "object" },
+        "mac_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "gold_signer_attestation": {
+      "type": "object",
+      "required": ["signer_id", "key_fingerprint", "attestation"],
+      "properties": {
+        "signer_id": { "type": "string", "minLength": 1 },
+        "key_fingerprint": { "$ref": "#/$defs/digest" },
+        "attestation": { "$ref": "#/$defs/untrusted_receipt" }
+      }
+    },
+    "gold_provenance": {
+      "type": "object",
+      "required": ["schema_version", "cases"],
+      "properties": {
+        "schema_version": { "const": "epistesys-dgcl-gold-provenance.v1" },
+        "cases": { "type": "array", "items": { "type": "object", "required": ["case_id", "annotator_attestations", "adjudicator_attestation"], "properties": { "case_id": { "type": "string" }, "annotator_attestations": { "type": "array", "minItems": 2, "items": { "$ref": "#/$defs/gold_signer_attestation" } }, "adjudicator_attestation": { "$ref": "#/$defs/gold_signer_attestation" } } } }
+      }
+    },
+    "gold_provenance_report": {
+      "type": "object",
+      "required": ["schema_version", "corpus_digest", "cases", "authenticated_case_count", "signer_separation_verified", "human_independence_verified", "claim_boundary"],
+      "properties": {
+        "schema_version": { "const": "epistesys-dgcl-gold-provenance-report.v1" },
+        "corpus_digest": { "$ref": "#/$defs/digest" },
+        "cases": { "type": "array", "items": { "type": "object" } },
+        "authenticated_case_count": { "type": "integer", "minimum": 0 },
+        "signer_separation_verified": { "type": "boolean" },
+        "human_independence_verified": { "const": false },
+        "claim_boundary": { "type": "string" }
+      }
+    },
+    "gold_decision_observation": {
+      "type": "object",
+      "required": ["case_id", "source_revision", "decision", "candidate_digest", "candidate_requirements"],
+      "properties": {
+        "case_id": { "type": "string", "minLength": 1 },
+        "source_revision": { "$ref": "#/$defs/digest" },
+        "decision": { "enum": ["implementation_closed", "hold", "clarify", "conflict", "no_action"] },
+        "candidate_digest": { "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }] },
+        "candidate_requirements": { "type": "array", "items": { "type": "object" } }
+      }
+    },
+    "gold_decision_evaluation": {
+      "type": "object",
+      "required": ["schema_version", "corpus_digest", "metrics", "observation_count", "decision_observations_authenticated", "gold_annotation_signatures_verified", "human_independence_verified", "gate", "legacy_non_hold_coverage_semantics", "claim_boundary"],
+      "properties": {
+        "schema_version": { "const": "epistesys-dgcl-decision-evaluation.v1" },
+        "corpus_digest": { "$ref": "#/$defs/digest" },
+        "metrics": { "type": "array", "minItems": 2, "items": { "type": "object", "required": ["language", "holdout_documents", "holdout_gold_obligations", "candidate_nonempty_documents", "accepted_documents", "held_documents", "no_action_documents", "committed_true_positive", "committed_false_positive", "committed_false_negative", "committed_precision", "committed_recall", "false_acceptance_documents", "exact_candidate_documents", "false_hold_documents", "decision_coverage", "selective_risk", "over_hold_rate", "risk_coverage"], "properties": { "language": { "enum": ["japanese", "english"] }, "committed_precision": { "type": ["number", "null"], "minimum": 0, "maximum": 1 }, "committed_recall": { "type": ["number", "null"], "minimum": 0, "maximum": 1 }, "decision_coverage": { "type": ["number", "null"], "minimum": 0, "maximum": 1 }, "selective_risk": { "type": ["number", "null"], "minimum": 0, "maximum": 1 }, "over_hold_rate": { "type": ["number", "null"], "minimum": 0, "maximum": 1 }, "risk_coverage": { "type": "object" } } } },
+        "observation_count": { "type": "integer", "minimum": 0 },
+        "decision_observations_authenticated": { "const": false },
+        "gold_annotation_signatures_verified": { "type": "boolean" },
+        "human_independence_verified": { "const": false },
+        "gate": { "enum": ["corpus_insufficient", "threshold_unmet", "pending_independent_review"] },
+        "legacy_non_hold_coverage_semantics": { "type": "string" },
+        "claim_boundary": { "type": "string" }
+      }
+    },
+    "connection_plan": {
+      "type": "object",
+      "required": ["schema_version", "source", "source_revision", "requirement_id", "expected_polarity", "expected_condition_kind", "expected_scope", "implementation_path", "implementation_digest", "implementation_symbol", "router_path", "router_digest", "executable_path", "executable_digest", "command", "arguments", "expected_json_pointer", "expected_json_value"],
+      "properties": {
+        "schema_version": { "const": "epistesys-coding-connection-plan.v1" },
+        "source_revision": { "$ref": "#/$defs/digest" },
+        "requirement_id": { "type": "integer", "minimum": 1 },
+        "coding_requirement_id": { "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }] },
+        "coding_task_id": { "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }] },
+        "coding_target_ref": { "type": ["string", "null"], "pattern": "^dgcl/action/sha256:[0-9a-f]{64}$" },
+        "coding_target_digest": { "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }] },
+        "implementation_digest": { "$ref": "#/$defs/digest" },
+        "router_digest": { "$ref": "#/$defs/digest" },
+        "executable_digest": { "$ref": "#/$defs/digest" },
+        "arguments": { "type": "array", "maxItems": 64, "items": { "type": "string" } }
+      }
+    },
+    "connection_report": {
+      "type": "object",
+      "required": ["schema_version", "source_revision", "requirement_id", "implementation_symbol_found", "command_registered_candidate", "runtime_command_observed", "acceptance_matched", "status", "authority_created", "output_commit_allowed"],
+      "properties": {
+        "schema_version": { "const": "epistesys-coding-connection.v1" },
+        "source_revision": { "$ref": "#/$defs/digest" },
+        "status": { "enum": ["observed", "held"] },
+        "connection_graph": { "$ref": "#/$defs/connection_graph" },
+        "runtime_trace": { "oneOf": [{ "$ref": "#/$defs/connection_runtime_trace" }, { "type": "null" }] },
+        "authority_created": { "const": false },
+        "output_commit_allowed": { "const": false }
+      }
+    },
+    "connection_runtime_trace": {
+      "type": "object",
+      "required": ["schema_version", "run_id", "trace_digest", "plan_digest", "source_revision", "requirement_id", "connection_graph_digest", "route_edge_id", "producer_node_id", "consumer_node_id", "executable_path", "declared_executable_digest", "observed_executable_digest", "arguments_digest", "input_digest", "cwd_digest", "environment_digest", "stdout_digest", "stderr_digest", "exit_code", "timed_out", "stdout_truncated", "stderr_truncated", "network_policy", "network_os_enforced", "filesystem_write_monitor", "acceptance_oracle", "claim_boundary"],
+      "properties": {
+        "schema_version": { "const": "epistesys-connection-runtime-trace.v1" },
+        "run_id": { "$ref": "#/$defs/digest" },
+        "trace_digest": { "$ref": "#/$defs/digest" },
+        "plan_digest": { "$ref": "#/$defs/digest" },
+        "source_revision": { "$ref": "#/$defs/digest" },
+        "connection_graph_digest": { "$ref": "#/$defs/digest" },
+        "route_edge_id": { "$ref": "#/$defs/digest" },
+        "producer_node_id": { "$ref": "#/$defs/digest" },
+        "consumer_node_id": { "$ref": "#/$defs/digest" },
+        "executable_path": { "type": "string" },
+        "declared_executable_digest": { "$ref": "#/$defs/digest" },
+        "observed_executable_digest": { "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }] },
+        "arguments_digest": { "$ref": "#/$defs/digest" },
+        "input_digest": { "$ref": "#/$defs/digest" },
+        "cwd_digest": { "$ref": "#/$defs/digest" },
+        "environment_digest": { "$ref": "#/$defs/digest" },
+        "stdout_digest": { "$ref": "#/$defs/digest" },
+        "stderr_digest": { "$ref": "#/$defs/digest" },
+        "exit_code": { "type": ["integer", "null"] },
+        "timed_out": { "type": "boolean" },
+        "stdout_truncated": { "type": "boolean" },
+        "stderr_truncated": { "type": "boolean" },
+        "network_policy": { "type": "string" },
+        "network_os_enforced": { "type": "boolean" },
+        "filesystem_write_monitor": { "type": "string" },
+        "acceptance_oracle": { "type": "object", "required": ["schema_version", "oracle_revision", "source", "json_pointer", "expected_value_digest", "matched", "candidate_generated", "independent_semantic_gold"], "properties": { "schema_version": { "const": "epistesys-connection-acceptance-oracle.v1" }, "expected_value_digest": { "$ref": "#/$defs/digest" }, "matched": { "type": "boolean" }, "candidate_generated": { "const": false }, "independent_semantic_gold": { "const": false } } }
+      }
+    },
+    "connection_graph": {
+      "type": "object",
+      "required": ["schema_version", "source_revision", "requirement_id", "requirement_source_span", "requirement_source_digest", "requirement_target_binding_state", "implementation_path", "implementation_digest", "router_path", "router_digest", "implementation_symbol", "command", "definition_count", "import_bound", "route_arm_count", "matching_call_count", "route_subjects", "route_input_bound", "configuration_unobserved", "module_symbol_shadowed", "nodes", "edges", "residuals", "state", "graph_digest", "repository_wide_complete", "cross_module_type_resolution", "authority_created", "coding_closure_allowed"],
+      "properties": {
+        "schema_version": { "const": "epistesys-static-connection-graph.v1" },
+        "source_revision": { "$ref": "#/$defs/digest" },
+        "requirement_id": { "type": "integer", "minimum": 1 },
+        "requirement_source_span": { "$ref": "#/$defs/span" },
+        "requirement_source_digest": { "$ref": "#/$defs/digest" },
+        "requirement_target_binding_state": { "enum": ["connected", "disconnected", "unresolved"] },
+        "implementation_path": { "type": "string" },
+        "implementation_digest": { "$ref": "#/$defs/digest" },
+        "router_path": { "type": "string" },
+        "router_digest": { "$ref": "#/$defs/digest" },
+        "implementation_symbol": { "type": "string" },
+        "command": { "type": "string" },
+        "definition_count": { "type": "integer", "minimum": 0 },
+        "import_bound": { "type": "boolean" },
+        "route_arm_count": { "type": "integer", "minimum": 0 },
+        "matching_call_count": { "type": "integer", "minimum": 0 },
+        "route_subjects": { "type": "array", "items": { "type": "string" } },
+        "route_input_bound": { "type": "boolean" },
+        "configuration_unobserved": { "type": "boolean" },
+        "module_symbol_shadowed": { "type": "boolean" },
+        "nodes": { "type": "array" },
+        "edges": { "type": "array", "items": { "type": "object", "properties": { "kind": { "enum": ["requirement_target_candidate", "import_binds_definition", "route_dispatches_to_call"] }, "state": { "enum": ["connected", "disconnected", "unresolved"] } } } },
+        "residuals": { "type": "array", "items": { "type": "string" } },
+        "state": { "enum": ["connected", "disconnected", "unresolved"] },
+        "graph_digest": { "$ref": "#/$defs/digest" },
+        "repository_wide_complete": { "const": false },
+        "cross_module_type_resolution": { "type": "string" },
+        "authority_created": { "const": false },
+        "coding_closure_allowed": { "const": false }
+      }
+    },
+    "checkpoint": {
+      "type": "object",
+      "required": ["schema_version", "sequence", "source_revision", "plan_digest", "authority_revision", "action_key", "delivery", "result_digest", "parent_digest"],
+      "properties": {
+        "schema_version": { "const": "epistesys-dgcl-checkpoint.v1" },
+        "sequence": { "type": "integer", "minimum": 0 },
+        "source_revision": { "$ref": "#/$defs/digest" },
+        "plan_digest": { "$ref": "#/$defs/digest" },
+        "delivery": { "enum": ["unknown_delivery", "confirmed_failed", "confirmed_success"] }
+      }
+    },
+    "checkpoint_v2": {
+      "type": "object",
+      "required": ["schema_version", "sequence", "source_revision", "plan_digest", "authority_revision", "action_key", "event_kind", "delivery", "result_digest", "parent_digest"],
+      "properties": {
+        "schema_version": { "const": "epistesys-dgcl-checkpoint.v2" },
+        "sequence": { "type": "integer", "minimum": 0 },
+        "source_revision": { "$ref": "#/$defs/digest" },
+        "plan_digest": { "$ref": "#/$defs/digest" },
+        "authority_revision": { "type": "string", "minLength": 1 },
+        "action_key": { "type": "string", "minLength": 1 },
+        "event_kind": { "enum": ["action_started", "action_observed", "candidate_prepared", "candidate_send_attempted", "sink_delivery_observed"] },
+        "delivery": { "enum": ["unknown_delivery", "confirmed_failed", "confirmed_success"] },
+        "result_digest": { "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }] },
+        "parent_digest": { "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }] }
+      }
+    },
+    "checkpoint_head": {
+      "type": "object",
+      "required": ["schema_version", "source_revision", "plan_digest", "authority_revision", "sequence", "head_digest", "issued_at_epoch", "expires_at_epoch", "attestation"],
+      "properties": {
+        "schema_version": { "const": "epistesys-dgcl-checkpoint-head.v1" },
+        "source_revision": { "$ref": "#/$defs/digest" },
+        "plan_digest": { "$ref": "#/$defs/digest" },
+        "authority_revision": { "type": "string", "minLength": 1 },
+        "sequence": { "type": ["integer", "null"], "minimum": 0 },
+        "head_digest": { "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }] },
+        "issued_at_epoch": { "type": "integer", "minimum": 0 },
+        "expires_at_epoch": { "type": "integer", "minimum": 1 },
+        "attestation": { "type": "object" }
+      }
+    },
+    "resume_observation": {
+      "type": "object",
+      "required": ["integrity_state", "latest_sequence", "latest_digest", "latest_delivery", "latest_event_kind", "retry_permitted_by_prior_result", "fresh_revalidation_required", "authority_created", "completion_restored"],
+      "properties": {
+        "integrity_state": { "enum": ["unanchored", "trusted_head_matched"] },
+        "latest_sequence": { "type": ["integer", "null"], "minimum": 0 },
+        "latest_digest": { "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }] },
+        "latest_delivery": { "oneOf": [{ "enum": ["unknown_delivery", "confirmed_failed", "confirmed_success"] }, { "type": "null" }] },
+        "latest_event_kind": { "oneOf": [{ "enum": ["legacy_unclassified", "action_started", "action_observed", "candidate_prepared", "candidate_send_attempted", "sink_delivery_observed"] }, { "type": "null" }] },
+        "retry_permitted_by_prior_result": { "type": "boolean" },
+        "fresh_revalidation_required": { "type": "boolean" },
+        "authority_created": { "const": false },
+        "completion_restored": { "const": false }
+      }
+    },
+    "repair_request": {
+      "type": "object",
+      "required": ["attempt", "gap_id", "source_revision", "plan_digest", "target_ref", "target_digest_before", "candidate_digest", "authorization_scope", "authorization_span"],
+      "properties": {
+        "attempt": { "type": "integer", "minimum": 1, "maximum": 4 },
+        "gap_id": { "$ref": "#/$defs/digest" },
+        "source_revision": { "$ref": "#/$defs/digest" },
+        "plan_digest": { "$ref": "#/$defs/digest" },
+        "target_ref": { "type": "string", "minLength": 1, "maxLength": 1024 },
+        "target_digest_before": { "$ref": "#/$defs/digest" },
+        "candidate_digest": { "$ref": "#/$defs/digest" },
+        "authorization_scope": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "authorization_span": { "$ref": "#/$defs/span" },
+        "repository_root_digest": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "repair_application": {
+      "type": "object",
+      "required": ["schema_version", "attempt", "gap_id", "request_digest", "source_revision", "plan_digest", "target_ref", "target_digest_before", "target_digest_after", "candidate_digest", "delta_bytes", "run_digest", "permit_digest", "applied", "after_snapshot", "after_lease", "attestation"],
+      "properties": {
+        "schema_version": { "const": "epistesys-dgcl-repair-application.v1" },
+        "attempt": { "type": "integer", "minimum": 1, "maximum": 4 },
+        "gap_id": { "$ref": "#/$defs/digest" },
+        "request_digest": { "$ref": "#/$defs/digest" },
+        "source_revision": { "$ref": "#/$defs/digest" },
+        "plan_digest": { "$ref": "#/$defs/digest" },
+        "target_ref": { "type": "string" },
+        "target_digest_before": { "$ref": "#/$defs/digest" },
+        "target_digest_after": { "$ref": "#/$defs/digest" },
+        "candidate_digest": { "$ref": "#/$defs/digest" },
+        "delta_bytes": { "type": "integer", "minimum": 0 },
+        "run_digest": { "$ref": "#/$defs/digest" },
+        "permit_digest": { "$ref": "#/$defs/digest" },
+        "applied": { "type": "boolean" },
+        "after_snapshot": { "$ref": "#/$defs/lifecycle_snapshot" },
+        "after_lease": { "$ref": "#/$defs/evidence_lease" },
+        "attestation": { "oneOf": [{ "type": "object" }, { "type": "null" }] }
+      }
+    },
+    "repair_validation": {
+      "type": "object",
+      "required": ["schema_version", "attempt", "gap_id", "request_digest", "source_revision", "plan_digest", "run_digest", "snapshot_digest", "validator_digest", "closure_digest", "outcome", "remaining_gap_ids", "attestation"],
+      "properties": {
+        "schema_version": { "const": "epistesys-dgcl-repair-validation.v1" },
+        "attempt": { "type": "integer", "minimum": 1, "maximum": 4 },
+        "gap_id": { "$ref": "#/$defs/digest" },
+        "request_digest": { "$ref": "#/$defs/digest" },
+        "source_revision": { "$ref": "#/$defs/digest" },
+        "plan_digest": { "$ref": "#/$defs/digest" },
+        "run_digest": { "$ref": "#/$defs/digest" },
+        "snapshot_digest": { "$ref": "#/$defs/digest" },
+        "validator_digest": { "$ref": "#/$defs/digest" },
+        "closure_digest": { "$ref": "#/$defs/digest" },
+        "closure_claims": { "type": "array", "maxItems": 4096, "items": { "type": "object" } },
+        "outcome": { "enum": ["implementation_closed", "pending", "conflict", "unverifiable"] },
+        "remaining_gap_ids": { "type": "array", "maxItems": 4096, "uniqueItems": true, "items": { "$ref": "#/$defs/digest" } },
+        "attestation": { "oneOf": [{ "type": "object" }, { "type": "null" }] }
+      }
+    },
+    "repair_attempt_record": {
+      "type": "object",
+      "required": ["attempt", "gap_id", "target_ref", "before_snapshot_digest", "after_snapshot_digest", "application_receipt_digest", "validation_receipt_digest", "effect_state", "outcome", "reason"],
+      "properties": {
+        "attempt": { "type": "integer", "minimum": 1, "maximum": 4 },
+        "gap_id": { "$ref": "#/$defs/digest" },
+        "target_ref": { "type": "string" },
+        "before_snapshot_digest": { "$ref": "#/$defs/digest" },
+        "after_snapshot_digest": { "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }] },
+        "application_receipt_digest": { "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }] },
+        "validation_receipt_digest": { "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }] },
+        "effect_state": { "enum": ["not_attempted", "may_have_applied", "receipt_verified", "observed_no_progress"] },
+        "outcome": { "enum": ["completed", "no_work", "hold", "conflict", "no_progress", "cycle_detected", "budget_exceeded", "unauthorized"] },
+        "reason": { "type": "string" }
+      }
+    },
+    "repair_loop_report": {
+      "type": "object",
+      "required": ["schema_version", "source_revision", "plan_digest", "initial_snapshot_digest", "final_snapshot_digest", "attempts", "remaining_gap_ids", "status", "authority_created", "commit_push_merge_performed", "candidate_only_updates_state", "claim_boundary"],
+      "properties": {
+        "schema_version": { "const": "epistesys-dgcl-repair-loop.v1" },
+        "source_revision": { "$ref": "#/$defs/digest" },
+        "plan_digest": { "$ref": "#/$defs/digest" },
+        "initial_snapshot_digest": { "$ref": "#/$defs/digest" },
+        "final_snapshot_digest": { "$ref": "#/$defs/digest" },
+        "attempts": { "type": "array", "maxItems": 4, "items": { "$ref": "#/$defs/repair_attempt_record" } },
+        "remaining_gap_ids": { "type": "array", "maxItems": 4096, "uniqueItems": true, "items": { "$ref": "#/$defs/digest" } },
+        "status": { "enum": ["completed", "no_work", "hold", "conflict", "no_progress", "cycle_detected", "budget_exceeded", "unauthorized"] },
+        "authority_created": { "const": false },
+        "commit_push_merge_performed": { "const": false },
+        "candidate_only_updates_state": { "const": false },
+        "claim_boundary": { "type": "string" }
+      }
+    },
+    "requirement_output_realization": {
+      "type": "object",
+      "required": ["requirement_id", "closure_status", "open_gap_ids", "output_realization"],
+      "properties": {
+        "requirement_id": { "$ref": "#/$defs/digest" },
+        "closure_status": { "enum": ["implementation_closed", "no_action", "hold", "clarify", "conflict"] },
+        "open_gap_ids": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/digest" } },
+        "output_realization": { "enum": ["not_observed", "contract_ledger_rendered"] }
+      }
+    },
+    "host_observation_stages": {
+      "type": "object",
+      "required": ["precommit", "post_send", "sink_delivery", "durable_replay"],
+      "properties": {
+        "precommit": { "const": "pending" },
+        "post_send": { "const": "pending" },
+        "sink_delivery": { "const": "pending" },
+        "durable_replay": { "const": "pending" }
+      }
+    },
+    "standalone_candidate": {
+      "type": "object",
+      "required": ["schema_version", "source_revision", "program_ir_digest", "completion_plan_digest", "implementation_closure_status", "implementation_complete_candidate", "candidate_state", "candidate_digest", "candidate_byte_len", "expected_schema_version", "observed_schema_version", "schema_version_matches", "candidate_text", "requirement_realizations", "host_observation", "host_send_authorized", "output_commit_allowed", "authority_created", "claim_boundary"],
+      "properties": {
+        "schema_version": { "const": "epistesys-dgcl-standalone-candidate.v1" },
+        "source_revision": { "$ref": "#/$defs/digest" },
+        "program_ir_digest": { "$ref": "#/$defs/digest" },
+        "completion_plan_digest": { "$ref": "#/$defs/digest" },
+        "implementation_closure_status": { "enum": ["implementation_closed", "no_action", "hold", "clarify", "conflict"] },
+        "implementation_complete_candidate": { "type": "boolean" },
+        "candidate_state": { "enum": ["exact_candidate_captured", "no_action"] },
+        "candidate_digest": { "$ref": "#/$defs/digest" },
+        "candidate_byte_len": { "type": "integer", "minimum": 1, "maximum": 2097152 },
+        "expected_schema_version": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "observed_schema_version": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "schema_version_matches": { "const": true },
+        "candidate_text": { "type": "string", "maxLength": 2097152 },
+        "requirement_realizations": { "type": "array", "items": { "$ref": "#/$defs/requirement_output_realization" } },
+        "host_observation": { "$ref": "#/$defs/host_observation_stages" },
+        "host_send_authorized": { "const": false },
+        "output_commit_allowed": { "const": false },
+        "authority_created": { "const": false },
+        "claim_boundary": { "type": "string" }
+      }
+    },
+    "host_output_stage_receipt": {
+      "type": "object",
+      "required": ["schema_version", "artifact_id", "turn_id", "candidate_digest", "output_digest", "stage", "callback_event_digest", "sink_id", "delivered", "host_seed_receipt_digest", "authenticity_receipt_digest", "authenticity_attestation"],
+      "properties": {
+        "schema_version": { "const": "lc631-host-contract.v2" },
+        "artifact_id": { "type": "integer", "minimum": 0 },
+        "turn_id": { "type": "integer", "minimum": 0 },
+        "candidate_digest": { "$ref": "#/$defs/digest" },
+        "output_digest": { "$ref": "#/$defs/digest" },
+        "stage": { "enum": ["precommit_candidate", "post_send_observed", "sink_delivery_observed"] },
+        "callback_event_digest": { "$ref": "#/$defs/digest" },
+        "sink_id": { "type": ["string", "null"] },
+        "delivered": { "type": ["boolean", "null"] },
+        "host_seed_receipt_digest": { "$ref": "#/$defs/digest" },
+        "authenticity_receipt_digest": { "$ref": "#/$defs/digest" },
+        "authenticity_attestation": { "type": "object" }
+      }
+    },
+    "host_output_stage_ledger": {
+      "type": "object",
+      "required": ["artifact_id", "turn_id", "candidate_digest", "output_digest", "stages"],
+      "properties": {
+        "artifact_id": { "type": "integer", "minimum": 0 },
+        "turn_id": { "type": "integer", "minimum": 0 },
+        "candidate_digest": { "$ref": "#/$defs/digest" },
+        "output_digest": { "$ref": "#/$defs/digest" },
+        "stages": { "type": "array", "maxItems": 3, "items": { "$ref": "#/$defs/host_output_stage_receipt" } }
+      }
+    },
+    "finalization": {
+      "type": "object",
+      "required": ["schema_version", "connection", "closure", "host_output_bound", "delivery_observed", "final_decision"],
+      "properties": {
+        "schema_version": { "const": "epistesys-dgcl-finalization.v1" },
+        "connection": { "$ref": "#/$defs/connection_report" },
+        "closure": { "type": "object" },
+        "checkpoint_integrity_state": { "enum": ["unanchored", "trusted_head_matched"] },
+        "rollback_detection": { "const": "unavailable_without_external_trusted_head_anchor" },
+        "host_output_bound": { "const": false },
+        "delivery_observed": { "const": false },
+        "final_decision": { "const": "hold_host_output_unbound" }
+      }
+    }
+    ,"standalone_run": {
+      "type": "object",
+      "required": ["schema_version", "input_profile", "pipeline", "candidate", "host_send_authorized", "output_commit_allowed", "authority_created", "claim_boundary"],
+      "properties": {
+        "schema_version": { "const": "epistesys-dgcl-standalone-run.v1" },
+        "input_profile": { "enum": ["dgcl-rust-cli-ja-en-alpha2-no-external-models.v1", "dgcl-rust-cli-ja-en-alpha2-configured-stanza.v1"] },
+        "pipeline": { "$ref": "#/$defs/pipeline" },
+        "candidate": { "$ref": "#/$defs/standalone_candidate" },
+        "host_send_authorized": { "const": false },
+        "output_commit_allowed": { "const": false },
+        "authority_created": { "const": false },
+        "claim_boundary": { "type": "string" }
+      }
+    }
+  }
+}

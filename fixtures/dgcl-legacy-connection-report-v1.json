@@ -1,0 +1,12 @@
+{
+  "schema_version": "epistesys-coding-connection.v1",
+  "source_revision": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+  "requirement_id": 1,
+  "implementation_symbol_found": false,
+  "command_registered_candidate": false,
+  "runtime_command_observed": false,
+  "acceptance_matched": false,
+  "status": "held",
+  "authority_created": false,
+  "output_commit_allowed": false
+}

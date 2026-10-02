@@ -1,0 +1,11 @@
+{
+  "schema_version": "epistesys-dgcl-checkpoint.v1",
+  "sequence": 0,
+  "source_revision": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+  "plan_digest": "sha256:8888888888888888888888888888888888888888888888888888888888888888",
+  "authority_revision": "authority-r1",
+  "action_key": "action-1",
+  "delivery": "unknown_delivery",
+  "result_digest": null,
+  "parent_digest": null
+}
