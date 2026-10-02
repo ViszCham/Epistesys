@@ -1,5 +1,13 @@
 #![forbid(unsafe_code)]
 
+mod alpha2_release;
+
+pub use alpha2_release::{
+    alpha2_gate_payload_digest, alpha2_gate_scope, alpha2_required_features, assess_alpha2_release,
+    Alpha2GateAttestation, Alpha2GateFeature, Alpha2HostObservation, Alpha2ReleaseProfile,
+    Alpha2ReleaseReport, Alpha2ResearchStatus, Alpha2SourceReadiness,
+};
+
 use lc631_core::LC631_VERSION;
 use serde::Serialize;
 use std::collections::BTreeMap;

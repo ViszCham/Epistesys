@@ -12,11 +12,12 @@ members = [
     "crates/lc631-compat",
     "crates/lc631-wire",
     "crates/lc631-cli",
+    "crates/lc631-process-supervisor",
 ]
 resolver = "2"
 
 [workspace.package]
-version = "6.3.2-alpha.1"
+version = "6.3.2-alpha.2"
 edition = "2021"
 license = "UNLICENSED"
 
@@ -28,3 +29,6 @@ getrandom = "0.3"
 cubecl-core = { version = "=0.10.0", default-features = false, features = ["std"] }
 cubecl-wgpu = { version = "=0.10.0", default-features = false, features = ["std"] }
 wgpu = { version = "=29.0.4", default-features = false }
+pulldown-cmark = { version = "=0.13.4", default-features = false }
+tree-sitter = "=0.27.0"
+tree-sitter-rust = "=0.24.2"

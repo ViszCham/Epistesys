@@ -1,16 +1,19 @@
 use crate::{
-    default_profile_registry, BoundaryLedger, ConstraintEdge, ConstraintKind, ConstraintState,
-    DeepGrammarArtifact, GrammarProduction, GrammarProfileId, PackedDerivation, ParseDefect,
-    RegionCandidate, RegionLattice, RelationKind, RelationState, SyntaxNode, SyntaxNodeId,
-    SyntaxNodeKind, SyntaxRelation, Token, TokenKind, TokenLattice, TypedConstraintGraph,
-    UnifiedGrammarIr, UnifiedSyntaxHypergraph,
+    analyze_dg1, default_profile_registry, BoundaryLedger, ConstraintEdge, ConstraintKind,
+    ConstraintState, DeepGrammarArtifact, Dg1Error, Dg1Language, Dg1Region, Dg1RegionKind,
+    Dg1Report, GrammarProduction, GrammarProfileId, PackedDerivation, ParseDefect, RegionCandidate,
+    RegionLattice, RelationKind, RelationState, SyntaxNode, SyntaxNodeId, SyntaxNodeKind,
+    SyntaxRelation, Token, TokenKind, TokenLattice, TypedConstraintGraph, UnifiedGrammarIr,
+    UnifiedSyntaxHypergraph,
 };
 use lc631_core::SourceSpan;
 use serde::Serialize;
+use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub enum TldgError {
     SourceRoundtripMismatch,
+    Dg1(Dg1Error),
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize)]
@@ -28,8 +31,12 @@ pub struct UnifiedParseReport {
 }
 
 pub fn analyze_document(source: &str) -> Result<UnifiedParseReport, TldgError> {
-    let artifact = analyze(source)?;
-    Ok(UnifiedParseReport {
+    let (artifact, _) = analyze_with_dg1(source)?;
+    Ok(report_for_artifact(&artifact))
+}
+
+pub fn report_for_artifact(artifact: &DeepGrammarArtifact) -> UnifiedParseReport {
+    UnifiedParseReport {
         source_roundtrip: artifact.boundary_roundtrip.clone(),
         profile_count: default_profile_registry().len(),
         region_count: artifact.regions.candidates.len(),
@@ -50,122 +57,109 @@ pub fn analyze_document(source: &str) -> Result<UnifiedParseReport, TldgError> {
             .filter(|region| region.embedded)
             .count(),
         natural_program_binary_split: false,
-    })
+    }
 }
 
 pub fn analyze(source: &str) -> Result<DeepGrammarArtifact, TldgError> {
+    analyze_with_dg1(source).map(|(artifact, _)| artifact)
+}
+
+pub(crate) fn analyze_with_dg1(
+    source: &str,
+) -> Result<(DeepGrammarArtifact, Dg1Report), TldgError> {
     let boundary = BoundaryLedger::build(source);
     if boundary.roundtrip() != source || !boundary.covers_source() {
         return Err(TldgError::SourceRoundtripMismatch);
     }
-    let regions = build_regions(source);
+    let dg1 = analyze_dg1(source, crate::Dg1Budget::default()).map_err(TldgError::Dg1)?;
+    if !dg1.exact_source_roundtrip {
+        return Err(TldgError::SourceRoundtripMismatch);
+    }
+    let regions = build_regions(&dg1);
     let tokens = tokenize(source);
     let grammar = builtin_grammar();
-    let syntax = build_syntax(source, &regions, &tokens, &grammar);
+    let syntax = build_syntax(source, &dg1, &regions)?;
     let constraints = build_constraints(&tokens);
     let boundary_roundtrip = boundary.roundtrip();
-    Ok(DeepGrammarArtifact {
-        source: boundary.source,
-        boundary_roundtrip,
-        regions,
-        tokens,
-        grammar,
-        syntax,
-        constraints,
-        claim_boundary:
-            "lossless reference parse only; not semantic truth, compiler acceptance, or authority"
-                .into(),
-    })
+    Ok((
+        DeepGrammarArtifact {
+            source: boundary.source,
+            boundary_roundtrip,
+            regions,
+            tokens,
+            grammar,
+            syntax,
+            constraints,
+            claim_boundary:
+                "DG1 bounded CommonMark+tables/Rust CST projection; script spans are hints, rule candidates remain non-authoritative, and external natural-language semantics are unavailable"
+                    .into(),
+        },
+        dg1,
+    ))
 }
 
-fn build_regions(source: &str) -> RegionLattice {
-    let full = SourceSpan {
-        start: 0,
-        end: source.len(),
-    };
-    let mut candidates = vec![RegionCandidate {
-        span: full,
-        profile: GrammarProfileId(1),
-        evidence: "total_generic_symbolic_region".into(),
-        embedded: false,
-    }];
-    if source.chars().any(|character| character.is_alphabetic()) {
-        candidates.push(RegionCandidate {
-            span: full,
-            profile: GrammarProfileId(2),
-            evidence: "open_lexicon_candidate".into(),
-            embedded: false,
-        });
+fn build_regions(dg1: &Dg1Report) -> RegionLattice {
+    RegionLattice {
+        candidates: dg1
+            .regions
+            .iter()
+            .map(|region| RegionCandidate {
+                span: SourceSpan {
+                    start: region.span.start,
+                    end: region.span.end,
+                },
+                profile: profile_for_region(region),
+                evidence: format!("dg1_commonmark:{:?}:{:?}", region.kind, region.content_role),
+                embedded: matches!(
+                    region.kind,
+                    Dg1RegionKind::InlineCode
+                        | Dg1RegionKind::FencedCode
+                        | Dg1RegionKind::IndentedCode
+                        | Dg1RegionKind::OpaqueEmbedded
+                ),
+            })
+            .collect(),
     }
-    if contains_code_surface(source) {
-        candidates.push(RegionCandidate {
-            span: full,
-            profile: GrammarProfileId(3),
-            evidence: "executable_symbolic_candidate".into(),
-            embedded: false,
-        });
-    }
-    for span in embedded_spans(source) {
-        candidates.push(RegionCandidate {
-            span,
-            profile: GrammarProfileId(4),
-            evidence: "embedded_dialect_boundary".into(),
-            embedded: true,
-        });
-    }
-    RegionLattice { candidates }
 }
 
-fn contains_code_surface(source: &str) -> bool {
-    ["fn ", "let ", "const ", "::", "();", "{", "}", "sql!("]
-        .iter()
-        .any(|needle| source.contains(needle))
-}
-
-fn embedded_spans(source: &str) -> Vec<SourceSpan> {
-    let mut spans = Vec::new();
-    let mut search = 0;
-    while let Some(open_relative) = source[search..].find("~~~") {
-        let open = search + open_relative;
-        let content_start = source[open + 3..]
-            .find('\n')
-            .map_or(open + 3, |offset| open + 4 + offset);
-        if let Some(close_relative) = source[content_start..].find("~~~") {
-            let close = content_start + close_relative;
-            spans.push(SourceSpan {
-                start: content_start,
-                end: close,
-            });
-            search = close + 3;
-        } else {
-            break;
-        }
+fn profile_for_region(region: &Dg1Region) -> GrammarProfileId {
+    if region
+        .dialect
+        .as_deref()
+        .is_some_and(|dialect| dialect == "rust" || dialect == "rs")
+    {
+        GrammarProfileId(3)
+    } else if matches!(
+        region.language,
+        Dg1Language::Japanese | Dg1Language::English | Dg1Language::MixedJapaneseEnglish
+    ) {
+        GrammarProfileId(2)
+    } else if matches!(
+        region.kind,
+        Dg1RegionKind::FencedCode
+            | Dg1RegionKind::IndentedCode
+            | Dg1RegionKind::InlineCode
+            | Dg1RegionKind::OpaqueEmbedded
+    ) {
+        GrammarProfileId(4)
+    } else {
+        GrammarProfileId(1)
     }
-    if let Some(sql) = source.find("sql!(") {
-        let start = sql + "sql!(".len();
-        let end = source[start..]
-            .find(')')
-            .map_or(source.len(), |offset| start + offset);
-        spans.push(SourceSpan { start, end });
-    }
-    if let Some(comment) = source.find("//") {
-        spans.push(SourceSpan {
-            start: comment,
-            end: source.len(),
-        });
-    }
-    spans
 }
 
 fn tokenize(source: &str) -> TokenLattice {
     let mut tokens = Vec::new();
     let mut start = 0;
     while start < source.len() {
-        let character = source[start..].chars().next().expect("valid boundary");
+        let Some(character) = source.get(start..).and_then(|suffix| suffix.chars().next()) else {
+            break;
+        };
         let mut end = start + character.len_utf8();
         let kind = classify(character);
         while end < source.len() {
-            let next = source[end..].chars().next().expect("valid boundary");
+            let Some(next) = source.get(end..).and_then(|suffix| suffix.chars().next()) else {
+                break;
+            };
             if !can_merge(kind, next) {
                 break;
             }
@@ -180,19 +174,9 @@ fn tokenize(source: &str) -> TokenLattice {
         start = end;
     }
     let primary = tokens.iter().map(|token| token.id).collect::<Vec<_>>();
-    let competing_segmentations = if source.contains(" or ") {
-        let whitespace_elided = tokens
-            .iter()
-            .filter(|token| token.kind != TokenKind::Whitespace)
-            .map(|token| token.id)
-            .collect();
-        vec![primary, whitespace_elided]
-    } else {
-        vec![primary]
-    };
     TokenLattice {
         tokens,
-        competing_segmentations,
+        competing_segmentations: vec![primary],
     }
 }
 
@@ -283,16 +267,16 @@ fn builtin_grammar() -> UnifiedGrammarIr {
 
 fn build_syntax(
     source: &str,
+    dg1: &Dg1Report,
     regions: &RegionLattice,
-    tokens: &TokenLattice,
-    grammar: &UnifiedGrammarIr,
-) -> UnifiedSyntaxHypergraph {
+) -> Result<UnifiedSyntaxHypergraph, TldgError> {
     let root = SyntaxNodeId(0);
-    let profile_candidates = regions
+    let profile_set = regions
         .candidates
         .iter()
         .map(|region| region.profile)
-        .collect::<Vec<_>>();
+        .collect::<BTreeSet<_>>();
+    let profile_candidates = profile_set.into_iter().collect::<Vec<_>>();
     let mut nodes = vec![SyntaxNode {
         id: root,
         spans: vec![SourceSpan {
@@ -300,120 +284,139 @@ fn build_syntax(
             end: source.len(),
         }],
         kind: SyntaxNodeKind::Document,
-        profile_candidates: profile_candidates.clone(),
-        origin: "source_document".into(),
+        profile_candidates,
+        origin: "dg1_document_root".into(),
     }];
     let mut relations = Vec::new();
-    for token in &tokens.tokens {
-        let id = SyntaxNodeId(nodes.len() as u64);
+    let mut defects = Vec::new();
+    let mut region_nodes = BTreeMap::<u32, SyntaxNodeId>::from([(0, root)]);
+    let mut region_children = BTreeMap::<u32, Vec<SyntaxNodeId>>::new();
+
+    for region in dg1.regions.iter().filter(|region| region.id != 0) {
+        if source.get(region.span.clone()).is_none() {
+            return Err(TldgError::SourceRoundtripMismatch);
+        }
+        let parent_region = region.parent.unwrap_or(0);
+        let Some(parent_id) = region_nodes.get(&parent_region).copied() else {
+            return Err(TldgError::SourceRoundtripMismatch);
+        };
+        let id = SyntaxNodeId(
+            u64::try_from(nodes.len()).map_err(|_| TldgError::SourceRoundtripMismatch)?,
+        );
+        let profile = profile_for_region(region);
         nodes.push(SyntaxNode {
             id,
-            spans: vec![token.span],
-            kind: SyntaxNodeKind::Token,
-            profile_candidates: profile_candidates.clone(),
-            origin: "lossless_token_lattice".into(),
+            spans: vec![SourceSpan {
+                start: region.span.start,
+                end: region.span.end,
+            }],
+            kind: SyntaxNodeKind::Group,
+            profile_candidates: vec![profile],
+            origin: format!("dg1_commonmark_region:{:?}", region.kind),
         });
+        region_nodes.insert(region.id, id);
+        region_children.entry(parent_region).or_default().push(id);
         relations.push(SyntaxRelation {
-            from: root,
+            from: parent_id,
             to: id,
             kind: RelationKind::Contains,
             state: RelationState::Verified,
-            evidence: "source_span_coverage".into(),
+            evidence: "pinned_commonmark_event_region_parent".into(),
         });
-        if id.0 > 1 {
+    }
+    for siblings in region_children.values() {
+        for pair in siblings.windows(2) {
             relations.push(SyntaxRelation {
-                from: SyntaxNodeId(id.0 - 1),
-                to: id,
+                from: pair[0],
+                to: pair[1],
                 kind: RelationKind::Sequence,
                 state: RelationState::Verified,
-                evidence: "source_order".into(),
+                evidence: "pinned_commonmark_event_order".into(),
             });
         }
     }
-    let mut defects = Vec::new();
-    let mut stack = Vec::<(char, SyntaxNodeId, SourceSpan)>::new();
-    for token in &tokens.tokens {
-        if token.kind != TokenKind::Delimiter {
-            continue;
-        }
-        let character = token.surface.chars().next().unwrap_or_default();
-        let token_node = SyntaxNodeId(u64::from(token.id) + 1);
-        if "({[".contains(character) {
-            stack.push((character, token_node, token.span));
-        } else if let Some((opening, opener, opening_span)) = stack.pop() {
-            if matching(opening) == character {
-                relations.push(SyntaxRelation {
-                    from: opener,
-                    to: token_node,
-                    kind: RelationKind::Scope,
-                    state: RelationState::Verified,
-                    evidence: "matched_delimiter".into(),
-                });
-            } else {
-                defects.push(ParseDefect::UnmatchedDelimiter(token.span));
-                insert_error(&mut nodes, token.span, &profile_candidates);
-                stack.push((opening, opener, opening_span));
+
+    for tree in &dg1.rust_trees {
+        let Some(region_parent) = region_nodes.get(&tree.region_id).copied() else {
+            return Err(TldgError::SourceRoundtripMismatch);
+        };
+        let mut local_to_global = BTreeMap::<u32, SyntaxNodeId>::new();
+        let mut syntax_children = BTreeMap::<Option<u32>, Vec<SyntaxNodeId>>::new();
+        for node in &tree.nodes {
+            if source.get(node.span.clone()).is_none() {
+                return Err(TldgError::SourceRoundtripMismatch);
             }
-        } else {
-            defects.push(ParseDefect::UnmatchedDelimiter(token.span));
-            insert_error(&mut nodes, token.span, &profile_candidates);
+            let parent_id = match node.parent_id {
+                Some(parent) => local_to_global
+                    .get(&parent)
+                    .copied()
+                    .ok_or(TldgError::SourceRoundtripMismatch)?,
+                None => region_parent,
+            };
+            let id = SyntaxNodeId(
+                u64::try_from(nodes.len()).map_err(|_| TldgError::SourceRoundtripMismatch)?,
+            );
+            let error = node.is_error || node.missing || node.kind == "ERROR";
+            nodes.push(SyntaxNode {
+                id,
+                spans: vec![SourceSpan {
+                    start: node.span.start,
+                    end: node.span.end,
+                }],
+                kind: if error {
+                    SyntaxNodeKind::Error
+                } else if node.named {
+                    SyntaxNodeKind::Group
+                } else {
+                    SyntaxNodeKind::Token
+                },
+                profile_candidates: vec![GrammarProfileId(3)],
+                origin: format!("tree_sitter_rust_cst:{}", node.kind),
+            });
+            local_to_global.insert(node.id, id);
+            syntax_children.entry(node.parent_id).or_default().push(id);
+            relations.push(SyntaxRelation {
+                from: parent_id,
+                to: id,
+                kind: RelationKind::Contains,
+                state: RelationState::Verified,
+                evidence: "pinned_rust_cst_parent_child_relation".into(),
+            });
+            if error {
+                defects.push(ParseDefect::ErrorRecoveryInsertedNode(SourceSpan {
+                    start: node.span.start,
+                    end: node.span.end,
+                }));
+            }
+        }
+        for siblings in syntax_children
+            .iter()
+            .filter(|(parent, _)| parent.is_some())
+            .map(|(_, children)| children)
+        {
+            for pair in siblings.windows(2) {
+                relations.push(SyntaxRelation {
+                    from: pair[0],
+                    to: pair[1],
+                    kind: RelationKind::Sequence,
+                    state: RelationState::Verified,
+                    evidence: "pinned_rust_cst_sibling_order".into(),
+                });
+            }
         }
     }
-    for (_, _, span) in stack {
-        defects.push(ParseDefect::UnmatchedDelimiter(span));
-        insert_error(&mut nodes, span, &profile_candidates);
-    }
-    if regions.candidates.len() > 1 {
-        defects.push(ParseDefect::AmbiguousRegionBoundary(SourceSpan {
-            start: 0,
-            end: source.len(),
-        }));
-    }
-    let derivation_count = tokens.competing_segmentations.len().max(1);
-    if derivation_count > 1 {
-        defects.push(ParseDefect::CompetingDerivations);
-    }
-    let derivations = (0..derivation_count)
-        .map(|index| PackedDerivation {
-            id: index as u32 + 1,
-            root,
-            production_ids: grammar
-                .productions
-                .iter()
-                .map(|production| production.id)
-                .collect(),
-            status: if index == 0 {
-                "reference_surface_derivation".into()
-            } else {
-                "competing_derivation".into()
-            },
-        })
-        .collect();
-    UnifiedSyntaxHypergraph {
+
+    Ok(UnifiedSyntaxHypergraph {
         nodes,
         relations,
-        derivations,
+        derivations: vec![PackedDerivation {
+            id: 1,
+            root,
+            production_ids: Vec::new(),
+            status: format!("dg1_profile_parse:{}", crate::DG1_SCHEMA),
+        }],
         defects,
-    }
-}
-
-fn insert_error(nodes: &mut Vec<SyntaxNode>, span: SourceSpan, profiles: &[GrammarProfileId]) {
-    nodes.push(SyntaxNode {
-        id: SyntaxNodeId(nodes.len() as u64),
-        spans: vec![span],
-        kind: SyntaxNodeKind::Error,
-        profile_candidates: profiles.to_vec(),
-        origin: "delimiter_error_recovery".into(),
-    });
-}
-
-fn matching(opening: char) -> char {
-    match opening {
-        '(' => ')',
-        '{' => '}',
-        '[' => ']',
-        _ => opening,
-    }
+    })
 }
 
 #[cfg(test)]

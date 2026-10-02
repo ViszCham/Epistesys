@@ -14,4 +14,8 @@ lc631-core = { path = "../lc631-core" }
 lc631-receipt-kernel = { path = "../lc631-receipt-kernel" }
 lc631-tl = { path = "../lc631-tl" }
 serde.workspace = true
+serde_json.workspace = true
 sha2.workspace = true
+pulldown-cmark.workspace = true
+tree-sitter.workspace = true
+tree-sitter-rust.workspace = true

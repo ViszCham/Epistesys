@@ -289,7 +289,11 @@ fn explicit_execution_checks_the_source_bound_cargo_package() {
 
     assert!(cargo.source_bound, "{cargo:?}");
     assert_eq!(cargo.checked_package.as_deref(), Some("member"));
-    assert_eq!(cargo.crate_check_state, EvidenceState::Observed);
+    assert_eq!(
+        cargo.crate_check_state,
+        EvidenceState::Observed,
+        "{cargo:?}"
+    );
     assert!(cargo.build_execution_observed);
     assert_eq!(
         report.stage("RPA-13").unwrap().state,
@@ -527,7 +531,10 @@ fn rpa_37_consumes_rust_codegen_assembly_and_object_without_claiming_runtime_abi
         source_name: Some("lib.rs"),
         source: Some("pub fn add(a: i64, b: i64) -> i64 { a + b }"),
     });
-    let assembly = report.assembly.as_ref().expect("rustc assembly analysis");
+    let assembly = report
+        .assembly
+        .as_ref()
+        .unwrap_or_else(|| panic!("rustc assembly analysis: {report:#?}"));
 
     assert_eq!(assembly.source_origin, "rustc_codegen_assembly");
     assert!(assembly.object_digest.is_some());

@@ -1,11 +1,21 @@
 #![forbid(unsafe_code)]
 
+mod dgcl_journal;
+mod dgcl_package;
+mod dgcl_repair;
+
 #[cfg(feature = "gpu-cubecl-wgpu")]
 use lc631_accelerator::{compare_lane_digests, CubeClWgpuBackend, MeasurementState};
 use lc631_accelerator::{input_from_evaluations, AcceleratorBroker, CpuBackend, ExecutionReceipt};
 use lc631_analysis::{
-    analyze as analyze_program, analyze_path as analyze_program_path, AnalysisRequest,
-    ProgramAnalysisReport,
+    analyze as analyze_program, analyze_path as analyze_program_path, append_checkpoint,
+    build_coding_closure, build_dgcl_pipeline, build_dgcl_standalone_candidate, evaluate_gold,
+    inspect_resume, inspect_resume_with_anchor, issue_checkpoint_head_anchor,
+    issue_observed_connection_evidence, load_checkpoint_head, load_dgcl_runtime_pins,
+    observe_connection_plan_from_cli, parse_controlled_instruction, persist_checkpoint_head,
+    run_language_worker, verify_connection_plan_from_cli, AnalysisRequest, CheckpointBody,
+    CheckpointEventKind, CheckpointHeadRequest, CodingConnectionPlan, DeliveryState,
+    DgclBackendSet, GoldCorpus, InstructionParseBudget, ProgramAnalysisReport,
 };
 use lc631_compat::{audit_v630_root, BaselineGuardReport, DivergenceKind, PairedObservation};
 use lc631_core::{
@@ -28,12 +38,14 @@ use lc631_receipt_kernel::{
 };
 use lc631_tl::{compare_legacy_route, ProjectionGateDecision};
 use lc631_tldg::{
-    analyze as analyze_tldg, build_structural_kernel as build_tldg_structural_kernel,
+    analyze as analyze_tldg, analyze_dg1, build_structural_kernel as build_tldg_structural_kernel,
     build_tldg_pipeline, build_tldg_release_gate, build_tldg_release_gate_with_receipts,
-    run_adversarial_evaluation, run_tldg_geometry_accelerator, CalibrationPartition,
+    run_adversarial_evaluation, run_tldg_geometry_accelerator, CalibrationPartition, Dg1Budget,
     TldgPipelineReport,
 };
-use lc631_wire::{PromotionGate, ResidualRiskLedger, WireEnvelope, PROMOTION_PREDICATES};
+use lc631_wire::{
+    PromotionGate, ResidualRiskLedger, WireEnvelope, PROMOTION_PREDICATES, WIRE_SCHEMA,
+};
 use lc631_world::{
     evaluation_matrix, generate_distinct_worlds, materialize_evaluations, WorldArena, WorldBudget,
 };
@@ -58,6 +70,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 const MAX_RPA_SOURCE_FILE_BYTES: u64 = 1024 * 1024;
 const MAX_PROMOTION_EVIDENCE_FILE_BYTES: u64 = 1024 * 1024;
 const MAX_PROMOTION_RECEIPT_AGE_SECONDS: u64 = 24 * 60 * 60;
+const MAX_PROMPT_STDIN_BYTES: usize = 2 * 1024 * 1024;
 const PROMOTION_EVIDENCE_SCHEMA: &str = "lc631-promotion-evidence.v1";
 const V630_FROZEN_COMMIT: &str = "0d933982fa392043c2fe825644a3a560963b6615";
 
@@ -85,6 +98,13 @@ fn run() -> Result<(), String> {
     let repo = take_option(&mut args, "--repo").map(PathBuf::from);
     let execute = take_flag(&mut args, "--execute");
     let prompt = take_option(&mut args, "--prompt");
+    let prompt_stdin = take_flag(&mut args, "--prompt-stdin");
+    let prompt = match (prompt, prompt_stdin) {
+        (Some(_), true) => return Err("use_exactly_one_of_--prompt_or_--prompt-stdin".into()),
+        (Some(prompt), false) => Some(prompt),
+        (None, true) => Some(read_prompt_stdin()?),
+        (None, false) => None,
+    };
     let v630_digest = take_option(&mut args, "--v630-digest");
     let v631_digest = take_option(&mut args, "--v631-digest");
     let iterations = take_option(&mut args, "--iterations")
@@ -97,7 +117,19 @@ fn run() -> Result<(), String> {
     let python = take_option(&mut args, "--python").map(PathBuf::from);
     let ffmpeg = take_option(&mut args, "--ffmpeg").map(PathBuf::from);
     let backend_script = take_option(&mut args, "--backend-script").map(PathBuf::from);
+    let backend_script_digest = take_option(&mut args, "--backend-script-digest");
+    let python_digest = take_option(&mut args, "--python-digest");
     let model_cache = take_option(&mut args, "--model-cache").map(PathBuf::from);
+    let language = take_option(&mut args, "--language");
+    let model_manifest = take_option(&mut args, "--model-manifest").map(PathBuf::from);
+    let model_manifest_digest = take_option(&mut args, "--model-manifest-digest");
+    let model_manifest_en = take_option(&mut args, "--model-manifest-en").map(PathBuf::from);
+    let model_manifest_ja = take_option(&mut args, "--model-manifest-ja").map(PathBuf::from);
+    let model_digest_en = take_option(&mut args, "--model-digest-en");
+    let model_digest_ja = take_option(&mut args, "--model-digest-ja");
+    let gold_file = take_option(&mut args, "--gold-file").map(PathBuf::from);
+    let connection_plan_file = take_option(&mut args, "--connection-plan").map(PathBuf::from);
+    let authority_revision = take_option(&mut args, "--authority-revision");
     let rights_asserted = take_flag(&mut args, "--rights-asserted");
     let seed_file = take_option(&mut args, "--seed-file").map(PathBuf::from);
     let source_file = take_option(&mut args, "--source-file").map(PathBuf::from);
@@ -107,9 +139,11 @@ fn run() -> Result<(), String> {
     let source_receipt_file = take_option(&mut args, "--source-receipt-file").map(PathBuf::from);
     let evidence_file = take_option(&mut args, "--evidence-file").map(PathBuf::from);
     let receipt_root = take_option(&mut args, "--receipt-root").map(PathBuf::from);
+    let author_receipt_root = take_option(&mut args, "--author-receipt-root").map(PathBuf::from);
     let backend_id = take_option(&mut args, "--backend-id");
     let model_license_receipt = take_option(&mut args, "--model-license-receipt");
     let ledger_root = take_option(&mut args, "--ledger-root").map(PathBuf::from);
+    let head_root = take_option(&mut args, "--head-root").map(PathBuf::from);
     let ledger = take_option(&mut args, "--ledger").map(PathBuf::from);
     let artifact = take_option(&mut args, "--artifact")
         .map(|value| value.parse::<u64>().map_err(|_| "invalid_--artifact"))
@@ -148,6 +182,584 @@ fn run() -> Result<(), String> {
             )
             .map_err(|error| format!("{error:?}"))?,
         ),
+        "lc631-dg1-doctor" => {
+            let source = prompt.as_deref().unwrap_or("");
+            emit(
+                &command,
+                analyze_dg1(source, Dg1Budget::default())
+                    .map_err(|error| format!("dg1:{error:?}"))?,
+            )
+        }
+        "lc631-instruction-parse" => {
+            let source = source_file
+                .as_ref()
+                .map(|path| read_bounded_rpa_source(path))
+                .transpose()?
+                .or(prompt)
+                .ok_or("lc631-instruction-parse_requires_source")?;
+            emit(
+                &command,
+                parse_controlled_instruction(&source, InstructionParseBudget::default())
+                    .map_err(|error| format!("instruction_parse:{error:?}"))?,
+            )
+        }
+        "lc631-dgcl-shadow-parse" => {
+            let source = source_file
+                .as_ref()
+                .map(|path| read_bounded_rpa_source(path))
+                .transpose()?
+                .or(prompt)
+                .ok_or("lc631-dgcl-shadow-parse_requires_source")?;
+            emit(
+                &command,
+                build_dgcl_pipeline(
+                    &source,
+                    DgclBackendSet {
+                        english: None,
+                        japanese: None,
+                    },
+                )
+                .map_err(|error| format!("dgcl_shadow_parse:{error:?}"))?,
+            )
+        }
+        "lc631-dgcl-package-finalize"
+        | "lc631-dgcl-package-repair"
+        | "lc631-dgcl-package-resume" => {
+            if python.is_some()
+                || model_cache.is_some()
+                || model_manifest_en.is_some()
+                || model_manifest_ja.is_some()
+                || backend_script.is_some()
+                || media.is_some()
+            {
+                return Err(
+                    "dgcl_package_profile_does_not_support_backend_or_media_options".into(),
+                );
+            }
+            if !execute {
+                return Err("dgcl_package_finalize_requires_--execute".into());
+            }
+            let root = repo.ok_or("dgcl_package_finalize_requires_--repo")?;
+            let source = prompt.ok_or("dgcl_package_finalize_requires_--prompt")?;
+            let bundle_path =
+                evidence_file.ok_or("dgcl_package_finalize_requires_--evidence-file")?;
+            let raw = read_bounded_rpa_source(&bundle_path)?;
+            let context = HostReceiptContext::load_existing(
+                &receipt_root.ok_or("dgcl_package_finalize_requires_--receipt-root")?,
+            )
+            .map_err(|error| format!("dgcl_package_receipt_root:{error:?}"))?;
+            let author = HostReceiptContext::load_existing(
+                &author_receipt_root
+                    .ok_or("dgcl_package_finalize_requires_--author-receipt-root")?,
+            )
+            .map_err(|error| format!("dgcl_package_author_root:{error:?}"))?;
+            let result = if command == "lc631-dgcl-package-repair"
+                || command == "lc631-dgcl-package-resume"
+            {
+                let bundle = serde_json::from_str::<dgcl_repair::PackageRepairBundle>(&raw)
+                    .map_err(|error| format!("dgcl_repair_bundle:{error}"))?;
+                let ledger = ledger_root
+                    .as_deref()
+                    .ok_or("dgcl_package_repair_requires_--ledger-root")?;
+                let heads = head_root
+                    .as_deref()
+                    .ok_or("dgcl_package_repair_requires_--head-root")?;
+                if command == "lc631-dgcl-package-resume" {
+                    dgcl_journal::resume_package(
+                        &root, &source, bundle, &context, &author, ledger, heads,
+                    )?
+                } else {
+                    dgcl_repair::repair_package(
+                        &root,
+                        &source,
+                        bundle,
+                        &context,
+                        &author,
+                        Some((ledger, heads)),
+                    )?
+                }
+            } else {
+                let bundle = serde_json::from_str::<dgcl_package::PackageValidationBundle>(&raw)
+                    .map_err(|error| format!("dgcl_package_bundle:{error}"))?;
+                dgcl_package::finalize_package(&root, &source, bundle, &context, &author)?
+            };
+            emit(&command, result)
+        }
+        "lc631-dgcl-run" => {
+            let source = source_file
+                .as_ref()
+                .map(|path| read_bounded_rpa_source(path))
+                .transpose()?
+                .or(prompt)
+                .ok_or("lc631-dgcl-run_requires_source")?;
+            let configured_profile = repo.is_some()
+                || python.is_some()
+                || backend_script.is_some()
+                || model_cache.is_some()
+                || model_manifest_en.is_some()
+                || model_manifest_ja.is_some();
+            let (pipeline, input_profile) = if configured_profile {
+                let root = repo
+                    .as_deref()
+                    .ok_or("lc631-dgcl-run_configured_profile_requires_--repo")?;
+                let pins = load_dgcl_runtime_pins(root)
+                    .map_err(|error| format!("dgcl_runtime_pins:{error:?}"))?;
+                let python = python
+                    .as_deref()
+                    .ok_or("lc631-dgcl-run_configured_profile_requires_--python")?;
+                let script = backend_script
+                    .as_deref()
+                    .ok_or("lc631-dgcl-run_configured_profile_requires_--backend-script")?;
+                let model_dir = model_cache
+                    .as_deref()
+                    .ok_or("lc631-dgcl-run_configured_profile_requires_--model-cache")?;
+                let script_digest = backend_script_digest
+                    .as_deref()
+                    .ok_or("lc631-dgcl-run_configured_profile_requires_--backend-script-digest")?;
+                let en_config = pins
+                    .bind_worker(
+                        "en",
+                        python,
+                        python_digest.clone(),
+                        script,
+                        script_digest.to_string(),
+                        model_dir,
+                        model_manifest_en.as_deref().ok_or(
+                            "lc631-dgcl-run_configured_profile_requires_--model-manifest-en",
+                        )?,
+                        model_digest_en
+                            .as_deref()
+                            .ok_or("lc631-dgcl-run_configured_profile_requires_--model-digest-en")?
+                            .to_string(),
+                        60_000,
+                    )
+                    .map_err(|error| format!("dgcl_runtime_binding_en:{error:?}"))?;
+                let ja_config = pins
+                    .bind_worker(
+                        "ja",
+                        python,
+                        python_digest,
+                        script,
+                        script_digest.to_string(),
+                        model_dir,
+                        model_manifest_ja.as_deref().ok_or(
+                            "lc631-dgcl-run_configured_profile_requires_--model-manifest-ja",
+                        )?,
+                        model_digest_ja
+                            .as_deref()
+                            .ok_or("lc631-dgcl-run_configured_profile_requires_--model-digest-ja")?
+                            .to_string(),
+                        60_000,
+                    )
+                    .map_err(|error| format!("dgcl_runtime_binding_ja:{error:?}"))?;
+                let pipeline = build_dgcl_pipeline(
+                    &source,
+                    DgclBackendSet {
+                        english: Some(&en_config),
+                        japanese: Some(&ja_config),
+                    },
+                )
+                .map_err(|error| format!("dgcl_run_pipeline:{error:?}"))?;
+                (pipeline, "dgcl-rust-cli-ja-en-alpha2-configured-stanza.v1")
+            } else {
+                let pipeline = build_dgcl_pipeline(
+                    &source,
+                    DgclBackendSet {
+                        english: None,
+                        japanese: None,
+                    },
+                )
+                .map_err(|error| format!("dgcl_run_pipeline:{error:?}"))?;
+                (pipeline, "dgcl-rust-cli-ja-en-alpha2-no-external-models.v1")
+            };
+            let candidate_bytes = serde_json::to_vec(&pipeline)
+                .map_err(|error| format!("dgcl_run_candidate_json:{error}"))?;
+            let candidate = build_dgcl_standalone_candidate(
+                &source,
+                &pipeline,
+                &candidate_bytes,
+                "epistesys-dgcl-pipeline.v1",
+            )
+            .map_err(|error| format!("dgcl_run_candidate:{error:?}"))?;
+            emit(
+                &command,
+                serde_json::json!({
+                    "schema_version": "epistesys-dgcl-standalone-run.v1",
+                    "input_profile": input_profile,
+                    "pipeline": pipeline,
+                    "candidate": candidate,
+                    "host_send_authorized": false,
+                    "output_commit_allowed": false,
+                    "authority_created": false,
+                    "claim_boundary": "source-to-pipeline-to-exact-standalone-candidate only; configured worker observations are not semantic correctness, and no host callback, sink delivery, or output authority is established"
+                }),
+            )
+        }
+        "lc631-dgcl-language" => {
+            let root = repo
+                .as_deref()
+                .ok_or("lc631-dgcl-language_requires_--repo")?;
+            let pins = load_dgcl_runtime_pins(root)
+                .map_err(|error| format!("dgcl_runtime_pins:{error:?}"))?;
+            let source = source_file
+                .as_ref()
+                .map(|path| read_bounded_rpa_source(path))
+                .transpose()?
+                .or(prompt)
+                .ok_or("lc631-dgcl-language_requires_source")?;
+            let language = language
+                .as_deref()
+                .ok_or("lc631-dgcl-language_requires_--language")?;
+            let config = pins
+                .bind_worker(
+                    language,
+                    python
+                        .as_deref()
+                        .ok_or("lc631-dgcl-language_requires_--python")?,
+                    python_digest,
+                    backend_script
+                        .as_deref()
+                        .ok_or("lc631-dgcl-language_requires_--backend-script")?,
+                    backend_script_digest
+                        .ok_or("lc631-dgcl-language_requires_--backend-script-digest")?,
+                    model_cache
+                        .as_deref()
+                        .ok_or("lc631-dgcl-language_requires_--model-cache")?,
+                    model_manifest
+                        .as_deref()
+                        .ok_or("lc631-dgcl-language_requires_--model-manifest")?,
+                    model_manifest_digest
+                        .ok_or("lc631-dgcl-language_requires_--model-manifest-digest")?,
+                    60_000,
+                )
+                .map_err(|error| format!("dgcl_runtime_binding:{error:?}"))?;
+            emit(
+                &command,
+                run_language_worker(&source, language, &config)
+                    .map_err(|error| format!("dgcl_language:{error:?}"))?,
+            )
+        }
+        "lc631-dgcl-parse" => {
+            let root = repo.as_deref().ok_or("lc631-dgcl-parse_requires_--repo")?;
+            let pins = load_dgcl_runtime_pins(root)
+                .map_err(|error| format!("dgcl_runtime_pins:{error:?}"))?;
+            let source = source_file
+                .as_ref()
+                .map(|path| read_bounded_rpa_source(path))
+                .transpose()?
+                .or(prompt)
+                .ok_or("lc631-dgcl-parse_requires_source")?;
+            let python = python.ok_or("lc631-dgcl-parse_requires_--python")?;
+            let script = backend_script.ok_or("lc631-dgcl-parse_requires_--backend-script")?;
+            let model_dir = model_cache.ok_or("lc631-dgcl-parse_requires_--model-cache")?;
+            let python_digest = python_digest.clone();
+            let script_digest = backend_script_digest
+                .clone()
+                .ok_or("lc631-dgcl-parse_requires_--backend-script-digest")?;
+            let en_config = pins
+                .bind_worker(
+                    "en",
+                    &python,
+                    python_digest.clone(),
+                    &script,
+                    script_digest.clone(),
+                    &model_dir,
+                    model_manifest_en
+                        .as_deref()
+                        .ok_or("lc631-dgcl-parse_requires_--model-manifest-en")?,
+                    model_digest_en
+                        .clone()
+                        .ok_or("lc631-dgcl-parse_requires_--model-digest-en")?,
+                    60_000,
+                )
+                .map_err(|error| format!("dgcl_runtime_binding_en:{error:?}"))?;
+            let ja_config = pins
+                .bind_worker(
+                    "ja",
+                    &python,
+                    python_digest,
+                    &script,
+                    script_digest,
+                    &model_dir,
+                    model_manifest_ja
+                        .as_deref()
+                        .ok_or("lc631-dgcl-parse_requires_--model-manifest-ja")?,
+                    model_digest_ja.ok_or("lc631-dgcl-parse_requires_--model-digest-ja")?,
+                    60_000,
+                )
+                .map_err(|error| format!("dgcl_runtime_binding_ja:{error:?}"))?;
+            emit(
+                &command,
+                build_dgcl_pipeline(
+                    &source,
+                    DgclBackendSet {
+                        english: Some(&en_config),
+                        japanese: Some(&ja_config),
+                    },
+                )
+                .map_err(|error| format!("dgcl_parse:{error:?}"))?,
+            )
+        }
+        "lc631-dgcl-evaluate" => {
+            let path = gold_file.ok_or("lc631-dgcl-evaluate_requires_--gold-file")?;
+            let metadata = fs::metadata(&path).map_err(|error| format!("gold_metadata:{error}"))?;
+            if metadata.len() == 0 || metadata.len() > 16 * 1024 * 1024 {
+                return Err("dgcl_gold_size_invalid".into());
+            }
+            let raw = fs::read_to_string(&path).map_err(|error| format!("gold_read:{error}"))?;
+            let corpus: GoldCorpus =
+                serde_json::from_str(&raw).map_err(|error| format!("gold_json:{error}"))?;
+            emit(
+                &command,
+                evaluate_gold(&corpus).map_err(|error| format!("gold_eval:{error:?}"))?,
+            )
+        }
+        "lc631-dgcl-verify" => {
+            if !execute {
+                return Err("lc631-dgcl-verify_requires_--execute".into());
+            }
+            let root = repo.ok_or("lc631-dgcl-verify_requires_--repo")?;
+            let path =
+                connection_plan_file.ok_or("lc631-dgcl-verify_requires_--connection-plan")?;
+            let metadata =
+                fs::metadata(&path).map_err(|error| format!("connection_plan_metadata:{error}"))?;
+            if metadata.len() == 0 || metadata.len() > 1_048_576 {
+                return Err("dgcl_connection_plan_size_invalid".into());
+            }
+            let raw = fs::read_to_string(&path)
+                .map_err(|error| format!("connection_plan_read:{error}"))?;
+            let plan: CodingConnectionPlan = serde_json::from_str(&raw)
+                .map_err(|error| format!("connection_plan_json:{error}"))?;
+            emit(
+                &command,
+                verify_connection_plan_from_cli(&root, &plan)
+                    .map_err(|error| format!("dgcl_connection:{error:?}"))?,
+            )
+        }
+        "lc631-dgcl-finalize" => {
+            if !execute {
+                return Err("lc631-dgcl-finalize_requires_--execute".into());
+            }
+            let root = repo.ok_or("lc631-dgcl-finalize_requires_--repo")?;
+            let path =
+                connection_plan_file.ok_or("lc631-dgcl-finalize_requires_--connection-plan")?;
+            let metadata =
+                fs::metadata(&path).map_err(|error| format!("connection_plan_metadata:{error}"))?;
+            if metadata.len() == 0 || metadata.len() > 1_048_576 {
+                return Err("dgcl_connection_plan_size_invalid".into());
+            }
+            let raw = fs::read_to_string(&path)
+                .map_err(|error| format!("connection_plan_read:{error}"))?;
+            let plan: CodingConnectionPlan = serde_json::from_str(&raw)
+                .map_err(|error| format!("connection_plan_json:{error}"))?;
+            let dgcl_pipeline = build_dgcl_pipeline(
+                &plan.source,
+                DgclBackendSet {
+                    english: None,
+                    japanese: None,
+                },
+            )
+            .map_err(|error| format!("dgcl_finalization_pipeline:{error:?}"))?;
+            let ledger_root = ledger_root.ok_or("lc631-dgcl-finalize_requires_--ledger-root")?;
+            let authority_revision =
+                authority_revision.ok_or("lc631-dgcl-finalize_requires_--authority-revision")?;
+            let receipt_root = receipt_root.ok_or("lc631-dgcl-finalize_requires_--receipt-root")?;
+            let plan_digest = stable_sha256(&raw);
+            let prior = inspect_resume(
+                &ledger_root,
+                &plan.source_revision,
+                &plan_digest,
+                &authority_revision,
+            )
+            .map_err(|error| format!("dgcl_resume:{error:?}"))?;
+            if prior.latest_sequence.is_some() {
+                return Err("dgcl_prior_delivery_requires_manual_revalidation".into());
+            }
+            let context = HostReceiptContext::load_existing(&receipt_root)
+                .map_err(|error| format!("dgcl_receipt_root:{error:?}"))?;
+            let action_key = stable_sha256(&format!(
+                "{}\0{}\0{}",
+                plan.source_revision, plan_digest, authority_revision
+            ));
+            let first_digest = append_checkpoint(
+                &ledger_root,
+                CheckpointBody {
+                    schema_version: "epistesys-dgcl-checkpoint.v2".into(),
+                    sequence: 0,
+                    source_revision: plan.source_revision.clone(),
+                    plan_digest: plan_digest.clone(),
+                    authority_revision: authority_revision.clone(),
+                    action_key: action_key.clone(),
+                    event_kind: CheckpointEventKind::ActionStarted,
+                    delivery: DeliveryState::UnknownDelivery,
+                    result_digest: None,
+                    parent_digest: None,
+                },
+            )
+            .map_err(|error| format!("dgcl_checkpoint:{error:?}"))?;
+            if let Some(heads) = head_root.as_deref() {
+                let anchor = issue_checkpoint_head_anchor(
+                    context.issuer(),
+                    CheckpointHeadRequest {
+                        source_revision: &plan.source_revision,
+                        plan_digest: &plan_digest,
+                        authority_revision: &authority_revision,
+                        sequence: Some(0),
+                        head_digest: Some(&first_digest),
+                        now_epoch: current_epoch_seconds()?,
+                        lease_seconds: 3600,
+                    },
+                )
+                .map_err(|error| format!("dgcl_head:{error:?}"))?;
+                persist_checkpoint_head(
+                    &ledger_root,
+                    heads,
+                    &anchor,
+                    context.verifier(),
+                    current_epoch_seconds()?,
+                )
+                .map_err(|error| format!("dgcl_head_persist:{error:?}"))?;
+            }
+            let observation = observe_connection_plan_from_cli(&root, &plan)
+                .map_err(|error| format!("dgcl_connection:{error:?}"))?;
+            let connection = observation.report().clone();
+            if connection.status != lc631_analysis::ConnectionStatus::Observed {
+                return Err("dgcl_delivery_unconfirmed_requires_manual_revalidation".into());
+            }
+            let now_epoch = current_epoch_seconds()?;
+            let claim = issue_observed_connection_evidence(
+                observation,
+                context.issuer(),
+                context.verifier(),
+                now_epoch,
+            )
+            .map_err(|error| format!("dgcl_evidence:{error:?}"))?;
+            let observed_digest = append_checkpoint(
+                &ledger_root,
+                CheckpointBody {
+                    schema_version: "epistesys-dgcl-checkpoint.v2".into(),
+                    sequence: 1,
+                    source_revision: plan.source_revision.clone(),
+                    plan_digest: plan_digest.clone(),
+                    authority_revision: authority_revision.clone(),
+                    action_key,
+                    event_kind: CheckpointEventKind::ActionObserved,
+                    delivery: DeliveryState::ConfirmedSuccess,
+                    result_digest: Some(connection.process.stdout_digest.clone()),
+                    parent_digest: Some(first_digest),
+                },
+            )
+            .map_err(|error| format!("dgcl_checkpoint:{error:?}"))?;
+            if let Some(heads) = head_root.as_deref() {
+                let anchor = issue_checkpoint_head_anchor(
+                    context.issuer(),
+                    CheckpointHeadRequest {
+                        source_revision: &plan.source_revision,
+                        plan_digest: &plan_digest,
+                        authority_revision: &authority_revision,
+                        sequence: Some(1),
+                        head_digest: Some(&observed_digest),
+                        now_epoch,
+                        lease_seconds: 3600,
+                    },
+                )
+                .map_err(|error| format!("dgcl_head:{error:?}"))?;
+                persist_checkpoint_head(
+                    &ledger_root,
+                    heads,
+                    &anchor,
+                    context.verifier(),
+                    now_epoch,
+                )
+                .map_err(|error| format!("dgcl_head_persist:{error:?}"))?;
+            }
+            let closure = build_coding_closure(
+                &plan.source,
+                &dgcl_pipeline.dg1,
+                &[claim],
+                Some(context.verifier()),
+                &mut ReplayGuard::default(),
+                now_epoch,
+            )
+            .map_err(|error| format!("dgcl_closure:{error:?}"))?;
+            let standalone_candidate = build_dgcl_standalone_candidate(
+                &plan.source,
+                &dgcl_pipeline,
+                &connection.process.stdout,
+                WIRE_SCHEMA,
+            )
+            .map_err(|error| format!("dgcl_standalone_candidate:{error:?}"))?;
+            emit(
+                &command,
+                serde_json::json!({
+                    "schema_version": "epistesys-dgcl-finalization.v1",
+                    "connection": connection,
+                    "closure": closure,
+                    "standalone_candidate": standalone_candidate,
+                    "checkpoint_integrity_state": prior.integrity_state,
+                    "rollback_detection": "unavailable_without_external_trusted_head_anchor",
+                    "host_output_bound": false,
+                    "delivery_observed": false,
+                    "final_decision": "hold_host_output_unbound"
+                }),
+            )
+        }
+        "lc631-dgcl-resume" => {
+            let path =
+                connection_plan_file.ok_or("lc631-dgcl-resume_requires_--connection-plan")?;
+            let raw = fs::read_to_string(&path)
+                .map_err(|error| format!("connection_plan_read:{error}"))?;
+            if raw.len() > 1_048_576 {
+                return Err("dgcl_connection_plan_size_invalid".into());
+            }
+            let plan: CodingConnectionPlan = serde_json::from_str(&raw)
+                .map_err(|error| format!("connection_plan_json:{error}"))?;
+            let root = ledger_root.ok_or("lc631-dgcl-resume_requires_--ledger-root")?;
+            let authority =
+                authority_revision.ok_or("lc631-dgcl-resume_requires_--authority-revision")?;
+            let resumed = if let Some(heads) = head_root.as_deref() {
+                let context = HostReceiptContext::load_existing(
+                    &receipt_root.ok_or("dgcl_anchored_resume_requires_--receipt-root")?,
+                )
+                .map_err(|error| format!("dgcl_receipt_root:{error:?}"))?;
+                let now = current_epoch_seconds()?;
+                let anchor = load_checkpoint_head(&root, heads, context.verifier(), now)
+                    .map_err(|error| format!("dgcl_head_load:{error:?}"))?;
+                inspect_resume_with_anchor(
+                    &root,
+                    &plan.source_revision,
+                    &stable_sha256(&raw),
+                    &authority,
+                    Some(&anchor),
+                    Some(context.verifier()),
+                    now,
+                )
+            } else {
+                inspect_resume(
+                    &root,
+                    &plan.source_revision,
+                    &stable_sha256(&raw),
+                    &authority,
+                )
+            }
+            .map_err(|error| format!("dgcl_resume:{error:?}"))?;
+            emit(&command, resumed)
+        }
+        "lc631-coding-closure" => {
+            let source = prompt.as_deref().unwrap_or("");
+            let dg1 = analyze_dg1(source, Dg1Budget::default())
+                .map_err(|error| format!("dg1:{error:?}"))?;
+            let closure = build_coding_closure(
+                source,
+                &dg1,
+                &[],
+                None,
+                &mut ReplayGuard::default(),
+                current_epoch_seconds()?,
+            )
+            .map_err(|error| format!("coding_closure:{error:?}"))?;
+            emit(&command, closure)
+        }
         "lc631-rpa-doctor" => {
             let source = source_file
                 .as_ref()
@@ -752,6 +1364,22 @@ fn is_lower_sha256(value: &str) -> bool {
         && value[7..]
             .bytes()
             .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+}
+
+fn read_prompt_stdin() -> Result<String, String> {
+    let mut bytes = Vec::new();
+    std::io::stdin()
+        .take((MAX_PROMPT_STDIN_BYTES + 1) as u64)
+        .read_to_end(&mut bytes)
+        .map_err(|_| "prompt_stdin_read_failed")?;
+    if bytes.len() > MAX_PROMPT_STDIN_BYTES {
+        return Err("prompt_stdin_exceeds_2_mib".into());
+    }
+    let prompt = String::from_utf8(bytes).map_err(|_| "prompt_stdin_is_not_utf8")?;
+    if prompt.trim().is_empty() {
+        return Err("prompt_stdin_is_empty".into());
+    }
+    Ok(prompt)
 }
 
 fn take_option(args: &mut Vec<String>, name: &str) -> Option<String> {

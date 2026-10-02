@@ -134,17 +134,25 @@ pub fn build_geometry_shadow(
     let proposals = points
         .windows(2)
         .enumerate()
-        .map(|(index, pair)| GeometryProposal {
-            id: index as u32 + 1,
-            source: pair[0].node_id,
-            target: pair[1].node_id,
-            source_state: pair[0].state,
-            target_state: pair[1].state,
-            relation: RelationKind::DependencyCandidate,
-            forward_cost_x1000: CpuGeometryBackend::finsler_cost(&pair[0], &pair[1]),
-            reverse_cost_x1000: CpuGeometryBackend::finsler_cost(&pair[1], &pair[0]),
-            authority: ProposalAuthority::AdvisoryOnly,
-            geometry_revision: signature.revision.clone(),
+        .filter_map(|(index, pair)| {
+            let source = pair[0].node_id;
+            let target = pair[1].node_id;
+            let relation = RelationKind::DependencyCandidate;
+            let materialized = kernel.materialized_relations.iter().any(|edge| {
+                edge.source == source && edge.target == target && edge.kind == relation
+            });
+            (!materialized).then(|| GeometryProposal {
+                id: index as u32 + 1,
+                source,
+                target,
+                source_state: pair[0].state,
+                target_state: pair[1].state,
+                relation,
+                forward_cost_x1000: CpuGeometryBackend::finsler_cost(&pair[0], &pair[1]),
+                reverse_cost_x1000: CpuGeometryBackend::finsler_cost(&pair[1], &pair[0]),
+                authority: ProposalAuthority::AdvisoryOnly,
+                geometry_revision: signature.revision.clone(),
+            })
         })
         .collect::<Vec<_>>();
     let couplings = points

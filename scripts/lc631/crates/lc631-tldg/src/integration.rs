@@ -1,9 +1,9 @@
 use crate::{
-    analyze, analyze_document, build_semantic_views, build_structural_kernel,
-    default_backend_registry, evaluate_geometry_execution, execute_builtin_backend_receipts,
-    run_mutual_distillation, BackflowReport, CalibrationPartition, CpuGeometryBackend,
-    EmpiricalRiskOverlay, GeometryExecutionReceipt, ParseBudget, SemanticView, TldgError,
-    UnifiedParseReport,
+    analyze_with_dg1, build_semantic_views, build_structural_kernel, default_backend_registry,
+    evaluate_geometry_execution, execute_builtin_backend_receipts, report_for_artifact,
+    run_mutual_distillation, BackendExecutionValidationReport, BackflowReport,
+    CalibrationPartition, CpuGeometryBackend, Dg1Report, EmpiricalRiskOverlay,
+    GeometryExecutionReceipt, ParseBudget, SemanticView, TldgError, UnifiedParseReport,
 };
 use lc631_core::{stable_sha256, ObligationId, SourceSpan};
 use lc631_receipt_kernel::{
@@ -13,8 +13,8 @@ use lc631_receipt_kernel::{
 use lc631_tl::{
     Obligation, ObligationKind, ObligationPolarity, ObligationStrength, PreservationState,
     ProjectionDefectGraphV3, ProjectionEdgeId, ProjectionEdgeV3, ProjectionGateDecision,
-    SourceLedgerId, TargetClaim, TargetClaimId, VerificationReceipt, VerificationStatus,
-    VerifierKind,
+    ProjectionStage, SourceLedgerId, TargetClaim, TargetClaimId, VerificationReceipt,
+    VerificationStatus, VerifierKind,
 };
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -24,6 +24,7 @@ pub enum PipelineError {
     Calibration(String),
     Distillation(String),
     Parse(TldgError),
+    Dg1(String),
     Projection(String),
     Structural(String),
 }
@@ -31,6 +32,7 @@ pub enum PipelineError {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct DistillationSummary {
     pub accepted: usize,
+    pub materialized_relation_count: usize,
     pub rejected: usize,
     pub needs_evidence: usize,
     pub incomparable: usize,
@@ -39,21 +41,48 @@ pub struct DistillationSummary {
     pub epochs_executed: usize,
     pub reprojection_request_count: usize,
     pub epoch_revisions: Vec<String>,
+    pub state_change_count: usize,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct OutputClosure {
     pub binding_state: String,
+    pub requirement_projection_state: String,
     pub defect_gate: ProjectionGateDecision,
     pub output_commit_allowed: bool,
     pub authority_created: bool,
     pub exact_host_output_bound: bool,
+    pub requirement_candidate_count: usize,
+    pub projected_obligation_count: usize,
+    pub projection_edge_count: usize,
+    pub unexplained_prose_count: usize,
+    pub empty_requirement_set_held: bool,
+}
+
+#[derive(Serialize)]
+struct RequirementProgramIr<'a> {
+    schema_version: &'static str,
+    requirement_id: u32,
+    source_revision: &'a str,
+    source_span: SourceSpan,
+    source_text: &'a str,
+    language: crate::Dg1Language,
+    strength: crate::Dg1RequirementStrength,
+    polarity: crate::Dg1RequirementPolarity,
+    conditional: bool,
+    exception_present: bool,
+    condition_kind: Option<crate::Dg1ConditionKind>,
+    scope: &'a Option<String>,
+    unresolved_reference: bool,
+    authority_grant: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct TldgPipelineReport {
     pub source_revision: String,
     pub parse: UnifiedParseReport,
+    pub dg1: Dg1Report,
+    pub backend_validation: BackendExecutionValidationReport,
     pub semantic_views: Vec<SemanticView>,
     pub distillation: DistillationSummary,
     pub empirical_risk: EmpiricalRiskOverlay,
@@ -122,20 +151,22 @@ fn build_tldg_pipeline_inner(
     partition: &CalibrationPartition,
     receipt_context: Option<(&ReceiptIssuer, &ReceiptVerifier, &mut ReplayGuard, u64)>,
 ) -> Result<TldgPipelineReport, PipelineError> {
-    let artifact = analyze(source).map_err(PipelineError::Parse)?;
-    let parse = analyze_document(source).map_err(PipelineError::Parse)?;
+    let (artifact, dg1) = analyze_with_dg1(source).map_err(PipelineError::Parse)?;
+    let parse = report_for_artifact(&artifact);
     let mut registry = default_backend_registry();
-    if let Some((issuer, verifier, replay, now_epoch)) = receipt_context {
+    let backend_validation = if let Some((issuer, verifier, replay, now_epoch)) = receipt_context {
         let receipts = execute_builtin_backend_receipts(&artifact, issuer, now_epoch)
             .map_err(PipelineError::Projection)?;
-        let _ = registry.validate_executions(
+        registry.validate_executions_detailed(
             &receipts,
             &artifact.source.revision,
             verifier,
             replay,
             now_epoch,
-        );
-    }
+        )
+    } else {
+        BackendExecutionValidationReport::default()
+    };
     let semantic_views = build_semantic_views(&artifact, &registry);
     let kernel = build_structural_kernel(&artifact)
         .map_err(|error| PipelineError::Structural(format!("{error:?}")))?;
@@ -148,6 +179,7 @@ fn build_tldg_pipeline_inner(
     .map_err(|error| PipelineError::Distillation(format!("{error:?}")))?;
     let distillation = DistillationSummary {
         accepted: run.final_payload.accepted.len(),
+        materialized_relation_count: run.final_payload.kernel.materialized_relations.len(),
         rejected: run.final_payload.rejected.len(),
         needs_evidence: run.final_payload.needs_evidence.len(),
         incomparable: run.final_payload.incomparable.len(),
@@ -160,9 +192,14 @@ fn build_tldg_pipeline_inner(
             .iter()
             .map(|epoch| epoch.output_revision.clone())
             .collect(),
+        state_change_count: run
+            .epochs
+            .iter()
+            .filter(|epoch| epoch.state_changed)
+            .count(),
     };
     let empirical_risk = EmpiricalRiskOverlay::from_defects(&artifact.syntax.defects, partition);
-    let output = build_output_closure(source, candidate_output)?;
+    let output = build_output_closure(source, candidate_output, &dg1)?;
     let geometry_execution = evaluate_geometry_execution(None, None);
     let external_backends_observed = semantic_views.iter().any(|view| {
         view.state == crate::BackendState::ValidatedObservation
@@ -182,6 +219,9 @@ fn build_tldg_pipeline_inner(
     if !external_backends_observed {
         residuals.push("external_grammar_and_semantic_backends_unobserved".into());
     }
+    residuals.push(
+        "japanese_english_linguistic_backend_unavailable_rule_candidates_are_not_full_parse".into(),
+    );
     if !geometry_execution.real_gpu_observed {
         residuals.push("real_gpu_geometry_unobserved".into());
     }
@@ -192,6 +232,8 @@ fn build_tldg_pipeline_inner(
     Ok(TldgPipelineReport {
         source_revision: artifact.source.revision.clone(),
         parse,
+        dg1,
+        backend_validation,
         semantic_views,
         distillation,
         empirical_risk,
@@ -387,73 +429,183 @@ fn valid_digest(value: &str) -> bool {
 fn build_output_closure(
     source: &str,
     candidate_output: Option<&str>,
+    dg1: &Dg1Report,
 ) -> Result<OutputClosure, PipelineError> {
     let source_revision = stable_sha256(source);
     let mut graph = ProjectionDefectGraphV3::new(SourceLedgerId(631_022), &source_revision, source)
         .map_err(|error| PipelineError::Projection(format!("{error:?}")))?;
-    let obligation = Obligation {
-        id: ObligationId(1),
-        kind: ObligationKind::OutputContract,
-        strength: ObligationStrength::Must,
-        polarity: ObligationPolarity::Positive,
-        scope: "candidate-output".into(),
-        source_span: SourceSpan::checked(source, 0, source.len())
-            .map_err(|error| PipelineError::Projection(format!("{error:?}")))?,
-        source_text: source.into(),
-    };
-    graph
-        .add_obligation(obligation)
+    let mut next_obligation_id = 1u64;
+    let mut next_edge_id = 1u64;
+    let mut projected_obligation_count = 0usize;
+    let mut projection_edge_count = 0usize;
+    for requirement in &dg1.requirement_candidates {
+        let span = SourceSpan::checked(
+            source,
+            requirement.source_span.start,
+            requirement.source_span.end,
+        )
         .map_err(|error| PipelineError::Projection(format!("{error:?}")))?;
-    let anchor = graph
-        .obligation_anchor(ObligationId(1))
-        .cloned()
-        .ok_or_else(|| PipelineError::Projection("output_anchor_missing".into()))?;
-    let targets = candidate_output
-        .filter(|output| !output.trim().is_empty())
-        .map(|output| {
-            let claim = TargetClaim::checked(
-                TargetClaimId(1),
-                "candidate-output",
-                "output",
-                stable_sha256(output),
-                output,
-            )
-            .map_err(|error| PipelineError::Projection(format!("{error:?}")))?;
-            graph
-                .add_target_claim(claim)
-                .map_err(|error| PipelineError::Projection(format!("{error:?}")))?;
-            Ok::<Vec<TargetClaimId>, PipelineError>(vec![TargetClaimId(1)])
-        })
-        .transpose()?
-        .unwrap_or_default();
-    for (index, stage) in ProjectionDefectGraphV3::required_output_stages()
-        .into_iter()
-        .enumerate()
-    {
-        graph
-            .add_edge(ProjectionEdgeV3 {
-                id: ProjectionEdgeId(index as u64 + 1),
-                obligation_id: Some(ObligationId(1)),
-                source: Some(anchor.clone()),
-                targets: targets.clone(),
-                stage,
-                state: PreservationState::Unresolved,
-                rule_id: "tldg-output-unbound.v3".into(),
-                verifier: VerificationReceipt {
-                    verifier: VerifierKind::ModelAdvisory,
-                    status: VerificationStatus::NeedsEvidence,
-                    revision: "model-advisory-unbound.v3".into(),
-                    evidence_digest: None,
+        let mut dimensions = vec![(ObligationKind::Semantic, "semantic")];
+        if requirement.polarity != crate::Dg1RequirementPolarity::Positive {
+            dimensions.push((ObligationKind::Polarity, "polarity"));
+        }
+        if requirement.conditional || requirement.exception_present {
+            dimensions.push((ObligationKind::Scope, "scope"));
+        }
+        for (kind, dimension) in dimensions {
+            let obligation_id = ObligationId(next_obligation_id);
+            next_obligation_id = next_obligation_id.saturating_add(1);
+            let obligation = Obligation {
+                id: obligation_id,
+                kind,
+                strength: match requirement.strength {
+                    crate::Dg1RequirementStrength::Must => ObligationStrength::Must,
+                    crate::Dg1RequirementStrength::Should => ObligationStrength::Should,
+                    crate::Dg1RequirementStrength::May => ObligationStrength::May,
                 },
+                polarity: match requirement.polarity {
+                    crate::Dg1RequirementPolarity::Positive => ObligationPolarity::Positive,
+                    crate::Dg1RequirementPolarity::Negative => ObligationPolarity::Negative,
+                    crate::Dg1RequirementPolarity::Unknown => ObligationPolarity::Unknown,
+                    crate::Dg1RequirementPolarity::Conflict => ObligationPolarity::Conflict,
+                },
+                scope: format!(
+                    "dg1-requirement-{}:{dimension}:conditional={}:exception={}",
+                    requirement.id, requirement.conditional, requirement.exception_present
+                ),
+                source_span: span,
+                source_text: requirement.source_text.clone(),
+            };
+            graph
+                .add_obligation(obligation)
+                .map_err(|error| PipelineError::Projection(format!("{error:?}")))?;
+            let anchor = graph
+                .obligation_anchor(obligation_id)
+                .cloned()
+                .ok_or_else(|| PipelineError::Projection("requirement_anchor_missing".into()))?;
+
+            let contract = serde_json::to_string(requirement).map_err(|error| {
+                PipelineError::Projection(format!("requirement_encode:{error}"))
+            })?;
+            let program = serde_json::to_string(&RequirementProgramIr {
+                schema_version: "epistesys-dgcl-program-ir-requirement.v1",
+                requirement_id: requirement.id,
+                source_revision: &source_revision,
+                source_span: span,
+                source_text: &requirement.source_text,
+                language: requirement.language,
+                strength: requirement.strength,
+                polarity: requirement.polarity,
+                conditional: requirement.conditional,
+                exception_present: requirement.exception_present,
+                condition_kind: requirement.condition_kind,
+                scope: &requirement.scope,
+                unresolved_reference: requirement.unresolved_reference,
+                authority_grant: false,
             })
-            .map_err(|error| PipelineError::Projection(format!("{error:?}")))?;
+            .map_err(|error| {
+                PipelineError::Projection(format!("program_requirement_encode:{error}"))
+            })?;
+            let contract_id = TargetClaimId(obligation_id.0.saturating_mul(10).saturating_add(1));
+            let program_id = TargetClaimId(obligation_id.0.saturating_mul(10).saturating_add(2));
+            for (id, artifact, path, content) in [
+                (
+                    contract_id,
+                    "task-contract",
+                    format!("requirements/{}/{}", requirement.id, dimension),
+                    contract.as_str(),
+                ),
+                (
+                    program_id,
+                    "program-ir",
+                    format!("requirements/{}/{}", requirement.id, dimension),
+                    program.as_str(),
+                ),
+            ] {
+                graph
+                    .add_target_claim(
+                        TargetClaim::checked(id, artifact, path, stable_sha256(content), content)
+                            .map_err(|error| PipelineError::Projection(format!("{error:?}")))?,
+                    )
+                    .map_err(|error| PipelineError::Projection(format!("{error:?}")))?;
+            }
+            let mut stage_targets = vec![
+                (ProjectionStage::SeedToContract, vec![contract_id]),
+                (ProjectionStage::ContractToProgram, vec![program_id]),
+            ];
+            if let Some(candidate) = candidate_output.filter(|value| !value.trim().is_empty()) {
+                let candidate_id =
+                    TargetClaimId(obligation_id.0.saturating_mul(10).saturating_add(3));
+                let output_id = TargetClaimId(obligation_id.0.saturating_mul(10).saturating_add(4));
+                for (id, artifact, path) in [
+                    (candidate_id, "implementation-candidate", "candidate"),
+                    (output_id, "candidate-output", "output"),
+                ] {
+                    graph
+                        .add_target_claim(
+                            TargetClaim::checked(
+                                id,
+                                artifact,
+                                format!("requirements/{}/{}", requirement.id, path),
+                                stable_sha256(candidate),
+                                candidate,
+                            )
+                            .map_err(|error| PipelineError::Projection(format!("{error:?}")))?,
+                        )
+                        .map_err(|error| PipelineError::Projection(format!("{error:?}")))?;
+                }
+                stage_targets.push((ProjectionStage::ProgramToCandidate, vec![candidate_id]));
+                stage_targets.push((ProjectionStage::CandidateToOutput, vec![output_id]));
+            } else {
+                stage_targets.push((ProjectionStage::ProgramToCandidate, Vec::new()));
+                stage_targets.push((ProjectionStage::CandidateToOutput, Vec::new()));
+            }
+            for (stage, targets) in stage_targets {
+                graph
+                    .add_edge(ProjectionEdgeV3 {
+                        id: ProjectionEdgeId(next_edge_id),
+                        obligation_id: Some(obligation_id),
+                        source: Some(anchor.clone()),
+                        targets,
+                        stage,
+                        state: PreservationState::Unresolved,
+                        rule_id: format!("dg1-requirement-projection.v1:{dimension}"),
+                        verifier: VerificationReceipt {
+                            verifier: VerifierKind::ModelAdvisory,
+                            status: VerificationStatus::NeedsEvidence,
+                            revision: "unverified-requirement-projection.v1".into(),
+                            evidence_digest: None,
+                        },
+                    })
+                    .map_err(|error| PipelineError::Projection(format!("{error:?}")))?;
+                next_edge_id = next_edge_id.saturating_add(1);
+                projection_edge_count += 1;
+            }
+            projected_obligation_count += 1;
+        }
     }
+    let empty_requirement_set_held = dg1.requirement_candidates.is_empty();
+    let defect_gate = if empty_requirement_set_held {
+        ProjectionGateDecision::Clarify
+    } else {
+        graph.gate()
+    };
     Ok(OutputClosure {
         binding_state: "host_output_unbound".into(),
-        defect_gate: graph.gate(),
+        requirement_projection_state: if empty_requirement_set_held {
+            "no_supported_requirement_candidate_clarify".into()
+        } else {
+            "requirement_candidates_projected_but_unverified_host_output_unbound".into()
+        },
+        defect_gate,
         output_commit_allowed: false,
         authority_created: false,
         exact_host_output_bound: false,
+        requirement_candidate_count: dg1.requirement_candidates.len(),
+        projected_obligation_count,
+        projection_edge_count,
+        unexplained_prose_count: dg1.instruction_residuals.len(),
+        empty_requirement_set_held,
     })
 }
 
@@ -500,6 +652,8 @@ mod tests {
         )
         .unwrap();
         assert!(report.local_source_ready);
+        assert_eq!(report.backend_validation.accepted_count, 3);
+        assert_eq!(report.backend_validation.rejected_count, 0);
         let adversarial = crate::run_adversarial_evaluation().unwrap();
         let mut evidence = TldgReleaseEvidence {
             source_revision: report.source_revision.clone(),
@@ -552,5 +706,39 @@ mod tests {
         assert!(gate.release_complete);
         assert!(gate.blocked_reasons.is_empty());
         assert!(!gate.deployment_complete);
+    }
+
+    #[test]
+    fn dgcl_12_projects_each_supported_requirement_into_tl_without_claiming_closure() {
+        let report = build_tldg_pipeline(
+            "Do not edit this file. If tests pass, document the result.",
+            Some("candidate answer"),
+            &CalibrationPartition::reference(),
+        )
+        .unwrap();
+        assert_eq!(report.dg1.requirement_candidates.len(), 2);
+        assert_eq!(report.output.requirement_candidate_count, 2);
+        assert!(report.output.projected_obligation_count >= 4);
+        assert_eq!(
+            report.output.projection_edge_count,
+            report.output.projected_obligation_count * 4
+        );
+        assert_eq!(report.output.defect_gate, ProjectionGateDecision::Clarify);
+        assert!(!report.output.output_commit_allowed);
+        assert!(!report.output.authority_created);
+    }
+
+    #[test]
+    fn dgcl_12_empty_extraction_cannot_become_a_noop_commit() {
+        let report = build_tldg_pipeline(
+            "An observation without a supported directive.",
+            None,
+            &CalibrationPartition::reference(),
+        )
+        .unwrap();
+        assert!(report.dg1.requirement_candidates.is_empty());
+        assert!(report.output.empty_requirement_set_held);
+        assert_eq!(report.output.defect_gate, ProjectionGateDecision::Clarify);
+        assert!(!report.output.output_commit_allowed);
     }
 }
