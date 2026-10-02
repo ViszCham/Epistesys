@@ -1,0 +1,131 @@
+{
+  "schema_version": "epistesys-alpha2-residual-risk-ledger.v1",
+  "version": "6.3.2-alpha.2",
+  "source_profile_status": "implementation_closed_for_declared_profile",
+  "all_weaknesses_eliminated": false,
+  "formal_proof": false,
+  "host_activated": false,
+  "research_evaluation": "pending_no_corpus",
+  "risks": [
+    {
+      "id": "free_form_grammar",
+      "owner": "repository_maintainer_or_host_operator_assignment_pending",
+      "status": "unverified",
+      "scope": "controlled profile only; arbitrary natural-language understanding is not established",
+      "scope_ja": "controlled profileのみ。任意自然言語の理解は未実証",
+      "next_required_evidence": "independent multilingual holdout evaluation"
+    },
+    {
+      "id": "model_misparse",
+      "owner": "repository_maintainer_or_host_operator_assignment_pending",
+      "status": "unverified",
+      "scope": "pinned JA/EN worker execution is not semantic accuracy",
+      "scope_ja": "pin済み日英workerの実行は意味精度ではない",
+      "next_required_evidence": "independent dependency/instruction gold"
+    },
+    {
+      "id": "research_effects",
+      "owner": "repository_maintainer_or_host_operator_assignment_pending",
+      "status": "pending_no_corpus",
+      "scope": "hallucination, complexity and long-session effects remain hypotheses",
+      "scope_ja": "hallucination・複雑指示・長期sessionへの効果は研究仮説",
+      "next_required_evidence": "corpus, preregistered paired risk/coverage/frontier evaluation"
+    },
+    {
+      "id": "human_independence",
+      "owner": "repository_maintainer_or_host_operator_assignment_pending",
+      "status": "pending",
+      "scope": "separate fixture/signing keys are not independent humans",
+      "scope_ja": "別fixture/signing keyは独立した人間の証拠ではない",
+      "next_required_evidence": "trusted annotator registry and independently adjudicated evidence"
+    },
+    {
+      "id": "multilingual_reference",
+      "owner": "repository_maintainer_or_host_operator_assignment_pending",
+      "status": "unverified",
+      "scope": "ambiguous references retain alternatives/unresolved states",
+      "scope_ja": "曖昧参照はalternative/未解決stateを保持",
+      "next_required_evidence": "multilingual reference/scoping holdouts"
+    },
+    {
+      "id": "dynamic_dispatch_macros",
+      "owner": "repository_maintainer_or_host_operator_assignment_pending",
+      "status": "unsupported_scope",
+      "scope": "bounded CST paths are not arbitrary cross-module/type/effect completeness",
+      "scope_ja": "bounded CST pathは任意cross-module/type/effectの完全性ではない",
+      "next_required_evidence": "compiler-backed declared build-world analysis"
+    },
+    {
+      "id": "real_host",
+      "owner": "repository_maintainer_or_host_operator_assignment_pending",
+      "status": "pending_host_observation",
+      "scope": "source adapters/fixture callbacks are not real Codex delivery or activation",
+      "scope_ja": "source adapter/fixture callbackは実Codex delivery/activationではない",
+      "next_required_evidence": "exact precommit/postsend/sink/replay/pickup observations"
+    },
+    {
+      "id": "trust_roots",
+      "owner": "repository_maintainer_or_host_operator_assignment_pending",
+      "status": "caller_contract",
+      "scope": "root/key custody and current authority/revocation context are trusted caller premises",
+      "scope_ja": "root/key保護とcurrent authority/revocation contextはtrusted callerの前提",
+      "next_required_evidence": "host custody and current-context attestations"
+    },
+    {
+      "id": "live_revocation",
+      "owner": "repository_maintainer_or_host_operator_assignment_pending",
+      "status": "host_dependent",
+      "scope": "no immediate revocation feed or universal arbitrary callback cancellation",
+      "scope_ja": "即時revocation feedや任意callbackの完全cancelはない",
+      "next_required_evidence": "host-backed revocation/cancellation observations"
+    },
+    {
+      "id": "filesystem_network_sandbox",
+      "owner": "repository_maintainer_or_host_operator_assignment_pending",
+      "status": "not_claimed",
+      "scope": "Job Objects and permits are not filesystem/network confinement; reviewed caller-authorized packages only",
+      "scope_ja": "Job Object/permitはfilesystem/network隔離ではない。callerがreview・許可したpackageが前提",
+      "next_required_evidence": "separately scoped OS sandbox and effect-containment validation"
+    },
+    {
+      "id": "joint_rollback",
+      "owner": "repository_maintainer_or_host_operator_assignment_pending",
+      "status": "not_claimed",
+      "scope": "separate heads detect mismatches, not joint ledger/head administrator rollback",
+      "scope_ja": "別headで不一致を検出するがledger/head共同管理者rollbackへの耐性ではない",
+      "next_required_evidence": "independent freshness custody/rollback observations"
+    },
+    {
+      "id": "dependency_distribution",
+      "owner": "repository_maintainer_or_host_operator_assignment_pending",
+      "status": "bounded",
+      "scope": "source package excludes models/keys/binaries; external build worlds and redistribution rights remain separate",
+      "scope_ja": "source packageはmodel/key/binaryを除外。外部build worldと再配布権は別条件",
+      "next_required_evidence": "dependency/build-world/rights review for requested distribution"
+    },
+    {
+      "id": "remote_ci",
+      "owner": "repository_maintainer_or_host_operator_assignment_pending",
+      "status": "not_run",
+      "scope": "local gates are not remote CI evidence",
+      "scope_ja": "local gateはremote CI証拠ではない",
+      "next_required_evidence": "remote CI run receipt"
+    },
+    {
+      "id": "assurance_coverage",
+      "owner": "repository_maintainer_or_host_operator_assignment_pending",
+      "status": "bounded_needs_evidence",
+      "scope": "selected units retain needs_evidence and prior blocked_with_diagnostics; no repository-wide safety/proof",
+      "scope_ja": "選択単位のneeds_evidenceと過去のblocked_with_diagnosticsを保持。repository-wide safety/proofではない",
+      "next_required_evidence": "supported bounded analyzer coverage and separate corroboration"
+    },
+    {
+      "id": "gpu_hardware",
+      "owner": "repository_maintainer_or_host_operator_assignment_pending",
+      "status": "no_new_claim",
+      "scope": "existing GPU source regressions are not new occupancy/saturation/performance measurements",
+      "scope_ja": "既存GPU source回帰は新しいoccupancy/saturation/performance計測ではない",
+      "next_required_evidence": "separate authorized hardware/paired measurements"
+    }
+  ]
+}

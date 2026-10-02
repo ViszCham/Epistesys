@@ -2,6 +2,8 @@
 
 ## 日本語
 
+これは初期alpha.1 cloneの歴史的検証です。後続DGCL/EPIA2の現scopeは[operating profile](dgcl-operating-profile-and-closure.md)、昇格前の再検証は[functional gate](../validation/epia2-prepromotion-functional-pass-2026-10-02.md)を参照してください。旧結果を新identityの証拠へ流用しません。
+
 EPI-05の検証記録です。作業ディレクトリはEpistesys clone、対象workspaceは`scripts/lc631/Cargo.toml`です。
 
 ### 通過した検証
@@ -28,6 +30,8 @@ EPI-05の検証記録です。作業ディレクトリはEpistesys clone、対�
 Inherited `Unavailable`、`Hold`、`Clarify`、fallback、external receipt不足は保持します。`promotion_allowed=false`は失敗ではなく、必要なexternal evidenceがないcloneのrelease境界です。local testは実行結果の観測であり、正しさ、host activation、一般性能、形式証明ではありません。
 
 ## English
+
+This is historical verification of the initial alpha.1 clone. See the [operating profile](dgcl-operating-profile-and-closure.md) for later DGCL/EPIA2 scope and the [functional gates](../validation/epia2-prepromotion-functional-pass-2026-10-02.md) for prepromotion revalidation. Old results are not reused as evidence for a new identity.
 
 This is the EPI-05 verification record for the Epistesys clone. The workspace is `scripts/lc631/Cargo.toml`.
 

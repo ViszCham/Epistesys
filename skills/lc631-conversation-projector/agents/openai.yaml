@@ -1,0 +1,6 @@
+interface:
+  display_name: "Epistesys alpha.2 Conversation"
+  short_description: "Default bounded alpha.2 conversation control"
+  default_prompt: "Use $lc631-conversation-projector to inspect this prompt with Epistesys alpha.2."
+policy:
+  allow_implicit_invocation: true

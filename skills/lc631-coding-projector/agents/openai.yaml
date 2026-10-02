@@ -1,0 +1,6 @@
+interface:
+  display_name: "Epistesys alpha.2 Coding"
+  short_description: "Default bounded alpha.2 coding control facade"
+  default_prompt: "Use $lc631-coding-projector to inspect this coding task with Epistesys alpha.2."
+policy:
+  allow_implicit_invocation: true

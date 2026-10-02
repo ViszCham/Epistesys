@@ -1,0 +1,39 @@
+{
+  "schema_version": "epistesys-dgcl-python-runtime.v1",
+  "target_platform": "windows_x86_64",
+  "python": {
+    "implementation": "CPython",
+    "version": "3.12.10",
+    "executable_path": ".cache/dgcl-python/Scripts/python.exe",
+    "executable_sha256": "sha256:0b471133e110cfb53a061cad528ce8e517d7b9ac41a0a396c39ad795a487fc14",
+    "isolated_mode": true
+  },
+  "requirements_lock": {
+    "path": "validation/dgcl-python-requirements.lock",
+    "sha256": "sha256:fbb22a4edf864d9cca2828005bc1ab36119d2979273344f5eaf1b4c5673958e3",
+    "distribution_count": 42,
+    "comparison": "exact_normalized_name_and_version_set"
+  },
+  "worker": {
+    "path": "scripts/lc631/workers/dgcl_nlp_worker.py",
+    "sha256": "sha256:5e5189626dac84fa1d6ac6c8ff98b39dc8fe42baba474b7e723c65cc56f54c6c"
+  },
+  "stanza": {
+    "version": "1.14.0",
+    "package": "default",
+    "processors": ["tokenize", "pos", "lemma", "depparse"],
+    "device": "cpu",
+    "download_method": "none"
+  },
+  "models": {
+    "en_manifest_sha256": "sha256:d990c2e0c1a54b652433e8a58157d37d7989c9700aa2c979605f484c09389587",
+    "ja_manifest_sha256": "sha256:c2a28c20213cc0c7e0b4b403d9d2b4842b729c93aad893d9c822b2e64857e755",
+    "model_files_bundled": false
+  },
+  "network_boundary": {
+    "model_download_during_parse": false,
+    "offline_environment_hints": true,
+    "os_network_isolation_enforced": false
+  },
+  "claim_boundary": "pins the configured Python executable, distribution versions, requirements lock, worker, Stanza processor profile, and model manifests; does not authenticate installed wheel bytes, every Python standard-library file, native OS dependencies, or an OS network sandbox"
+}

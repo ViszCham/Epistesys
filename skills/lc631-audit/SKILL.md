@@ -1,6 +1,6 @@
 ---
 name: lc631-audit
-description: Audit Epistesys 6.3.2-alpha.1 inherited closure levels, accelerator receipts, media authority, and promotion blockers.
+description: Audit Epistesys 6.3.2-alpha.2 inherited closure levels, accelerator receipts, media authority, and promotion blockers.
 ---
 
 # Epistesys Audit

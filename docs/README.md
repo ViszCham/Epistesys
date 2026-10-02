@@ -2,7 +2,7 @@
 
 ## 日本語
 
-Epistesys 6.3.2-alpha.1の文書は、clone契約、採否、実行検証、証拠境界、既知の制約を入口から追跡できるように整理します。説明文は日本語を前半、対応する英語を後半に置きます。
+Epistesys 6.3.2-alpha.2の文書は、clone契約、採否、実行検証、証拠境界、既知の制約を入口から追跡できるように整理します。説明文は日本語を前半、対応する英語を後半に置きます。
 
 ### 研究目的と設計
 
@@ -20,12 +20,19 @@ Epistesysはv6.3.1のsource cloneとして、receipt検証、TL/TLDG、256×8 wo
 - [Clone verification](clone-verification.md)：build・test・clippy・CLIの観測
 - [Assurance-Compiler status](assurance-compiler-status.md)：16KiB以下Rust単位の補助監査
 - [Known limitations](known-limitations.md)：未観測、Unavailable、Hold、Clarify、fallback
+- [DGCL implementation status](dgcl-implementation-status-2026-09-28.md)：DeepGrammar/Coding Closureのslice状態と未完了gate
+- [DGCL operating profile](dgcl-operating-profile-and-closure.md)：現sourceのgrammar・Coding・修復/再開・蒸留・consumer契約と残存risk
+- [DGCL wire compatibility](dgcl-wire-compatibility.md)：additive schema、明示v1/v2 negotiationと旧consumer境界
+- [alpha.2 release notes](epistesys-6.3.2-alpha.2-release-notes-2026-10-02.md)：実際の追加機能とsource-only境界
+- [alpha.2 final verification](../validation/epia2-alpha2-release-verification-2026-10-02.md)：A2-G00〜13とalpha.2 identity再検証、ResidualRisk
+- [Codex default routing](codex-default-routing.md)：alpha.2 facadeの既定選択、stdin、host境界
+- [DGCL独立gold収集手順](dgcl-gold-collection-protocol.md)：未作成の評価データを独立に収集・裁定する条件
 - [RepoSeiri audit](reposeiri-audit.md)：repository scopeの構成・文言・hold記録
 - [Initial clone release](initial-clone-release-record.md)：initial commitとmain bootstrap
 
 ### 継承元記録の扱い
 
-同じdirectoryのv6.3.1設計・監査文書は、実装の由来と歴史的状態を保存するためのものです。そこにある旧line名、旧package identity、旧検証結果は、Epistesys 6.3.2-alpha.1の現在状態へ自動昇格しません。現在のクローンidentityと検証は、root README、clone verification、known limitationsを基準にします。
+同じdirectoryのv6.3.1設計・監査文書は、実装の由来と歴史的状態を保存するためのものです。そこにある旧line名、旧package identity、旧検証結果は、Epistesys 6.3.2-alpha.2の現在状態へ自動昇格しません。現在のクローンidentityと検証は、root README、clone verification、known limitationsを基準にします。
 
 ### 主張境界
 
@@ -33,7 +40,7 @@ local test、低loss、schemaの存在、GPU実行、source hash、Assurance sta
 
 ## English
 
-Epistesys 6.3.2-alpha.1 documentation is organized so that clone contract, disposition, execution validation, evidence boundaries, and known limitations can be followed from the entry point. Explanatory prose places Japanese first and equivalent English second.
+Epistesys 6.3.2-alpha.2 documentation is organized so that clone contract, disposition, execution validation, evidence boundaries, and known limitations can be followed from the entry point. Explanatory prose places Japanese first and equivalent English second.
 
 ### Research purpose and design
 
@@ -51,12 +58,19 @@ As a v6.3.1 source clone, Epistesys inherits executable surfaces for receipt ver
 - [Clone verification](clone-verification.md): build, test, clippy, and CLI observations
 - [Assurance-Compiler status](assurance-compiler-status.md): bounded review of Rust units no larger than 16 KiB
 - [Known limitations](known-limitations.md): unobserved, Unavailable, Hold, Clarify, and fallback states
+- [DGCL implementation status](dgcl-implementation-status-2026-09-28.md): DeepGrammar/Coding Closure slice state and incomplete gates
+- [DGCL operating profile](dgcl-operating-profile-and-closure.md): current-source grammar, Coding, repair/resume, distillation, consumer contracts, and residual risks
+- [DGCL wire compatibility](dgcl-wire-compatibility.md): additive schemas, explicit v1/v2 negotiation, and legacy-consumer boundaries
+- [Alpha.2 release notes](epistesys-6.3.2-alpha.2-release-notes-2026-10-02.md): actual additions and source-only boundaries
+- [Alpha.2 final verification](../validation/epia2-alpha2-release-verification-2026-10-02.md): A2-G00..13, alpha.2 identity revalidation, and residual risks
+- [Codex default routing](codex-default-routing.md): alpha.2 facade defaults, stdin, and host boundaries
+- [Independent DGCL gold collection protocol](dgcl-gold-collection-protocol.md): conditions for independent collection and adjudication of the missing evaluation corpus
 - [RepoSeiri audit](reposeiri-audit.md): repository-scope structure, wording, and hold record
 - [Initial clone release](initial-clone-release-record.md): initial commit and main bootstrap
 
 ### Treatment of inherited records
 
-The v6.3.1 design and audit documents in this directory preserve implementation provenance and historical states. Their older line names, package identities, and validation results do not automatically promote into the current Epistesys 6.3.2-alpha.1 state. The root README, clone verification, and known limitations define the current clone identity and evidence.
+The v6.3.1 design and audit documents in this directory preserve implementation provenance and historical states. Their older line names, package identities, and validation results do not automatically promote into the current Epistesys 6.3.2-alpha.2 state. The root README, clone verification, and known limitations define the current clone identity and evidence.
 
 ### Claim boundary
 
