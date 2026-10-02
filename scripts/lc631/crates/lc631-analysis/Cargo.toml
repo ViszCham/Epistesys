@@ -8,6 +8,10 @@ license.workspace = true
 lc631-core = { path = "../lc631-core" }
 lc631-receipt-kernel = { path = "../lc631-receipt-kernel" }
 lc631-tl = { path = "../lc631-tl" }
+lc631-tldg = { path = "../lc631-tldg" }
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+lc631-process-supervisor = { path = "../lc631-process-supervisor" }

@@ -1,0 +1,2 @@
+# Keep the pinned NLP worker bytes stable on Windows checkouts.
+*.py text eol=lf

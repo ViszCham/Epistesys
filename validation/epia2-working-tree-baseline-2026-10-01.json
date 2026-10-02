@@ -1,0 +1,211 @@
+{
+  "schema_version": "epistesys-working-tree-snapshot.v1",
+  "baseline_head": "60cc71db2ba47517bbd209894033f9b55b3708f8",
+  "branch": "dgcl-completion",
+  "tracked_changed": 20,
+  "untracked": 20,
+  "files": 40,
+  "snapshot_sha256": "33d6ef66fcd12afe91641b36c8d91759b8370b5a533ebada4c966a5216e481d3",
+  "entries": [
+    {
+      "path": "docs/dgcl-gold-collection-protocol.md",
+      "bytes": 4242,
+      "sha256": "a5fed89144bc47d0693d7c5223a4327f6ad1e941a884070c39f7637c3b5bf053"
+    },
+    {
+      "path": "docs/dgcl-implementation-status-2026-09-28.md",
+      "bytes": 27572,
+      "sha256": "20f4755016bc151f763befc95586549485d053852c09b1ade22a85f09ed4ec75"
+    },
+    {
+      "path": "docs/epistesys-6.3.2-alpha.2-dgcl-closure-roadmap-2026-10-01.md",
+      "bytes": 88780,
+      "sha256": "e0fc525cd27bf9641ad3461f7feaf1ea38cc46be4de3f03087a55816c8085e61"
+    },
+    {
+      "path": "docs/known-limitations.md",
+      "bytes": 4449,
+      "sha256": "2f3adf76bb3cd95613b75fa7f8c3f3cabc10f838bbe52a76f270da02f575ee44"
+    },
+    {
+      "path": "docs/README.md",
+      "bytes": 6045,
+      "sha256": "586f9e13d2d7dcdb198fb0c243f308270fd0d0ad4e0b562a149a2d8642fd6179"
+    },
+    {
+      "path": "fixtures/dgcl/mixed-ja-en.txt",
+      "bytes": 83,
+      "sha256": "cfe0c8a4fd78ba4e1dbf356038bc968fa14be9ebd5ff9fca99daf6b6e41ec7f0"
+    },
+    {
+      "path": "README.md",
+      "bytes": 27785,
+      "sha256": "d927614fb3babaa1e7f1fb3b243ce4cbbf1d224fb12f16b841e783140c93b147"
+    },
+    {
+      "path": "schemas/epistesys-dgcl-surfaces.v1.schema.json",
+      "bytes": 6556,
+      "sha256": "9f1a22bae31170fb98626501a00cca0c9550ea0a15ae16687814e3e5104efeef"
+    },
+    {
+      "path": "schemas/lc631-coding-closure.v1.schema.json",
+      "bytes": 2687,
+      "sha256": "7a015443ee98ef5ea78351cd74f95b373b69c6d006fb3586b13461ea4ed6db44"
+    },
+    {
+      "path": "schemas/lc631-dg1-parse.v1.schema.json",
+      "bytes": 4734,
+      "sha256": "5848a8e0707f4750df618d31bd286e1cefcc2fe1db567dc7f8e1b2ffe2341ff5"
+    },
+    {
+      "path": "scripts/lc631/Cargo.lock",
+      "bytes": 61192,
+      "sha256": "4b198d5a7ee7c8e6aa57ccc0619235f388b1fd843981da6bc95b19f2357c0057"
+    },
+    {
+      "path": "scripts/lc631/Cargo.toml",
+      "bytes": 947,
+      "sha256": "bb0cbd9df21db00619a25d9bcff12f2e2ff9060ca19f98eebe64b898ec0db757"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/Cargo.toml",
+      "bytes": 386,
+      "sha256": "e7acaf292eb4c0dc064a0f3d42307555b006510000afbd63aa4cd56d399fc575"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/src/closure_connection.rs",
+      "bytes": 12875,
+      "sha256": "53fa4e3c516a573dc93bff356d4b5805891a1ea71122c754ba06df567d8d82d2"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/src/closure_resume.rs",
+      "bytes": 12535,
+      "sha256": "d3ff5328ce1e7bb6f6aba7c274d3dee0e0923ef5a459b4ee2c6267eb2a3652d2"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/src/closure.rs",
+      "bytes": 23583,
+      "sha256": "5e32a6b6cb53e744e005e032590978aa3206d8c318eb070e47603a4eaba74968"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/src/dgcl_gold.rs",
+      "bytes": 13064,
+      "sha256": "22fbca390151b093edfd0a3b95c3a90b047a6e17ca4e4df54f1c23ce568391d4"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/src/dgcl_pipeline.rs",
+      "bytes": 10880,
+      "sha256": "a771f0ae11debd74ec1df5bcaafa57ea9b10d4c14dd4730761ca4dc8a0e60565"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/src/language_worker.rs",
+      "bytes": 13879,
+      "sha256": "3ecc295fe442f0fbab525b27324084af401fced1575ce70bb5d42d3adfe3978c"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/src/lib.rs",
+      "bytes": 1948,
+      "sha256": "a448584affec982b5af1bf773b21d481e189eb7f69f214ddb2f969eb861ce838"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-cli/Cargo.toml",
+      "bytes": 929,
+      "sha256": "528ea781bb548d0e76642ff4171344d3a1bc958a56414ac945e095ead9ae0484"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-cli/src/lib.rs",
+      "bytes": 68866,
+      "sha256": "a12e6991a6b4f50321eadfc1399517e70cc1ddef36ad2a993bb66737e31ab263"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-cli/tests/cli_contract.rs",
+      "bytes": 25676,
+      "sha256": "04b5cf7206c767a5ebf5938488219997cf973ff6da57b947fc30fbe9561e6ee4"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-tldg/Cargo.toml",
+      "bytes": 601,
+      "sha256": "58756191e60ef57ddbe8bb47b3ce734442657f1a6eaf61f3c6d71920ba7187ea"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-tldg/src/adapters.rs",
+      "bytes": 21320,
+      "sha256": "9eadd70b819f0940a43895228e6c6364b42455725587fbd10d6f02091c5aac69"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-tldg/src/dg1.rs",
+      "bytes": 38942,
+      "sha256": "a2bfc56ee4bdba834d0fa9bdcadb25a3b728ca3797aa8b2209c962e875865731"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-tldg/src/distillation.rs",
+      "bytes": 15163,
+      "sha256": "df2acb699adf993c2516833ad700a3ffd5ee6ba13bd08b751d2adadb701359cb"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-tldg/src/integration.rs",
+      "bytes": 28791,
+      "sha256": "e0ef165b187228bd179e166665c3c35cddb684810ccd256ae94c2c5b88f24e6e"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-tldg/src/kernel.rs",
+      "bytes": 4137,
+      "sha256": "c89cf954fd8f89e340521434f5c2cfdb64b04526c2068a4311a2a40cdc8bd979"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-tldg/src/lib.rs",
+      "bytes": 3308,
+      "sha256": "4a4eb6988852aeaa5a0e31227c15a98d21b880463e82f0a557938e6a701a83be"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-tldg/src/parser.rs",
+      "bytes": 14953,
+      "sha256": "af91dfa6b7daea9c798bb79e530e469fb44e0d8fbeb1525c045462da02e930bf"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-tldg/src/semantics.rs",
+      "bytes": 7487,
+      "sha256": "ccaf3fe49cdb555ea026fe6c061ca05acbcfcecc55c42ced705b927c1b81bcde"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-tldg/tests/arc631_iterative_distillation.rs",
+      "bytes": 1336,
+      "sha256": "4bfd0799c8d3b0c6a8debd95d963101bfbbebdfd5295914cba3b30a8bce61791"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-tldg/tests/dgcl_instruction_regressions.rs",
+      "bytes": 3914,
+      "sha256": "53c90221d9b13585faf99d52629c49512549c94fc5b4678430e8fb5c87b56f6d"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-tldg/tests/dgcl_properties.rs",
+      "bytes": 1893,
+      "sha256": "f5abc85162d0771327a2b690179c44d4f73123d3e827a6dcaa9d658655cd4b39"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-tldg/tests/grammar_foundation.rs",
+      "bytes": 2057,
+      "sha256": "106980e6edcd2d5374f3c10b6992635b663fe3256bba101865daad1144833e64"
+    },
+    {
+      "path": "scripts/lc631/workers/dgcl_nlp_worker.py",
+      "bytes": 4223,
+      "sha256": "6ab7c3b05cee284fa325afbb8b781e0c407032404401a1feb139b9c65c0e6069"
+    },
+    {
+      "path": "validation/dgcl-local-gates-2026-09-28.md",
+      "bytes": 4613,
+      "sha256": "21da52a6a4aceb1936c21a0e899960f29390fd726568086f24de25aa2f39ed02"
+    },
+    {
+      "path": "validation/dgcl-nlp-model-pins.v1.json",
+      "bytes": 751,
+      "sha256": "6243cbf2c17af243d20961fb3203b133625df3e345380c9dd578fdf77b20ab47"
+    },
+    {
+      "path": "validation/dgcl-python-requirements.lock",
+      "bytes": 833,
+      "sha256": "fc7a9b07084cefac49ef1b0e31d03cfacc429a162627577780bc02723a3ad05d"
+    }
+  ]
+}

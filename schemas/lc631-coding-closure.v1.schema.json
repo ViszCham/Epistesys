@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://epistesys.invalid/schemas/lc631-coding-closure.v1.schema.json",
+  "title": "Epistesys per-requirement coding closure evidence report",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version",
+    "source_revision",
+    "requirement_count",
+    "residual_span_count",
+    "gaps",
+    "rejected_claim_count",
+    "rejected_claims",
+    "duplicate_claim_count",
+    "status",
+    "authority_created",
+    "output_commit_allowed",
+    "claim_boundary"
+  ],
+  "properties": {
+    "schema_version": { "const": "epistesys-coding-closure.v1" },
+    "source_revision": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "requirement_count": { "type": "integer", "minimum": 0, "maximum": 1024 },
+    "residual_span_count": { "type": "integer", "minimum": 0 },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": ["gap_id", "requirement_id", "kind", "state", "target_binding", "evidence_digest", "reason"],
+        "properties": {
+          "gap_id": { "type": "string" },
+          "requirement_id": { "type": ["integer", "null"], "minimum": 0 },
+          "kind": { "enum": ["implementation_binding", "production_connection", "static_validation", "runtime_validation", "acceptance_test", "unsupported_input", "empty_requirement_set", "parser_syntax_errors"] },
+          "state": { "enum": ["unavailable", "rejected", "verified_receipt"] },
+          "target_binding": { "type": ["string", "null"] },
+          "evidence_digest": { "type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$" },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    "rejected_claim_count": { "type": "integer", "minimum": 0 },
+    "rejected_claims": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": ["claim_index", "requirement_id", "kind", "reason"],
+        "properties": {
+          "claim_index": { "type": "integer", "minimum": 0 },
+          "requirement_id": { "type": "integer", "minimum": 0 },
+          "kind": { "enum": ["implementation_binding", "production_connection", "static_validation", "runtime_validation", "acceptance_test"] },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    "duplicate_claim_count": { "type": "integer", "minimum": 0 },
+    "status": { "enum": ["held", "evidence_complete_for_declared_requirements"] },
+    "authority_created": { "const": false },
+    "output_commit_allowed": { "const": false },
+    "claim_boundary": { "type": "string" }
+  }
+}

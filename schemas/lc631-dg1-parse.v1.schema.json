@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://epistesys.invalid/schemas/lc631-dg1-parse.v1.schema.json",
+  "title": "Epistesys DG1 bounded document and Rust-CST report",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version",
+    "source_revision",
+    "source_bytes",
+    "exact_source_roundtrip",
+    "regions",
+    "rust_trees",
+    "requirement_candidates",
+    "instruction_residuals",
+    "status",
+    "semantic_backend_state",
+    "claim_boundary"
+  ],
+  "properties": {
+    "schema_version": { "const": "epistesys-dg1-parse.v1" },
+    "source_revision": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "source_bytes": { "type": "integer", "minimum": 0, "maximum": 262144 },
+    "exact_source_roundtrip": { "type": "boolean" },
+    "regions": {
+      "type": "array",
+      "maxItems": 100000,
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": ["id", "parent", "kind", "content_role", "span", "language", "dialect"],
+        "properties": {
+          "id": { "type": "integer", "minimum": 0 },
+          "parent": { "type": ["integer", "null"], "minimum": 0 },
+          "kind": { "enum": ["document", "paragraph", "heading", "block_quote", "list", "list_item", "link", "emphasis", "strong", "table", "table_row", "table_cell", "prose", "inline_code", "fenced_code", "indented_code", "opaque_embedded", "opaque_html_block", "opaque_html"] },
+          "content_role": { "enum": ["operative_prose", "quotation", "code", "opaque", "unknown"] },
+          "span": { "$ref": "#/$defs/span" },
+          "language": { "enum": ["japanese", "english", "mixed_japanese_english", "unknown"] },
+          "dialect": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "rust_trees": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": ["region_id", "grammar_revision", "root_has_error", "nodes"],
+        "properties": {
+          "region_id": { "type": "integer", "minimum": 0 },
+          "grammar_revision": { "type": "string" },
+          "root_has_error": { "type": "boolean" },
+          "nodes": {
+            "type": "array",
+            "maxItems": 100000,
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "required": ["id", "parent_id", "kind", "named", "span", "has_error", "is_error", "missing"],
+              "properties": {
+                "id": { "type": "integer", "minimum": 0 },
+                "parent_id": { "type": ["integer", "null"], "minimum": 0 },
+                "kind": { "type": "string" },
+                "named": { "type": "boolean" },
+                "span": { "$ref": "#/$defs/span" },
+                "has_error": { "type": "boolean" },
+                "is_error": { "type": "boolean" },
+                "missing": { "type": "boolean" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "requirement_candidates": {
+      "type": "array",
+      "maxItems": 1024,
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": ["id", "source_span", "source_text", "language", "strength", "polarity", "conditional", "exception_present", "authority_grant"],
+        "properties": {
+          "id": { "type": "integer", "minimum": 1 },
+          "source_span": { "$ref": "#/$defs/span" },
+          "source_text": { "type": "string" },
+          "language": { "enum": ["japanese", "english", "mixed_japanese_english", "unknown"] },
+          "strength": { "enum": ["must", "should", "may"] },
+          "polarity": { "enum": ["positive", "negative", "unknown", "conflict"] },
+          "conditional": { "type": "boolean" },
+          "exception_present": { "type": "boolean" },
+          "condition_kind": { "type": ["string", "null"], "enum": ["necessary", "conditional", "temporal", "exception", null] },
+          "scope": { "type": ["string", "null"] },
+          "unresolved_reference": { "type": "boolean" },
+          "authority_grant": { "const": false }
+        }
+      }
+    },
+    "instruction_residuals": { "type": "array", "items": { "type": "object" } },
+    "source_accounting": {
+      "type": "array",
+      "maxItems": 100000,
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": ["source_span", "role", "region_id", "residual_reason"],
+        "properties": {
+          "source_span": { "$ref": "#/$defs/span" },
+          "role": { "enum": ["instruction_candidate", "context", "quoted", "code", "opaque", "unsupported", "ambiguous", "markdown_syntax"] },
+          "region_id": { "type": ["integer", "null"], "minimum": 0 },
+          "residual_reason": { "type": ["string", "null"], "enum": ["no_supported_instruction_marker", "quoted_text", "mixed_or_unknown_language", "unresolved_reference", null] }
+        }
+      }
+    },
+    "language_span_lattice": {
+      "type": "array",
+      "maxItems": 100000,
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": ["id", "region_id", "source_span", "language"],
+        "properties": {
+          "id": { "type": "integer", "minimum": 0 },
+          "region_id": { "type": "integer", "minimum": 0 },
+          "source_span": { "$ref": "#/$defs/span" },
+          "language": { "enum": ["japanese", "english", "mixed_japanese_english", "unknown"] }
+        }
+      }
+    },
+    "status": { "enum": ["parsed_within_bounded_profiles", "parsed_with_syntax_errors"] },
+    "semantic_backend_state": { "type": "string" },
+    "claim_boundary": { "type": "string" }
+  },
+  "$defs": {
+    "span": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["start", "end"],
+      "properties": {
+        "start": { "type": "integer", "minimum": 0, "maximum": 262144 },
+        "end": { "type": "integer", "minimum": 0, "maximum": 262144 }
+      }
+    }
+  }
+}

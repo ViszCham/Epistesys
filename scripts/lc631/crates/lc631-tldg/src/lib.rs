@@ -3,6 +3,7 @@
 mod accelerated;
 mod adapters;
 mod calibration;
+mod dg1;
 mod distillation;
 mod execution;
 mod geometry;
@@ -19,17 +20,24 @@ pub use accelerated::{
 };
 pub use adapters::{
     backend_execution_payload_digest, backend_execution_scope, default_backend_registry,
-    execute_builtin_backend_receipts, BackendDescriptor, BackendExecutionReceipt, BackendFamily,
-    BackendRegistry, BackendState, UNIFIED_SYNTAX_SCHEMA,
+    execute_builtin_backend_receipts, BackendDescriptor, BackendExecutionOutcome,
+    BackendExecutionReceipt, BackendExecutionValidationReport, BackendFamily, BackendRegistry,
+    BackendState, UNIFIED_SYNTAX_SCHEMA,
 };
 pub use calibration::{
     CalibrationError, CalibrationPartition, EmpiricalRiskOverlay, EmpiricalRiskSource,
 };
+pub use dg1::{
+    analyze_dg1, Dg1Budget, Dg1ConditionKind, Dg1ContentRole, Dg1Error, Dg1InstructionResidual,
+    Dg1Language, Dg1LanguageSpan, Dg1Region, Dg1RegionKind, Dg1Report, Dg1RequirementCandidate,
+    Dg1RequirementPolarity, Dg1RequirementStrength, Dg1ResidualReason, Dg1SourceAccountingSegment,
+    Dg1SourceRole, Dg1Status, Dg1SyntaxNode, Dg1SyntaxTree, DG1_SCHEMA,
+};
 pub use distillation::{
     run_mutual_distillation, AcceptedProposal, Anchored, BackflowReport, Decoded, DecodedProposal,
-    DistillationEpoch, DistillationEpochRecord, DistillationError, EpochPayload,
-    MutualDistillationRun, ParseBudget, Proposed, RejectedProposal, ReprojectionRequest, Validated,
-    ValidationReceipt, ValidationState,
+    DistillationEpoch, DistillationEpochRecord, DistillationError, DistillationStopReason,
+    EpochPayload, MutualDistillationRun, ParseBudget, Proposed, RejectedProposal,
+    ReprojectionRequest, Validated, ValidationReceipt, ValidationState,
 };
 pub use execution::{
     evaluate_geometry_execution, run_adversarial_evaluation, AdversarialEvaluationReport,
@@ -52,14 +60,19 @@ pub use integration::{
     TldgPipelineReport, TldgReleaseEvidence, TldgReleaseGate,
 };
 pub use kernel::{
-    build_structural_kernel, AnchorState, StructuralAnchor, StructuralKernel, StructuralKernelError,
+    build_structural_kernel, AnchorState, MaterializedRelationEvidence, StructuralAnchor,
+    StructuralKernel, StructuralKernelError,
 };
-pub use parser::{analyze, analyze_document, TldgError, UnifiedParseReport};
+pub(crate) use parser::analyze_with_dg1;
+pub use parser::{analyze, analyze_document, report_for_artifact, TldgError, UnifiedParseReport};
 pub use profile::{
     default_profile_registry, AmbiguityPolicy, GrammarFeature, GrammarProfile, GrammarProfileId,
     GrammarProfileRegistry, LexiconPolicy,
 };
-pub use semantics::{build_semantic_views, SemanticView, SemanticViewKind};
+pub use semantics::{
+    build_semantic_views, SemanticView, SemanticViewEdge, SemanticViewKind, SemanticViewNode,
+    SemanticViewPayload,
+};
 pub use source::{BoundaryCell, BoundaryClass, BoundaryLedger, SourceRevision};
 
 pub const TLDG_SCHEMA: &str = "lc631-unified-geometric-deepgrammar.v1";

@@ -178,6 +178,18 @@ impl VerifiedReceipt {
         self.wire.receipt_digest()
     }
 
+    pub fn parent_receipt_digest(&self) -> Option<&str> {
+        self.wire.claims.parent_receipt_digest()
+    }
+
+    pub fn issued_at_epoch(&self) -> u64 {
+        self.wire.claims.issued_at_epoch()
+    }
+
+    pub fn expires_at_epoch(&self) -> Option<u64> {
+        self.wire.claims.expires_at_epoch()
+    }
+
     pub fn verifier_key_fingerprint(&self) -> &str {
         &self.verifier_key_fingerprint
     }

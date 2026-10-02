@@ -1,6 +1,7 @@
 use crate::{
     build_geometry_shadow, AnchorState, CpuGeometryBackend, DeepGrammarArtifact, GeometryProposal,
-    GeometryShadow, GeometrySignature, StructuralKernel, SyntaxNodeId,
+    GeometryShadow, GeometrySignature, MaterializedRelationEvidence, RelationState,
+    StructuralKernel, SyntaxNodeId,
 };
 use lc631_core::stable_sha256;
 use serde::Serialize;
@@ -89,6 +90,15 @@ pub struct DistillationEpoch<State> {
 pub enum DistillationError {
     BudgetExhausted,
     GeometryUnavailable,
+    StateEncodingUnavailable,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DistillationStopReason {
+    ResidualsCleared,
+    NoProgress,
+    EpochBudget,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -108,11 +118,14 @@ pub struct DistillationEpochRecord {
     pub input_revision: String,
     pub output_revision: String,
     pub accepted: usize,
+    pub materialized_relations_added: usize,
     pub rejected: usize,
     pub needs_evidence: usize,
     pub incomparable: usize,
     pub grammar_mutated: bool,
     pub thresholds_mutated: bool,
+    pub state_digest: String,
+    pub state_changed: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -131,10 +144,11 @@ pub struct MutualDistillationRun {
     pub final_payload: EpochPayload,
     pub final_backflow: BackflowReport,
     pub max_epochs_respected: bool,
+    pub stop_reason: DistillationStopReason,
 }
 
 pub fn run_mutual_distillation(
-    kernel: StructuralKernel,
+    mut kernel: StructuralKernel,
     artifact: &DeepGrammarArtifact,
     budget: ParseBudget,
     backend: &CpuGeometryBackend,
@@ -142,45 +156,48 @@ pub fn run_mutual_distillation(
     if budget.max_epochs == 0 || budget.max_proposals == 0 {
         return Err(DistillationError::BudgetExhausted);
     }
-    let persistent_unknown = kernel
-        .anchors
-        .iter()
-        .any(|anchor| anchor.state != AnchorState::Verified);
     let mut input_revision = kernel.kernel_digest.clone();
+    let mut stop_reason = DistillationStopReason::EpochBudget;
     let mut records = Vec::new();
     let mut requests = Vec::new();
     let mut final_payload = None;
     let mut final_backflow = None;
     for epoch in 0..budget.max_epochs {
+        let input_kernel_digest = kernel.kernel_digest.clone();
         let mut anchored = DistillationEpoch::anchored(kernel.clone(), budget);
         anchored.epoch = epoch;
         let validated = anchored.relax(backend)?.decode()?.validate(artifact);
         let backflow = validated.backflow();
-        let output_revision = stable_sha256(&format!(
-            "{}:{}:{}:{}:{}:{}",
-            input_revision,
-            epoch,
-            validated.payload.accepted.len(),
-            validated.payload.rejected.len(),
-            validated.payload.needs_evidence.len(),
-            validated.payload.incomparable.len()
-        ));
+        let (next_kernel, materialized_relations_added) =
+            apply_accepted_materializations(&kernel, artifact, &validated.payload.accepted, epoch)?;
+        let state_changed = next_kernel.kernel_digest != input_kernel_digest;
+        let output_revision = next_kernel.kernel_digest.clone();
+        let mut output_payload = validated.payload.clone();
+        output_payload.kernel = next_kernel.clone();
+        let state_digest = epoch_state_digest(&output_payload)?;
         records.push(DistillationEpochRecord {
             epoch,
             input_revision: input_revision.clone(),
             output_revision: output_revision.clone(),
             accepted: validated.payload.accepted.len(),
+            materialized_relations_added,
             rejected: validated.payload.rejected.len(),
             needs_evidence: validated.payload.needs_evidence.len(),
             incomparable: validated.payload.incomparable.len(),
             grammar_mutated: false,
             thresholds_mutated: false,
+            state_digest: state_digest.clone(),
+            state_changed,
         });
+        let persistent_unknown = next_kernel
+            .anchors
+            .iter()
+            .any(|anchor| anchor.state != AnchorState::Verified);
         let has_residual = persistent_unknown
             || !validated.payload.rejected.is_empty()
             || !validated.payload.needs_evidence.is_empty()
             || !validated.payload.incomparable.is_empty();
-        if has_residual {
+        if has_residual && state_changed {
             let mut residual_classes = Vec::new();
             if persistent_unknown || !validated.payload.needs_evidence.is_empty() {
                 residual_classes.push("needs_evidence".into());
@@ -194,16 +211,25 @@ pub fn run_mutual_distillation(
             requests.push(ReprojectionRequest {
                 after_epoch: epoch,
                 from_revision: input_revision.clone(),
-                next_input_revision: output_revision.clone(),
+                next_input_revision: next_kernel.kernel_digest.clone(),
                 residual_classes,
                 authority_created: false,
             });
         }
         input_revision = output_revision;
-        final_payload = Some(validated.payload.clone());
+        final_payload = Some(output_payload);
         final_backflow = Some(backflow);
         if !has_residual {
+            stop_reason = DistillationStopReason::ResidualsCleared;
             break;
+        }
+        if !state_changed {
+            stop_reason = DistillationStopReason::NoProgress;
+            break;
+        }
+        kernel = next_kernel;
+        if usize::from(epoch) + 1 == usize::from(budget.max_epochs) {
+            stop_reason = DistillationStopReason::EpochBudget;
         }
     }
     Ok(MutualDistillationRun {
@@ -212,7 +238,70 @@ pub fn run_mutual_distillation(
         reprojection_requests: requests,
         final_payload: final_payload.ok_or(DistillationError::BudgetExhausted)?,
         final_backflow: final_backflow.ok_or(DistillationError::BudgetExhausted)?,
+        stop_reason,
     })
+}
+
+fn apply_accepted_materializations(
+    kernel: &StructuralKernel,
+    artifact: &DeepGrammarArtifact,
+    accepted: &[AcceptedProposal],
+    epoch: u16,
+) -> Result<(StructuralKernel, usize), DistillationError> {
+    let mut next = kernel.clone();
+    let before_count = next.materialized_relations.len();
+    for accepted in accepted {
+        let proposal = &accepted.proposal;
+        let Some(edge) = artifact.syntax.relations.iter().find(|edge| {
+            edge.from == proposal.source
+                && edge.to == proposal.target
+                && edge.kind == proposal.relation
+                && edge.state == RelationState::Verified
+                && !edge.evidence.trim().is_empty()
+        }) else {
+            continue;
+        };
+        let source_relation_evidence_digest = stable_sha256(&format!(
+            "{}\0{:?}\0{}",
+            edge.evidence, edge.kind, artifact.source.revision
+        ));
+        let materialization_id = stable_sha256(&format!(
+            "epistesys-distillation-materialization.v1\0{}\0{}\0{}\0{:?}\0{}",
+            artifact.source.revision,
+            proposal.source.0,
+            proposal.target.0,
+            proposal.relation,
+            source_relation_evidence_digest
+        ));
+        if !next
+            .materialized_relations
+            .iter()
+            .any(|materialized| materialized.materialization_id == materialization_id)
+        {
+            next.materialized_relations
+                .push(MaterializedRelationEvidence {
+                    materialization_id,
+                    source: proposal.source,
+                    target: proposal.target,
+                    kind: proposal.relation,
+                    source_relation_evidence_digest,
+                    first_materialized_epoch: epoch,
+                    claim_boundary: "materialized from a non-empty source relation already marked Verified; no new semantic truth, grammar mutation, or authority is created",
+                });
+        }
+    }
+    next.materialized_relations
+        .sort_by(|left, right| left.materialization_id.cmp(&right.materialization_id));
+    let added = next
+        .materialized_relations
+        .len()
+        .saturating_sub(before_count);
+    next.kernel_digest = crate::kernel::distillation_kernel_digest(
+        &next.structural_revision,
+        &next.materialized_relations,
+    )
+    .map_err(|_| DistillationError::StateEncodingUnavailable)?;
+    Ok((next, added))
 }
 
 impl DistillationEpoch<Anchored> {
@@ -312,14 +401,22 @@ impl DistillationEpoch<Decoded> {
                 || !nodes.contains(&proposal.target)
             {
                 ValidationState::Failed
-            } else {
+            } else if artifact.syntax.relations.iter().any(|edge| {
+                edge.from == proposal.source
+                    && edge.to == proposal.target
+                    && edge.kind == proposal.relation
+                    && edge.state == RelationState::Verified
+                    && !edge.evidence.trim().is_empty()
+            }) {
                 ValidationState::Passed
+            } else {
+                ValidationState::NeedsEvidence
             };
             let receipt = ValidationReceipt {
                 proposal_id: proposal.id,
-                verifier: "lc631-discrete-structure.v1".into(),
+                verifier: "lc631-syntax-edge-membership.v1".into(),
                 status,
-                canonical_edge_authorized: status == ValidationState::Passed,
+                canonical_edge_authorized: false,
             };
             match status {
                 ValidationState::Passed => accepted.push(AcceptedProposal {
@@ -349,6 +446,21 @@ impl DistillationEpoch<Decoded> {
             state: PhantomData,
         }
     }
+}
+
+fn epoch_state_digest(payload: &EpochPayload) -> Result<String, DistillationError> {
+    let canonical = serde_json::to_string(&(
+        &payload.kernel.source_revision,
+        &payload.kernel.kernel_digest,
+        &payload.kernel.materialized_relations,
+        &payload.decoded,
+        &payload.accepted,
+        &payload.rejected,
+        &payload.needs_evidence,
+        &payload.incomparable,
+    ))
+    .map_err(|_| DistillationError::StateEncodingUnavailable)?;
+    Ok(stable_sha256(&canonical))
 }
 
 impl DistillationEpoch<Validated> {
@@ -385,5 +497,24 @@ mod tests {
         )
         .relax(&CpuGeometryBackend);
         assert!(matches!(result, Err(DistillationError::BudgetExhausted)));
+    }
+
+    #[test]
+    fn geometry_candidate_requires_matching_verified_edge_and_never_authorizes_canonical_state() {
+        let artifact = analyze("alpha beta").unwrap();
+        let kernel = build_structural_kernel(&artifact).unwrap();
+        let validated = DistillationEpoch::anchored(kernel, ParseBudget::reference())
+            .relax(&CpuGeometryBackend)
+            .unwrap()
+            .decode()
+            .unwrap()
+            .validate(&artifact);
+        assert!(validated.payload.accepted.is_empty());
+        assert!(!validated.payload.needs_evidence.is_empty());
+        assert!(validated
+            .payload
+            .needs_evidence
+            .iter()
+            .all(|receipt| !receipt.canonical_edge_authorized));
     }
 }

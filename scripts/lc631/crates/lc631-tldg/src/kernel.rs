@@ -26,13 +26,27 @@ pub struct StructuralKernel {
     pub anchors: Vec<StructuralAnchor>,
     pub relation_count: usize,
     pub legacy_translation_loss_consumed: bool,
+    pub structural_revision: String,
+    pub materialized_relations: Vec<MaterializedRelationEvidence>,
     pub kernel_digest: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct MaterializedRelationEvidence {
+    pub materialization_id: String,
+    pub source: SyntaxNodeId,
+    pub target: SyntaxNodeId,
+    pub kind: crate::RelationKind,
+    pub source_relation_evidence_digest: String,
+    pub first_materialized_epoch: u16,
+    pub claim_boundary: &'static str,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum StructuralKernelError {
     NoAnchoredNodes,
+    CanonicalEncodingUnavailable,
 }
 
 pub fn build_structural_kernel(
@@ -72,27 +86,41 @@ pub fn build_structural_kernel(
     if anchors.is_empty() {
         return Err(StructuralKernelError::NoAnchoredNodes);
     }
-    let digest_surface = anchors
-        .iter()
-        .map(|anchor| {
-            format!(
-                "{}:{}:{}:{}:{:?}",
-                anchor.node_id.0,
-                anchor.order,
-                anchor.relation_degree,
-                anchor.profile_count,
-                anchor.source_spans
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("|");
+    let digest_surface = serde_json::to_string(&(
+        &artifact.source.revision,
+        &artifact.syntax.nodes,
+        &artifact.syntax.relations,
+        &artifact.syntax.derivations,
+        &artifact.syntax.defects,
+        &artifact.constraints,
+        &anchors,
+    ))
+    .map_err(|_| StructuralKernelError::CanonicalEncodingUnavailable)?;
+    let structural_revision = stable_sha256(&digest_surface);
+    let materialized_relations = Vec::new();
+    let kernel_digest = distillation_kernel_digest(&structural_revision, &materialized_relations)?;
     Ok(StructuralKernel {
         source_revision: artifact.source.revision.clone(),
         relation_count: artifact.syntax.relations.len(),
         legacy_translation_loss_consumed: false,
-        kernel_digest: stable_sha256(&digest_surface),
+        structural_revision,
+        materialized_relations,
+        kernel_digest,
         anchors,
     })
+}
+
+pub(crate) fn distillation_kernel_digest(
+    structural_revision: &str,
+    materialized_relations: &[MaterializedRelationEvidence],
+) -> Result<String, StructuralKernelError> {
+    let canonical = serde_json::to_string(&(
+        "epistesys-distillation-kernel.v1",
+        structural_revision,
+        materialized_relations,
+    ))
+    .map_err(|_| StructuralKernelError::CanonicalEncodingUnavailable)?;
+    Ok(stable_sha256(&canonical))
 }
 
 #[cfg(test)]
@@ -109,5 +137,21 @@ mod tests {
             .anchors
             .iter()
             .all(|anchor| !anchor.source_spans.is_empty()));
+    }
+
+    #[test]
+    fn kernel_digest_binds_relation_kind_and_source_revision_not_just_node_counts() {
+        let original = analyze("alpha + beta").unwrap();
+        let mut changed = original.clone();
+        assert!(!changed.syntax.relations.is_empty());
+        changed.syntax.relations[0].kind = crate::RelationKind::DependencyCandidate;
+        assert_eq!(original.syntax.nodes.len(), changed.syntax.nodes.len());
+        assert_eq!(
+            original.syntax.relations.len(),
+            changed.syntax.relations.len()
+        );
+        let original_kernel = build_structural_kernel(&original).unwrap();
+        let changed_kernel = build_structural_kernel(&changed).unwrap();
+        assert_ne!(original_kernel.kernel_digest, changed_kernel.kernel_digest);
     }
 }

@@ -26,3 +26,6 @@ lc631-wire = { path = "../lc631-wire" }
 lc631-world = { path = "../lc631-world" }
 serde.workspace = true
 serde_json.workspace = true
+
+[dev-dependencies]
+sha2.workspace = true

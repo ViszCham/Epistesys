@@ -1,0 +1,811 @@
+{
+  "schema_version": "epistesys-functional-source-inventory.v1",
+  "baseline_head": "60cc71db2ba47517bbd209894033f9b55b3708f8",
+  "branch": "dgcl-completion",
+  "version": "6.3.2-alpha.2",
+  "scope": "Rust/Cargo source and tests, workers, fixtures, schemas, runtime pins and plugin identity; excludes build/cache/logs and prose/audit bookkeeping",
+  "files": 160,
+  "source_digest": "sha256:fa94dc67156ac2cd155b56dd50cd6ea63bfd49798dceed25bd7b2f1e0de6e3b5",
+  "entries": [
+    {
+      "path": ".codex-plugin/plugin.json",
+      "bytes": 1542,
+      "sha256": "910e725fa29bcd1468ec01bc1747a9e06c4f1eeba43cdeea63d3d4366e44f0f9"
+    },
+    {
+      "path": "fixtures/adversarial-boundaries.v1.json",
+      "bytes": 973,
+      "sha256": "642ef93fa445a53d676c1f440f33756fed42f32fb8315b56a6421d8a82d6e3e4"
+    },
+    {
+      "path": "fixtures/arc631-adversarial-authenticity.v1.json",
+      "bytes": 1654,
+      "sha256": "df5c8b16621372ec0a389f24682cf431f99a44a48a4584436df04de602889e41"
+    },
+    {
+      "path": "fixtures/dgcl-adversarial-disconnect-matrix.v1.json",
+      "bytes": 7207,
+      "sha256": "271adc748467d77a8dab8bb76dab2d70333834da5c131f1c8af856b230e8d8d2"
+    },
+    {
+      "path": "fixtures/dgcl-checkpoint-v1-legacy.json",
+      "bytes": 412,
+      "sha256": "f29aab3b641d78520cd2ce57e9fa838041453db7a8f2808723bf53e93b0101a4"
+    },
+    {
+      "path": "fixtures/dgcl-checkpoint-v2-action-started.json",
+      "bytes": 446,
+      "sha256": "d9b4ae031ea67d067f32895b35fbce2ebe361237397f49ca3c7e7de80484366d"
+    },
+    {
+      "path": "fixtures/dgcl-legacy-connection-plan-v1.json",
+      "bytes": 963,
+      "sha256": "7e26b4f910f4a647acc04c1731f7e57fe6d932cf464b813c4e5f5f7da6a915f6"
+    },
+    {
+      "path": "fixtures/dgcl-legacy-connection-report-v1.json",
+      "bytes": 409,
+      "sha256": "0c189a140230b4cb1dd3322f8c329441c0d5432d9047e2452f9b7490bf4b9b8c"
+    },
+    {
+      "path": "fixtures/dgcl-legacy-pipeline-v1.json",
+      "bytes": 337,
+      "sha256": "b24afa7810d5b858c4347cd9c039c19d5855ce56107c21ce4043a841993bf1cd"
+    },
+    {
+      "path": "fixtures/dgcl/mixed-ja-en.txt",
+      "bytes": 83,
+      "sha256": "cfe0c8a4fd78ba4e1dbf356038bc968fa14be9ebd5ff9fca99daf6b6e41ec7f0"
+    },
+    {
+      "path": "fixtures/dgcl/producer-package/Cargo.lock",
+      "bytes": 74,
+      "sha256": "50d60867fd6d308c355f9a4c677f4225ea70482c9d201c58f7091c0d30bb3a13"
+    },
+    {
+      "path": "fixtures/dgcl/producer-package/Cargo.toml",
+      "bytes": 105,
+      "sha256": "505c8b47f3aaf993d1544b1ba8ba04f688ff2eff1c1424684cc074729f58379a"
+    },
+    {
+      "path": "fixtures/dgcl/producer-package/src/lib.rs",
+      "bytes": 284,
+      "sha256": "1f250f3bcfe5cd30cc4fff678bb9e48ffaa5edc715f9b8d83223760d7f2e081e"
+    },
+    {
+      "path": "fixtures/dgcl/producer-package/tests/acceptance.rs",
+      "bytes": 274,
+      "sha256": "c0c728ec05538bac5175f3cf64759c28c9ac78c30eec16b6013e2c94befb750f"
+    },
+    {
+      "path": "fixtures/host-bind/callback.txt",
+      "bytes": 64,
+      "sha256": "070aa9285612c5dfd56e198cfc2c0edeaff5b06cb9187ea8e26372f3805c6b7a"
+    },
+    {
+      "path": "fixtures/host-bind/host-receipt.txt",
+      "bytes": 65,
+      "sha256": "bd487cf7a7d047b5783f1703190bbd363f65ff9a6f3978d6a630315cd4b189ed"
+    },
+    {
+      "path": "fixtures/host-bind/output.txt",
+      "bytes": 46,
+      "sha256": "f004881650e2c000d1d5977b5f6b02713712041281be1f37abb088aea7ff2098"
+    },
+    {
+      "path": "fixtures/host-bind/seed.txt",
+      "bytes": 63,
+      "sha256": "ca7955bb25e0e3a8b825976796741d53f4ffc9889b4350f55709e600c1f1ef03"
+    },
+    {
+      "path": "fixtures/paired-semantic-corpus.v1.json",
+      "bytes": 9411,
+      "sha256": "4e3846c5deb4042dfc4068b83a8b234a5e95fe7064734998cd45b0a22158784c"
+    },
+    {
+      "path": "fixtures/tldg-adversarial.v1.json",
+      "bytes": 1135,
+      "sha256": "a5eae2c8910572d8e04c020d7c5d88110160b65b861a22a957170d0bd0ebac56"
+    },
+    {
+      "path": "schemas/closure-and-receipt-contract.md",
+      "bytes": 7683,
+      "sha256": "5b143bc46fdd6781b8234ac7030d7e84dd8080b2a217940551f6ac81d25b5fdc"
+    },
+    {
+      "path": "schemas/epistesys-dgcl-surfaces.v1.schema.json",
+      "bytes": 70296,
+      "sha256": "4e46d8023dd9044ec51fc20c2fadd9dc42b8cf4f9002860d120f075627363d30"
+    },
+    {
+      "path": "schemas/lc631-authenticated-receipt.v1.schema.json",
+      "bytes": 2125,
+      "sha256": "112388485fef0eefa9f373e01e9837a53f4311a7a331459dea70e310d9b711ac"
+    },
+    {
+      "path": "schemas/lc631-coding-closure.v1.schema.json",
+      "bytes": 2687,
+      "sha256": "7a015443ee98ef5ea78351cd74f95b373b69c6d006fb3586b13461ea4ed6db44"
+    },
+    {
+      "path": "schemas/lc631-dg1-parse.v1.schema.json",
+      "bytes": 6001,
+      "sha256": "525ff0d553b333cc9f76826c06da68adbd154de0e50cc3545f4c27f9ff416420"
+    },
+    {
+      "path": "schemas/lc631-program-analysis.v1.schema.json",
+      "bytes": 3351,
+      "sha256": "2755f0d8740ae94985dd3f2b188b1377dd4ce40d86f28ad0b683633498f348d6"
+    },
+    {
+      "path": "schemas/lc631-promotion-evidence.v1.schema.json",
+      "bytes": 2759,
+      "sha256": "fe39bc39f5c5d6281d54784503265a2387ed6f858b0b06b10654f39119899f1f"
+    },
+    {
+      "path": "schemas/media-source-authority-contract.md",
+      "bytes": 1556,
+      "sha256": "74a7113dc8ca993f9d5ce81c48ba11ea0eb6a56ddbaf2ee673d5fd027d4e4596"
+    },
+    {
+      "path": "schemas/projection-witness-contract.md",
+      "bytes": 1882,
+      "sha256": "eb0aae32351a362cfc1b2f615cb4f0ce1f738b5f94725abbb171a35677392674"
+    },
+    {
+      "path": "schemas/unified-geometric-deepgrammar-contract.md",
+      "bytes": 3912,
+      "sha256": "764a9333bde0fe60aafadca26f4e652a2b94838c4eca753e66cc238764121cc7"
+    },
+    {
+      "path": "schemas/v630-frozen-baseline.v1.json",
+      "bytes": 652,
+      "sha256": "f8caf0c3c650cca64d5a695776b85ac5a603b9366a0059f0b83712ea15204fbd"
+    },
+    {
+      "path": "schemas/v631-slice-status.v1.json",
+      "bytes": 3844,
+      "sha256": "2910527f515bb300d50d6c11bc5aebad267e32bd067b42eb3c26bc3c9e0eb623"
+    },
+    {
+      "path": "scripts/lc631/Cargo.lock",
+      "bytes": 61354,
+      "sha256": "e1491c73c7f743483ffbcb7550fc7a47bd45013a9f94d0fa136ebd989a7164d8"
+    },
+    {
+      "path": "scripts/lc631/Cargo.toml",
+      "bytes": 992,
+      "sha256": "9fd1f7270efb37c598a61a37561837de614cd65c01a6a15ab179bdb0da5f4cdd"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-accelerator/Cargo.toml",
+      "bytes": 594,
+      "sha256": "ea1dd4890e3bbe3e0d294969b70a640501c8498478381619a9700eb5ef14afbb"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-accelerator/src/gpu.rs",
+      "bytes": 44462,
+      "sha256": "b19fca9ac07281ac6250bfdbfc375eda97079d51cf5a4188ffc08f8d7ad57428"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-accelerator/src/lib.rs",
+      "bytes": 52182,
+      "sha256": "f9197a4a7d7ff0cdae61161ac75825059df42da2684b181d60aa818dc49349e8"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-accelerator/tests/arc631_gpu_contract.rs",
+      "bytes": 2269,
+      "sha256": "0c16301cda0c1560c40777589e4e4ed4755846cfb04d93c822a6b97e21309af9"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/Cargo.toml",
+      "bytes": 495,
+      "sha256": "27b80c0821a28dae87770e0eb524596a0bf936da39f3ec2d669e9c80253fcb64"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/src/assembly.rs",
+      "bytes": 12004,
+      "sha256": "82866390866fad29b43c21471ec86048d388744b724238286d210d0bc40336db"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/src/cargo_world.rs",
+      "bytes": 9192,
+      "sha256": "ae648086a570a815119dde5be9bd62c14579c8ff903a75c5b6443d0dd335eed4"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/src/closure_connection.rs",
+      "bytes": 32517,
+      "sha256": "9ee9015b76cf2166c76064eaae05fb66a74edf49df0cd0cd510865420680054d"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/src/closure_resume.rs",
+      "bytes": 46013,
+      "sha256": "13797d6eca1ea44576647e4c9167bca082fced9005499c2487fa05cc5d316830"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/src/closure.rs",
+      "bytes": 37475,
+      "sha256": "325fa8b5cfc3546394f5092e5b5b4ec3c2d01415d3f720c20d2710d3eb1d5271"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/src/completion_plan.rs",
+      "bytes": 40691,
+      "sha256": "c4af7cef1eac49c5292d4b7b05968da0cec917386592eae1999bbd9b9f04084c"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/src/connection_graph.rs",
+      "bytes": 31315,
+      "sha256": "bbf70be0338c4bb91df44c2dab0974e80fc71d7886015e0ebd2224fe44ad20e5"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/src/corpus.rs",
+      "bytes": 1441,
+      "sha256": "066f014e3131114190c8fa4bf0feee3ba9fc0a132f54971f2f6ab7f81b36c128"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/src/dgcl_artifact.rs",
+      "bytes": 5803,
+      "sha256": "c9970b5c9f2d5e77651c4b9d12ad3d5fd15aef51531a2a9e998a227d44c31a9a"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/src/dgcl_consumer.rs",
+      "bytes": 2893,
+      "sha256": "00bb92b90702e5c83ef8d274f5ab51d35cb77ff8b815cd601d3709cbd3c411ce"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/src/dgcl_distillation.rs",
+      "bytes": 7063,
+      "sha256": "46b02154164a2f5d434f2b108276b9dde12d31941b7242b43ae12bebecd2344b"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/src/dgcl_final_output.rs",
+      "bytes": 12632,
+      "sha256": "43cd60dd4006fbff60a43a4c721dbba08907ff5ed8bd16746aa0905ecb3e6595"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/src/dgcl_gold.rs",
+      "bytes": 43283,
+      "sha256": "fa9b2d4b2e67091822a8a2b35043dad2694242240d9355b8e844f1f183f2b39f"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/src/dgcl_implementation_closure.rs",
+      "bytes": 22525,
+      "sha256": "d8570f23ca8bc06b136e9e42812a3972787816f150be0b1683f6a111d69f8588"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/src/dgcl_pipeline.rs",
+      "bytes": 20491,
+      "sha256": "8210d0732aa18bd0d0fa87908d2fb8ddf82bcfe68e52fc0adbd513b762079058"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/src/dgcl_projection.rs",
+      "bytes": 43133,
+      "sha256": "dd6cf7a400a8a6e128e3b50ae8da00686b8b6b7217a56277359fee3a783594b0"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/src/evidence_lifecycle.rs",
+      "bytes": 21600,
+      "sha256": "d9726d30a1bc50e353f5b433733c164a896cf0dc972200934c56cbd17b8a36d4"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/src/file_repair.rs",
+      "bytes": 15446,
+      "sha256": "54950ec484276a2e9f69d324937389b67249454a4059a395aa303f9a3a3e1022"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/src/instruction_grammar.rs",
+      "bytes": 90673,
+      "sha256": "1b70a197dbd62607a6086c76ac1f5a45455700ec61d98d85ceca67cd8b6a8bcf"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/src/language_worker.rs",
+      "bytes": 53039,
+      "sha256": "13b93a1b7a216ad615eb2218ab8dd7e5c4088f07f51bdb89cd97d87aef7d575f"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/src/lib.rs",
+      "bytes": 8295,
+      "sha256": "f39100927189431ed7d3063e195c63af9016096231ade0e1529173c1663bbf12"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/src/model.rs",
+      "bytes": 13072,
+      "sha256": "215e62afcb5f4f46af79906c7f87d8ed179be41c7c4a4a1c6207e710072881eb"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/src/pipeline.rs",
+      "bytes": 30090,
+      "sha256": "e456a80102dc68062e045a953c051862404444c958d92cd98b768150461981ae"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/src/process.rs",
+      "bytes": 28776,
+      "sha256": "993f4ec87fcc64f63d93e3f996a897ea1eb0cceec1b19a754c1170149e2dda24"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/src/python_script.rs",
+      "bytes": 5701,
+      "sha256": "3a1f9d59fbd23b7440a524f1fea268bfd2c8d4913b6ae375634ec4c6a4b8d091"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/src/python.rs",
+      "bytes": 10526,
+      "sha256": "8a023e8554629175a27c933b142a4133b8f810a88551d80dc899b5bed6767970"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/src/release.rs",
+      "bytes": 10652,
+      "sha256": "0f587670c3cbdfb8c7bca33359769dd4bdfc263cf155e5c20f0b990aecd57e1e"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/src/repair_loop.rs",
+      "bytes": 44986,
+      "sha256": "2a6348ef04da4d3f34d0c6a467bc135668258b17e4f0bd5101c1dc831744dc6e"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/src/rust.rs",
+      "bytes": 15790,
+      "sha256": "dc1bdddc80fb09070c7f95a83eb1e8992603bd28b9f9d21d3d5835f683188364"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/src/validation_producer.rs",
+      "bytes": 31269,
+      "sha256": "d3dba1b93cdfdbae655f9ab65f2529b4c93702206433ce709d0bfbabd0693056"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/src/validation.rs",
+      "bytes": 8573,
+      "sha256": "4c1f9b7384ce078deec0dc8c8617bf28271a116708dcccff4ad3b36aa8d46423"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/tests/arc631_rpa_authenticity.rs",
+      "bytes": 3082,
+      "sha256": "8a6c4428769820cf0afcc18264670c9b1e1b0f61dc96f48614adebfe919f0c9b"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/tests/arc631_tool_membrane.rs",
+      "bytes": 1389,
+      "sha256": "01057ee69971c7d196ce11cc8b36c4190c3f3f399e8184ad8e1c87eca1710d4b"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/tests/dgcl_artifact_identity.rs",
+      "bytes": 3775,
+      "sha256": "aa76e01ffcb8d0738c3a4ad527eafa741ee58cfc3f94226f2d956bbd716b80c8"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/tests/dgcl_completion_plan.rs",
+      "bytes": 12072,
+      "sha256": "b15954723f3d28fb50e441abbd882e5657dd221274f7bb4577b50b7a9e2b6186"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/tests/dgcl_consumer_negotiation.rs",
+      "bytes": 2002,
+      "sha256": "f38b35eef405b83762389aa7c09dff50e6e19d3d44d108a40bc90964eb86d231"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/tests/dgcl_distillation_connection.rs",
+      "bytes": 3894,
+      "sha256": "b384c9970bbf0a3c9e666215f2ec56d62b0087dd74dda49aac15bb6685a68796"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/tests/dgcl_implementation_closure.rs",
+      "bytes": 15464,
+      "sha256": "676b8fec4eb12483515bf700258c062ef05f347afaa3fce743f330bf19ee969f"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/tests/dgcl_instruction_pipeline.rs",
+      "bytes": 3287,
+      "sha256": "ba8a7ad79941e22804b34b8445abe600ff739063740d21a4cada1c1a77dbb6d7"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/tests/dgcl_persistent_head.rs",
+      "bytes": 6218,
+      "sha256": "ce324812998ff13265e1cc1c19eb78c75d98f2db4def4c804e8970452507372f"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/tests/dgcl_projection.rs",
+      "bytes": 13418,
+      "sha256": "de1bf6ae035baaa4a7207b340d139faffe65b7629e4b4d725fd91a8776ad0574"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/tests/dgcl_repair_loop.rs",
+      "bytes": 24800,
+      "sha256": "a47c1d9e6760dac7ba6fdd53b9b139d7d8c16dea6d312819594f1b7d236b0841"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/tests/dgcl_standalone_candidate.rs",
+      "bytes": 3532,
+      "sha256": "af2b08a45a3726508a4431ca11094b0bcacd0932f0ab12cefa9d56a3b6e36443"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/tests/dgcl_static_connection_graph.rs",
+      "bytes": 8291,
+      "sha256": "9a311daefcf3c945552411fccba343a2a5acd290041ce9a478f3f806b6adf237"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/tests/dgcl_validation_producers.rs",
+      "bytes": 23972,
+      "sha256": "a85244d63e86926d33639e68228180caacceab875f2aa5519467fb4d6fbca97a"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/tests/epia2_disconnect_roundtrip.rs",
+      "bytes": 9832,
+      "sha256": "06352eb70106b29112b7b14a4da093c677454f61e6d6d983a25c605f5fad3f8c"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/tests/epia2_grammar_matrix.rs",
+      "bytes": 9331,
+      "sha256": "f55df48f8a9c7ab6288313fa7a8b648e3d95ee772e4ffef0ce57b2d8075fb424"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/tests/instruction_constraints.rs",
+      "bytes": 4288,
+      "sha256": "8a92445de7273f76cce46c7bc5e0808e0b58cf3757cb8f184ebefb7bbd203f6c"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/tests/instruction_grammar.rs",
+      "bytes": 18505,
+      "sha256": "f67603c76fcf4f4acb001c61175256b8b6cf4c65b561682bebb23cd265184b5b"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/tests/rpa_pipeline.rs",
+      "bytes": 24798,
+      "sha256": "754541d9fd2b48ca6bff6cc9569258295c09a217d88ea52caba24f81b51e0fda"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-cli/Cargo.toml",
+      "bytes": 929,
+      "sha256": "528ea781bb548d0e76642ff4171344d3a1bc958a56414ac945e095ead9ae0484"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-cli/src/dgcl_journal.rs",
+      "bytes": 8687,
+      "sha256": "55225f070d6d57a54d51a30f9161947483e1ea3e540e946341b91796bcfd9e9b"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-cli/src/dgcl_package.rs",
+      "bytes": 12756,
+      "sha256": "2ea125ce04e082fb3f66f3642c8ab2475f839126374dd2890d1dfaf60e38234d"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-cli/src/dgcl_repair.rs",
+      "bytes": 13685,
+      "sha256": "e9a0a2072f999272c773906bbfc2b50eb2c11a1ac82e5b8df819f9d7a5ec76ce"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-cli/src/lib.rs",
+      "bytes": 84559,
+      "sha256": "9a9a658f0e2b2fab41a2e7df1fbadb30d76420a293c68efeefd96be8515ad527"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-cli/src/main.rs",
+      "bytes": 73,
+      "sha256": "116cb46f8d284014c8cc327bf258b282ad7e11a2015c83fa5451beff561c0dcb"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-cli/tests/cli_contract.rs",
+      "bytes": 45125,
+      "sha256": "66a70f83484a5ab50dd389bec03920b0a53be4a3a5af021efadaad1e45de3870"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-cli/tests/dgcl_package_cli.rs",
+      "bytes": 21643,
+      "sha256": "f023bfadbd0f50998a7bbf8f9c4c84a2c762b6d0b6d97f875f9ed602168d7cb6"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-compat/Cargo.toml",
+      "bytes": 177,
+      "sha256": "5083a0b83ed75081cc8c8be0e790c24075329b0896ecae84e6cb923fbdd4e83b"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-compat/src/lib.rs",
+      "bytes": 6067,
+      "sha256": "d8ad7979024e0e97851a20aa2fe6c6374dcde334987e3e09f14011cbddb5bee6"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-core/Cargo.toml",
+      "bytes": 287,
+      "sha256": "756ecd15f961ab8bce8c3c53c0b6208d2532b54461208ce974e70ebe9c0d17e6"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-core/src/lib.rs",
+      "bytes": 27823,
+      "sha256": "580119fd190a94d931325bf2b84f382954159ec8a7e1dec44783f64f6cb8c25c"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-core/tests/arc631_core_authenticity.rs",
+      "bytes": 3152,
+      "sha256": "ad8618ab64490f49a17792f54fa1f92a2f62ef849162a46111826a2e5d793da8"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-core/tests/execution_permit.rs",
+      "bytes": 7134,
+      "sha256": "e869940496cc50407b62c9ad069bfc888ae517946497a03c08e8c518f1586562"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-host/Cargo.toml",
+      "bytes": 283,
+      "sha256": "3292439922b365d3d2a5aca1332e69685f1752413a9130afd79d43098125d730"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-host/src/lib.rs",
+      "bytes": 58608,
+      "sha256": "e9a16845a6597eb13accee238249d68cccc3acb9ec5a30522f180cb1246f8984"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-host/src/stop_hook.rs",
+      "bytes": 11801,
+      "sha256": "0bce955278a7ef9cb7609b5c0cd984e249a6d96fa25a394120bd44ae6692dc70"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-host/tests/arc631_host_authenticity.rs",
+      "bytes": 5421,
+      "sha256": "563277b374c5bbf80723b97ee1ebba2b1acc1db287ff9b73aef1a8aae081583c"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-host/tests/authority_permit.rs",
+      "bytes": 11169,
+      "sha256": "073e5754a070aca9632fe85de4027c07fb24d27f9cbe51ccf3194c262eeaa8ef"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-host/tests/dgcl_output_stage_adapter.rs",
+      "bytes": 9965,
+      "sha256": "5799317e222d433ee6f4c39912eb376b6bcb94df3a66113053dc74ddad93922b"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-media/Cargo.toml",
+      "bytes": 344,
+      "sha256": "0b2ed267c36f57583bd1df3c0c3851a913d7fcd010e714de44d402d46d346279"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-media/src/lib.rs",
+      "bytes": 55919,
+      "sha256": "b3b789b3bdaf8c31a69895cba6b637a4dcd2deccdf0d030237101db9ab4fe421"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-media/tests/arc631_media_authority.rs",
+      "bytes": 6844,
+      "sha256": "a8b6bbab0f3b9bec5b70f3426ab5cc00cc8faefd5cbc3f5f2fa1168c456bf757"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-process-supervisor/Cargo.toml",
+      "bytes": 344,
+      "sha256": "3292858d05de74927bbecf19c27924a382796f489c1515421dd8f879d8cd7b86"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-process-supervisor/src/lib.rs",
+      "bytes": 150,
+      "sha256": "69cce80a58c442c0a12fd36cf681abe0b8ee79bb79f885475c57e18784422288"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-process-supervisor/src/windows.rs",
+      "bytes": 18178,
+      "sha256": "f174c24506f2335dde74e96aabdd30454ac75d1aaac80c6442f654102b53ec16"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-receipt-kernel/Cargo.toml",
+      "bytes": 264,
+      "sha256": "7994a274cddcc1f6d270ed999257114948d08846004cdfd60e6dc4cab1f4b823"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-receipt-kernel/src/lib.rs",
+      "bytes": 15477,
+      "sha256": "3aefa5c963aac39936adc374eab1cfb3b429ae0493413530931d69fc49b10d83"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-receipt-kernel/tests/arc631_receipt_authenticity.rs",
+      "bytes": 5649,
+      "sha256": "6f21cb04caf5ebb70808b1e768f8b6a6a15eb85b01a72e389710962e8e03f957"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-tl/Cargo.toml",
+      "bytes": 252,
+      "sha256": "4b4cf1becc75bcf5afea373d8fa30becea3060852740aca51838e3a0b255d76f"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-tl/src/lib.rs",
+      "bytes": 16754,
+      "sha256": "cae95dd7ff5a3c1e923c0c2fb760ca2edb79f87711ec6532275265a2e47f499f"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-tl/src/projection_v2.rs",
+      "bytes": 10750,
+      "sha256": "f9ae00511792b5e5d5423386d36fd933d6e8df3728a7c9d0bd5b558b984a37fb"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-tl/src/projection_v3.rs",
+      "bytes": 19763,
+      "sha256": "27b9c951763c6fec1293e19c07495f926a2e2c6e138679a087b6e1efd7bd608f"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-tl/src/regime.rs",
+      "bytes": 1586,
+      "sha256": "c4cff4bc5126aa3c503a52b9b74f796cf91aac849410d721457e0198365af4e1"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-tl/tests/arc631_projection_v3.rs",
+      "bytes": 6581,
+      "sha256": "d964d8459c734369ac517b56e5b145b8308280df595bc18921d29d695135fcf2"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-tl/tests/tldg_foundation.rs",
+      "bytes": 5503,
+      "sha256": "a69add9c3d81f7aa73692be7195486dad1bde02a73b5e9218c95fcd86931e4ee"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-tldg/Cargo.toml",
+      "bytes": 601,
+      "sha256": "58756191e60ef57ddbe8bb47b3ce734442657f1a6eaf61f3c6d71920ba7187ea"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-tldg/src/accelerated.rs",
+      "bytes": 7053,
+      "sha256": "b6f8c38afa7975d41b19cd7acd2a5e780287a915a162e5553b1b96c4960b3dbe"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-tldg/src/adapters.rs",
+      "bytes": 21320,
+      "sha256": "9eadd70b819f0940a43895228e6c6364b42455725587fbd10d6f02091c5aac69"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-tldg/src/calibration.rs",
+      "bytes": 3640,
+      "sha256": "461e3cb12795f4f9646146757cf0b44fef68c6dbcecdf540f36ca3749eaaa89d"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-tldg/src/dg1.rs",
+      "bytes": 50603,
+      "sha256": "56c735712f61b4cae1ee7d435fce29073e145566697df71f68d25350208be2fa"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-tldg/src/distillation.rs",
+      "bytes": 18109,
+      "sha256": "23e1a3b8f58b47113390ecefb3ed36cd1b01d3e26085b2f9020a2d06282794e0"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-tldg/src/execution.rs",
+      "bytes": 4583,
+      "sha256": "ab8ac6c785c46da375643de31d462606cb8cc99a4f5d7ba769836898305c26f3"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-tldg/src/geometry.rs",
+      "bytes": 7289,
+      "sha256": "67d59da58fda79876e1b4b442b2fd359834c579b5f1b37076456b5342e4b7c4c"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-tldg/src/grammar.rs",
+      "bytes": 4410,
+      "sha256": "fee994c8338b466d2012b833eafe632a68fdb6365e88060d13298a167e4272b8"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-tldg/src/integration.rs",
+      "bytes": 29105,
+      "sha256": "52290de841f6386ca901a5b0d54f941c1b891875412f4cc74de27f8ee9398712"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-tldg/src/kernel.rs",
+      "bytes": 5274,
+      "sha256": "71947411dfe35b3c412d83acd7ab3857d612925daade3e41e0ab1eb63cb3583a"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-tldg/src/lib.rs",
+      "bytes": 3402,
+      "sha256": "a70719d92932e19a7f3b36275b9989eb6f0143db85410ebc78a821232945d552"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-tldg/src/parser.rs",
+      "bytes": 14985,
+      "sha256": "efb1bcb24fa6c3459af6a24deed70332115b3ed75a233554a981b96fbadfc6d1"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-tldg/src/profile.rs",
+      "bytes": 4953,
+      "sha256": "efee9e644a3622a2adf646c363d446ceaace41e6f309e340aad6387040ba2f1d"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-tldg/src/semantics.rs",
+      "bytes": 7487,
+      "sha256": "ccaf3fe49cdb555ea026fe6c061ca05acbcfcecc55c42ced705b927c1b81bcde"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-tldg/src/source.rs",
+      "bytes": 2917,
+      "sha256": "63d4480086aafea0db867ea0e214e15d3a121f39f1831fadfbe89623107cb075"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-tldg/tests/arc631_iterative_distillation.rs",
+      "bytes": 3285,
+      "sha256": "fbaa9aa71c76f4ccd6594797fedb86598cc45c2db5fcd9810555dde1cf89cf68"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-tldg/tests/backend_views.rs",
+      "bytes": 1495,
+      "sha256": "2062f09666806795acb7e5cd9f15e812bd8211fb47070e18c1c63b511f0386bb"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-tldg/tests/calibration_integration.rs",
+      "bytes": 1823,
+      "sha256": "709dad446313a86f28eea508d79de599050555c4e476503a524131f4a9669a00"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-tldg/tests/dgcl_instruction_regressions.rs",
+      "bytes": 7522,
+      "sha256": "40d09b0c6928d5b975558f9e39890f49386da1f7241aea967a60b4418b0ddaa7"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-tldg/tests/dgcl_properties.rs",
+      "bytes": 1893,
+      "sha256": "f5abc85162d0771327a2b690179c44d4f73123d3e827a6dcaa9d658655cd4b39"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-tldg/tests/geometry_distillation.rs",
+      "bytes": 3271,
+      "sha256": "9dd8f9d91a1aaaa69bdcea84b48628e99910277f34ced033b8c139414559014d"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-tldg/tests/grammar_foundation.rs",
+      "bytes": 2057,
+      "sha256": "106980e6edcd2d5374f3c10b6992635b663fe3256bba101865daad1144833e64"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-wire/Cargo.toml",
+      "bytes": 283,
+      "sha256": "6ae4b2596ee9189711f69818a8fa2ef66e0e7d552d7fdb8aa99470b624a7a071"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-wire/src/alpha2_release.rs",
+      "bytes": 12988,
+      "sha256": "23603c12fb86fdc43a3ba5906a52c7ca6a07052d381a6542afea29af55afd276"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-wire/src/lib.rs",
+      "bytes": 6334,
+      "sha256": "42084d9dfe1d93d27d19a5e13760060838fdbe4975a2200aa03e1553a0ffba86"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-wire/tests/alpha2_release_gate.rs",
+      "bytes": 6105,
+      "sha256": "91b7358727cc77d6aa8882db627a49457036f0b6deaf313c276768a0ee683d70"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-world/Cargo.toml",
+      "bytes": 194,
+      "sha256": "43f48325a8cf3ef5c7e173de1eed757915bf1da9c3bc5ae3ae73ca5227efa3dd"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-world/src/lib.rs",
+      "bytes": 15662,
+      "sha256": "b5e6ba65a1736a8ffdad4c44a9a405dedb4e02c347813817582b371d8bef53b1"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-world/tests/arc631_world_evaluations.rs",
+      "bytes": 918,
+      "sha256": "f9230e691d01a20662804f4deb6037bf9cd1674418f9122ca9b4f87c7f4ca2ce"
+    },
+    {
+      "path": "scripts/lc631/workers/dgcl_nlp_worker.py",
+      "bytes": 11131,
+      "sha256": "5e5189626dac84fa1d6ac6c8ff98b39dc8fe42baba474b7e723c65cc56f54c6c"
+    },
+    {
+      "path": "scripts/lc631/workers/test_dgcl_nlp_worker.py",
+      "bytes": 1314,
+      "sha256": "8a1efbf96aad8458ba1bc22af4549c5daf295f8e12f5cf610684dd10a013c843"
+    },
+    {
+      "path": "validation/dgcl-nlp-model-pins.v1.json",
+      "bytes": 1096,
+      "sha256": "17ff1e2bf8a5b7400cb056db8e16f27632df2ad0a7b8835a56c3418ff84450df"
+    },
+    {
+      "path": "validation/dgcl-python-requirements.lock",
+      "bytes": 845,
+      "sha256": "fbb22a4edf864d9cca2828005bc1ab36119d2979273344f5eaf1b4c5673958e3"
+    },
+    {
+      "path": "validation/dgcl-python-runtime.v1.json",
+      "bytes": 1669,
+      "sha256": "85333102df0e7e1b54fbd392e938273bef02ee6768ea26a67cc2da39cb6902d6"
+    }
+  ]
+}

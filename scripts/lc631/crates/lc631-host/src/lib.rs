@@ -7,7 +7,12 @@ pub use stop_hook::{
     CodexStopHookEvent, StopHookObservation,
 };
 
-use lc631_core::{stable_sha256, ArtifactId, SourceSpan, TurnId};
+use lc631_core::{
+    authority_event_payload_digest, stable_sha256, Action, ArtifactId, AuthorityEvent,
+    AuthorityRevision, AuthoritySourceKind, CallerOrigin, DeonticPolarity, ExecutionPermit,
+    ExecutionPermitContext, PermitValidation, PrincipalBinding, SourceSpan, TurnId,
+    VerifiedAuthorityEvent,
+};
 use lc631_receipt_kernel::{
     generate_key, ReceiptClass, ReceiptError, ReceiptIssuer, ReceiptPolicy, ReceiptScope,
     ReceiptVerifier, ReplayGuard, SubjectRevision, UntrustedReceipt,
@@ -15,6 +20,7 @@ use lc631_receipt_kernel::{
 use serde::{Deserialize, Serialize};
 use std::fs::{self, OpenOptions};
 use std::io::Write;
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 
 pub const HOST_CONTRACT_SCHEMA: &str = "lc631-host-contract.v2";
@@ -39,7 +45,11 @@ pub struct HostSeedEnvelope {
     pub user_span: SourceSpan,
     pub binding_state: HostBindingState,
     pub host_receipt_digest: Option<String>,
+    pub authorized_resource_scope: Option<String>,
     verified_receipt_digest: Option<String>,
+    verified_host_key_fingerprint: Option<String>,
+    #[serde(skip)]
+    verified_receipt_expiry: Option<u64>,
 }
 
 impl HostSeedEnvelope {
@@ -85,6 +95,7 @@ impl HostSeedEnvelope {
             )
             .map_err(map_receipt_error)?;
         let receipt_digest = verified.receipt_digest();
+        let host_key_fingerprint = verifier.key_fingerprint().to_string();
         Ok(Self {
             schema_version: HOST_CONTRACT_SCHEMA,
             artifact_id,
@@ -93,7 +104,67 @@ impl HostSeedEnvelope {
             user_span,
             binding_state: HostBindingState::VerifiedHostUser,
             host_receipt_digest: Some(receipt_digest.clone()),
+            authorized_resource_scope: None,
             verified_receipt_digest: Some(receipt_digest),
+            verified_host_key_fingerprint: Some(host_key_fingerprint),
+            verified_receipt_expiry: verified.expires_at_epoch(),
+        })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn verify_attested_scoped(
+        artifact_id: ArtifactId,
+        turn_id: TurnId,
+        raw_user_message: String,
+        user_span: SourceSpan,
+        authorized_resource_scope: String,
+        receipt: UntrustedReceipt,
+        verifier: &ReceiptVerifier,
+        replay: &mut ReplayGuard,
+        now_epoch: u64,
+    ) -> Result<Self, HostError> {
+        user_span
+            .slice(&raw_user_message)
+            .map_err(|_| HostError::InvalidUserSpan)?;
+        if authorized_resource_scope.trim().is_empty() || authorized_resource_scope.len() > 4096 {
+            return Err(HostError::AuthorityScopeMismatch);
+        }
+        let payload = host_seed_scoped_payload_digest(
+            artifact_id,
+            turn_id,
+            &raw_user_message,
+            user_span,
+            &authorized_resource_scope,
+        );
+        let subject = SubjectRevision::checked(stable_sha256(&raw_user_message))
+            .map_err(|_| HostError::ReceiptRejected)?;
+        let scope = ReceiptScope::checked(format!(
+            "host/user-span/{}/{}/{}",
+            artifact_id.0,
+            turn_id.0,
+            stable_sha256(&authorized_resource_scope)
+        ))
+        .map_err(|_| HostError::ReceiptRejected)?;
+        let verified = verifier
+            .verify(
+                receipt,
+                &ReceiptPolicy::exact(ReceiptClass::HostSeed, subject, scope, payload, now_epoch),
+                replay,
+            )
+            .map_err(map_receipt_error)?;
+        let receipt_digest = verified.receipt_digest();
+        Ok(Self {
+            schema_version: HOST_CONTRACT_SCHEMA,
+            artifact_id,
+            turn_id,
+            raw_user_message,
+            user_span,
+            binding_state: HostBindingState::VerifiedHostUser,
+            host_receipt_digest: Some(receipt_digest.clone()),
+            authorized_resource_scope: Some(authorized_resource_scope),
+            verified_receipt_digest: Some(receipt_digest),
+            verified_host_key_fingerprint: Some(verifier.key_fingerprint().to_string()),
+            verified_receipt_expiry: verified.expires_at_epoch(),
         })
     }
 
@@ -111,7 +182,10 @@ impl HostSeedEnvelope {
             user_span: SourceSpan { start: 0, end },
             binding_state: HostBindingState::SelfAttested,
             host_receipt_digest: None,
+            authorized_resource_scope: None,
             verified_receipt_digest: None,
+            verified_host_key_fingerprint: None,
+            verified_receipt_expiry: None,
         }
     }
 
@@ -119,6 +193,27 @@ impl HostSeedEnvelope {
         self.binding_state == HostBindingState::VerifiedHostUser
             && self.host_receipt_digest.is_some()
             && self.host_receipt_digest == self.verified_receipt_digest
+            && self.verified_host_key_fingerprint.is_some()
+            && self.authorized_resource_scope.is_some()
+    }
+
+    pub fn authorized_resource_scope(&self) -> Option<&str> {
+        self.authorized_resource_scope.as_deref()
+    }
+
+    pub fn principal_binding(&self) -> Result<PrincipalBinding, HostError> {
+        if !self.may_source_grants() {
+            return Err(HostError::HostSeedUnbound);
+        }
+        PrincipalBinding::from_attested_seed(
+            self.host_receipt_digest
+                .as_deref()
+                .ok_or(HostError::MissingHostReceipt)?,
+            self.verified_host_key_fingerprint
+                .as_deref()
+                .ok_or(HostError::MissingHostReceipt)?,
+        )
+        .map_err(|_| HostError::ReceiptRejected)
     }
 }
 
@@ -146,6 +241,59 @@ pub struct HostOutputReceipt {
     pub binding_origin: HostOutputBindingOrigin,
     pub authenticity_receipt_digest: Option<String>,
     authenticity_attestation: Option<UntrustedReceipt>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HostOutputStage {
+    PreCommitCandidate,
+    PostSendObserved,
+    SinkDeliveryObserved,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct HostOutputStageRequest<'a> {
+    pub candidate: &'a HostOutputCandidate,
+    pub stage: HostOutputStage,
+    pub callback_payload: &'a str,
+    pub sink_id: Option<&'a str>,
+    pub delivered: Option<bool>,
+    pub attestation: Option<UntrustedReceipt>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct HostOutputStageReceipt {
+    schema_version: &'static str,
+    artifact_id: ArtifactId,
+    turn_id: TurnId,
+    candidate_digest: String,
+    output_digest: String,
+    stage: HostOutputStage,
+    callback_event_digest: String,
+    sink_id: Option<String>,
+    delivered: Option<bool>,
+    host_seed_receipt_digest: String,
+    authenticity_receipt_digest: String,
+    authenticity_attestation: UntrustedReceipt,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HostOutputLifecycleState {
+    AwaitingPreCommit,
+    AwaitingPostSend,
+    AwaitingSinkDelivery,
+    Delivered,
+    DeliveryFailed,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct HostOutputStageLedger {
+    artifact_id: ArtifactId,
+    turn_id: TurnId,
+    candidate_digest: String,
+    output_digest: String,
+    stages: Vec<HostOutputStageReceipt>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
@@ -181,6 +329,24 @@ pub fn host_seed_payload_digest(
     ))
 }
 
+pub fn host_seed_scoped_payload_digest(
+    artifact_id: ArtifactId,
+    turn_id: TurnId,
+    raw_user_message: &str,
+    user_span: SourceSpan,
+    authorized_resource_scope: &str,
+) -> String {
+    stable_sha256(&format!(
+        "{HOST_CONTRACT_SCHEMA}\0scoped-user-span.v1\0{}\0{}\0{}\0{}\0{}\0{}",
+        artifact_id.0,
+        turn_id.0,
+        stable_sha256(raw_user_message),
+        user_span.start,
+        user_span.end,
+        stable_sha256(authorized_resource_scope)
+    ))
+}
+
 pub fn host_output_payload_digest(
     seed: &HostSeedEnvelope,
     candidate: &HostOutputCandidate,
@@ -212,6 +378,201 @@ pub fn host_output_payload_digest(
         seed_digest,
         HostOutputBindingOrigin::ExternalPreCommitPayload,
     ))
+}
+
+pub fn host_output_stage_scope(
+    artifact_id: ArtifactId,
+    turn_id: TurnId,
+    stage: HostOutputStage,
+) -> Result<String, HostError> {
+    Ok(format!(
+        "host/output/{}/{}/stage/{}",
+        artifact_id.0,
+        turn_id.0,
+        host_output_stage_name(stage)
+    ))
+}
+
+pub fn host_output_stage_payload_digest(
+    seed: &HostSeedEnvelope,
+    request: &HostOutputStageRequest<'_>,
+) -> Result<String, HostError> {
+    let candidate = request.candidate;
+    if candidate.artifact_id != seed.artifact_id || candidate.turn_id != seed.turn_id {
+        return Err(HostError::ArtifactTurnMismatch);
+    }
+    let output_digest = stable_sha256(&candidate.output_text);
+    if candidate.candidate_digest != output_digest {
+        return Err(HostError::CandidateDigestMismatch);
+    }
+    let seed_digest = seed
+        .verified_receipt_digest
+        .as_ref()
+        .ok_or(HostError::MissingHostReceipt)?;
+    if request.callback_payload.trim().is_empty() || request.callback_payload.len() > 65_536 {
+        return Err(HostError::InvalidHostOutputStage);
+    }
+    match request.stage {
+        HostOutputStage::PreCommitCandidate | HostOutputStage::PostSendObserved
+            if request.sink_id.is_some() || request.delivered.is_some() =>
+        {
+            return Err(HostError::InvalidHostOutputStage)
+        }
+        HostOutputStage::SinkDeliveryObserved
+            if request.sink_id.is_none_or(|sink| {
+                sink.trim().is_empty() || sink.len() > 512 || sink.chars().any(char::is_control)
+            }) || request.delivered.is_none() =>
+        {
+            return Err(HostError::InvalidHostOutputStage)
+        }
+        _ => {}
+    }
+    let callback_event_digest = stable_sha256(request.callback_payload);
+    let sink_id = request.sink_id.unwrap_or("no-sink");
+    let delivered = request
+        .delivered
+        .map(|value| value.to_string())
+        .unwrap_or_else(|| "not_applicable".into());
+    Ok(stable_sha256(&format!(
+        "{HOST_CONTRACT_SCHEMA}\0host-output-stage.v1\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}",
+        candidate.artifact_id.0,
+        candidate.turn_id.0,
+        host_output_stage_name(request.stage),
+        candidate.candidate_digest,
+        output_digest,
+        callback_event_digest,
+        sink_id,
+        delivered,
+        seed_digest,
+    )))
+}
+
+pub fn observe_host_output_stage_attested(
+    seed: &HostSeedEnvelope,
+    request: HostOutputStageRequest<'_>,
+    verifier: &ReceiptVerifier,
+    replay: &mut ReplayGuard,
+    now_epoch: u64,
+) -> Result<HostOutputStageReceipt, HostError> {
+    let payload = host_output_stage_payload_digest(seed, &request)?;
+    let wire = request.attestation.ok_or(HostError::MissingHostReceipt)?;
+    let candidate = request.candidate;
+    let output_digest = stable_sha256(&candidate.output_text);
+    let subject = output_subject(candidate.artifact_id, candidate.turn_id, &output_digest)?;
+    let scope = ReceiptScope::checked(host_output_stage_scope(
+        candidate.artifact_id,
+        candidate.turn_id,
+        request.stage,
+    )?)
+    .map_err(|_| HostError::InvalidHostOutputStage)?;
+    let verified = verifier
+        .verify(
+            wire,
+            &ReceiptPolicy::exact(ReceiptClass::HostOutput, subject, scope, payload, now_epoch),
+            replay,
+        )
+        .map_err(map_receipt_error)?;
+    let receipt_digest = verified.receipt_digest();
+    let callback_event_digest = stable_sha256(request.callback_payload);
+    Ok(HostOutputStageReceipt {
+        schema_version: HOST_CONTRACT_SCHEMA,
+        artifact_id: candidate.artifact_id,
+        turn_id: candidate.turn_id,
+        candidate_digest: candidate.candidate_digest.clone(),
+        output_digest,
+        stage: request.stage,
+        callback_event_digest,
+        sink_id: request.sink_id.map(str::to_owned),
+        delivered: request.delivered,
+        host_seed_receipt_digest: seed
+            .host_receipt_digest
+            .clone()
+            .ok_or(HostError::MissingHostReceipt)?,
+        authenticity_receipt_digest: receipt_digest,
+        authenticity_attestation: verified.into_untrusted(),
+    })
+}
+
+impl HostOutputStageLedger {
+    pub fn new(candidate: &HostOutputCandidate) -> Result<Self, HostError> {
+        if candidate.output_text.is_empty()
+            || stable_sha256(&candidate.output_text) != candidate.candidate_digest
+        {
+            return Err(HostError::CandidateDigestMismatch);
+        }
+        Ok(Self {
+            artifact_id: candidate.artifact_id,
+            turn_id: candidate.turn_id,
+            candidate_digest: candidate.candidate_digest.clone(),
+            output_digest: stable_sha256(&candidate.output_text),
+            stages: Vec::new(),
+        })
+    }
+
+    pub fn append(&mut self, receipt: HostOutputStageReceipt) -> Result<(), HostError> {
+        if receipt.artifact_id != self.artifact_id
+            || receipt.turn_id != self.turn_id
+            || receipt.candidate_digest != self.candidate_digest
+            || receipt.output_digest != self.output_digest
+        {
+            return Err(HostError::ArtifactTurnMismatch);
+        }
+        let expected = match self.stages.len() {
+            0 => HostOutputStage::PreCommitCandidate,
+            1 => HostOutputStage::PostSendObserved,
+            2 => HostOutputStage::SinkDeliveryObserved,
+            _ => return Err(HostError::HostOutputStageConflict),
+        };
+        if receipt.stage != expected {
+            return Err(HostError::HostOutputStageConflict);
+        }
+        self.stages.push(receipt);
+        Ok(())
+    }
+
+    pub fn state(&self) -> HostOutputLifecycleState {
+        match self.stages.last() {
+            None => HostOutputLifecycleState::AwaitingPreCommit,
+            Some(receipt) if receipt.stage == HostOutputStage::PreCommitCandidate => {
+                HostOutputLifecycleState::AwaitingPostSend
+            }
+            Some(receipt) if receipt.stage == HostOutputStage::PostSendObserved => {
+                HostOutputLifecycleState::AwaitingSinkDelivery
+            }
+            Some(receipt) if receipt.delivered == Some(true) => HostOutputLifecycleState::Delivered,
+            Some(_) => HostOutputLifecycleState::DeliveryFailed,
+        }
+    }
+
+    pub fn stages(&self) -> &[HostOutputStageReceipt] {
+        &self.stages
+    }
+}
+
+impl HostOutputStageReceipt {
+    pub fn stage(&self) -> HostOutputStage {
+        self.stage
+    }
+
+    pub fn delivered(&self) -> Option<bool> {
+        self.delivered
+    }
+
+    pub fn authenticity_receipt_digest(&self) -> &str {
+        &self.authenticity_receipt_digest
+    }
+
+    pub fn authenticity_attestation(&self) -> &UntrustedReceipt {
+        &self.authenticity_attestation
+    }
+}
+
+fn host_output_stage_name(stage: HostOutputStage) -> &'static str {
+    match stage {
+        HostOutputStage::PreCommitCandidate => "precommit_candidate",
+        HostOutputStage::PostSendObserved => "post_send_observed",
+        HostOutputStage::SinkDeliveryObserved => "sink_delivery_observed",
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -648,7 +1009,103 @@ pub struct HostReceiptContext {
     key_path: PathBuf,
 }
 
+pub struct ExecutionPermitValidationRequest<'a> {
+    pub permit: &'a ExecutionPermit,
+    pub action: Action,
+    pub scope: &'a str,
+    pub source_revision: &'a str,
+    pub authority_revision: AuthorityRevision,
+    pub now_epoch: u64,
+    pub revocation_revision: u64,
+    pub revoked_permit_digests: &'a [String],
+}
+
+pub struct HostExecutionPermitAdmission {
+    pub action: Action,
+    pub scope: String,
+    pub span: SourceSpan,
+    pub authority_revision: AuthorityRevision,
+    pub revocation_revision: u64,
+    pub now_epoch: u64,
+    pub attestation: UntrustedReceipt,
+}
+
 impl HostReceiptContext {
+    /// Consume an externally issued authority event. This reader never signs a
+    /// Grant from parsed text, a seed envelope, a model output, or a public report.
+    pub fn admit_execution_permit(
+        &self,
+        seed: &HostSeedEnvelope,
+        admission: HostExecutionPermitAdmission,
+        replay: &mut ReplayGuard,
+    ) -> Result<ExecutionPermit, HostError> {
+        if !seed.may_source_grants()
+            || seed.verified_host_key_fingerprint.as_deref()
+                != Some(self.verifier.key_fingerprint())
+            || seed.authorized_resource_scope.as_deref() != Some(admission.scope.as_str())
+        {
+            return Err(HostError::HostSeedUnbound);
+        }
+        if admission.span.start < seed.user_span.start
+            || admission.span.end > seed.user_span.end
+            || admission.span.slice(&seed.raw_user_message).is_err()
+            || !user_span_is_plain_prose(&seed.raw_user_message, admission.span)
+        {
+            return Err(HostError::AuthoritySourceIneligible);
+        }
+        let event = AuthorityEvent {
+            action: admission.action,
+            source: AuthoritySourceKind::VerifiedHostUserSpan,
+            polarity: DeonticPolarity::Grant,
+            span: admission.span,
+            scope: admission.scope,
+        };
+        let parent = seed
+            .verified_receipt_digest
+            .as_deref()
+            .ok_or(HostError::MissingHostReceipt)?;
+        let expiry = admission
+            .attestation
+            .claims()
+            .expires_at_epoch()
+            .ok_or(HostError::AuthorityPermitRejected)?
+            .min(
+                seed.verified_receipt_expiry
+                    .ok_or(HostError::AuthorityPermitRejected)?,
+            );
+        let verified = self
+            .verifier
+            .verify(
+                admission.attestation,
+                &ReceiptPolicy::exact(
+                    ReceiptClass::Authority,
+                    SubjectRevision::checked(stable_sha256(&seed.raw_user_message))
+                        .map_err(|_| HostError::ReceiptRejected)?,
+                    ReceiptScope::checked(format!(
+                        "authority/{}/{}",
+                        host_action_name(event.action),
+                        event.scope
+                    ))
+                    .map_err(|_| HostError::ReceiptRejected)?,
+                    authority_event_payload_digest(&event),
+                    admission.now_epoch,
+                )
+                .with_parent(parent),
+                replay,
+            )
+            .map_err(map_receipt_error)?;
+        ExecutionPermit::from_verified_user_event(
+            VerifiedAuthorityEvent::checked(event, verified)
+                .map_err(|_| HostError::AuthorityPermitRejected)?,
+            &seed.raw_user_message,
+            admission.authority_revision,
+            admission.now_epoch,
+            expiry.min(admission.now_epoch.saturating_add(300)),
+            admission.revocation_revision,
+        )
+        .map_err(|_| HostError::AuthorityPermitRejected)
+    }
+    #[cfg(test)]
     pub fn from_key_bytes(key: &[u8]) -> Result<Self, HostError> {
         Ok(Self {
             issuer: ReceiptIssuer::from_key_bytes("lc631-host-root", key)
@@ -731,6 +1188,356 @@ impl HostReceiptContext {
     pub fn key_fingerprint(&self) -> String {
         self.verifier.key_fingerprint().to_string()
     }
+
+    pub fn attest_authority_event(
+        &self,
+        seed: &HostSeedEnvelope,
+        event: AuthorityEvent,
+        replay: &mut ReplayGuard,
+        now_epoch: u64,
+        expires_at_epoch: u64,
+    ) -> Result<VerifiedAuthorityEvent, HostError> {
+        if !seed.may_source_grants() {
+            return Err(HostError::HostSeedUnbound);
+        }
+        if seed.verified_host_key_fingerprint.as_deref() != Some(self.verifier.key_fingerprint()) {
+            return Err(HostError::AuthorityHostMismatch);
+        }
+        if event.source != AuthoritySourceKind::VerifiedHostUserSpan
+            || !matches!(
+                event.polarity,
+                DeonticPolarity::Grant | DeonticPolarity::Deny
+            )
+            || event.scope.is_empty()
+            || event.scope.len() > 4096
+            || event.span.start < seed.user_span.start
+            || event.span.end > seed.user_span.end
+            || event.span.slice(&seed.raw_user_message).is_err()
+        {
+            return Err(HostError::AuthoritySpanInvalid);
+        }
+        if seed.authorized_resource_scope.as_deref() != Some(event.scope.as_str()) {
+            return Err(HostError::AuthorityScopeMismatch);
+        }
+        let text = event
+            .span
+            .slice(&seed.raw_user_message)
+            .map_err(|_| HostError::AuthoritySpanInvalid)?;
+        if !user_span_is_plain_prose(&seed.raw_user_message, event.span)
+            || !authority_surface_matches(event.action, event.polarity, text)
+        {
+            return Err(HostError::AuthoritySourceIneligible);
+        }
+        if expires_at_epoch <= now_epoch || expires_at_epoch.saturating_sub(now_epoch) > 86_400 {
+            return Err(HostError::AuthorityPermitRejected);
+        }
+        let seed_receipt_digest = seed
+            .verified_receipt_digest
+            .as_deref()
+            .ok_or(HostError::MissingHostReceipt)?;
+        let subject = SubjectRevision::checked(stable_sha256(&seed.raw_user_message))
+            .map_err(|_| HostError::ReceiptRejected)?;
+        let scope = ReceiptScope::checked(format!(
+            "authority/{}/{}",
+            host_action_name(event.action),
+            event.scope
+        ))
+        .map_err(|_| HostError::ReceiptRejected)?;
+        let payload = authority_event_payload_digest(&event);
+        let wire = self
+            .issuer
+            .issue(
+                ReceiptClass::Authority,
+                subject.clone(),
+                scope.clone(),
+                payload.clone(),
+                now_epoch,
+                Some(expires_at_epoch),
+                Some(seed_receipt_digest.to_string()),
+            )
+            .map_err(|_| HostError::ReceiptRejected)?;
+        let verified = self
+            .verifier
+            .verify(
+                wire,
+                &ReceiptPolicy::exact(ReceiptClass::Authority, subject, scope, payload, now_epoch)
+                    .with_parent(seed_receipt_digest),
+                replay,
+            )
+            .map_err(map_receipt_error)?;
+        VerifiedAuthorityEvent::checked(event, verified).map_err(|_| HostError::ReceiptRejected)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn issue_execution_permit(
+        &self,
+        seed: &HostSeedEnvelope,
+        action: Action,
+        polarity: DeonticPolarity,
+        span: SourceSpan,
+        scope: String,
+        authority_revision: AuthorityRevision,
+        now_epoch: u64,
+        expires_at_epoch: u64,
+        revocation_revision: u64,
+        replay: &mut ReplayGuard,
+    ) -> Result<ExecutionPermit, HostError> {
+        let event = AuthorityEvent {
+            action,
+            source: AuthoritySourceKind::VerifiedHostUserSpan,
+            polarity,
+            span,
+            scope,
+        };
+        let verified =
+            self.attest_authority_event(seed, event, replay, now_epoch, expires_at_epoch)?;
+        ExecutionPermit::from_verified_user_event(
+            verified,
+            &seed.raw_user_message,
+            authority_revision,
+            now_epoch,
+            expires_at_epoch,
+            revocation_revision,
+        )
+        .map_err(|_| HostError::AuthorityPermitRejected)
+    }
+
+    pub fn validate_execution_permit(
+        &self,
+        seed: &HostSeedEnvelope,
+        request: &ExecutionPermitValidationRequest<'_>,
+    ) -> PermitValidation {
+        if !seed.may_source_grants()
+            || seed.verified_host_key_fingerprint.as_deref()
+                != Some(self.verifier.key_fingerprint())
+        {
+            return PermitValidation::Rejected(lc631_core::PermitRejection::UntrustedCallerOrigin);
+        }
+        let Ok(principal) = seed.principal_binding() else {
+            return PermitValidation::Rejected(
+                lc631_core::PermitRejection::PrincipalBindingInvalid,
+            );
+        };
+        request.permit.validate(&ExecutionPermitContext {
+            principal: &principal,
+            action: request.action,
+            scope: request.scope,
+            source_revision: request.source_revision,
+            authority_revision: request.authority_revision,
+            now_epoch: request.now_epoch,
+            revocation_revision: request.revocation_revision,
+            revoked_permit_digests: request.revoked_permit_digests,
+            caller_origin: CallerOrigin::HostVerifiedUser,
+            trusted_host_fingerprint: self.verifier.key_fingerprint(),
+        })
+    }
+}
+
+fn authority_surface_matches(action: Action, polarity: DeonticPolarity, surface: &str) -> bool {
+    let lower = surface.to_lowercase();
+    let verbs = authority_action_verbs(action);
+    let negative = [
+        "do not",
+        "must not",
+        "should not",
+        "never",
+        "don't",
+        "禁止",
+        "しないで",
+        "してはいけない",
+    ]
+    .iter()
+    .any(|marker| lower.contains(marker));
+    let conditional = [
+        "if ",
+        "only if",
+        "unless ",
+        "until ",
+        "場合",
+        "ない限り",
+        "まで",
+        "ただし",
+    ]
+    .iter()
+    .any(|marker| lower.contains(marker));
+    if conditional {
+        return false;
+    }
+    let words = lower
+        .split_whitespace()
+        .map(|word| {
+            word.trim_matches(|character: char| {
+                !character.is_ascii_alphanumeric() && character != '_'
+            })
+        })
+        .filter(|word| !word.is_empty())
+        .collect::<Vec<_>>();
+    match polarity {
+        DeonticPolarity::Deny => {
+            let explicit_english_deny = [
+                ("do", "not"),
+                ("must", "not"),
+                ("should", "not"),
+                ("don't", ""),
+                ("never", ""),
+            ]
+            .iter()
+            .any(|(first, second)| {
+                words.first() == Some(first)
+                    && (second.is_empty() || words.get(1) == Some(second))
+                    && words
+                        .get(if second.is_empty() { 1 } else { 2 })
+                        .is_some_and(|verb| verbs.contains(verb))
+            });
+            explicit_english_deny || japanese_authority_surface(action, polarity, surface)
+        }
+        DeonticPolarity::Grant => {
+            if negative || words.is_empty() {
+                return false;
+            }
+            let first_action = verbs.contains(&words[0]);
+            let prefixed_action = matches!(words.first(), Some(&"please" | &"must" | &"should"))
+                && words.get(1).is_some_and(|word| verbs.contains(word));
+            first_action || prefixed_action || japanese_authority_surface(action, polarity, surface)
+        }
+        _ => false,
+    }
+}
+
+fn authority_action_verbs(action: Action) -> &'static [&'static str] {
+    match action {
+        Action::Edit => &["edit", "modify", "change", "update"],
+        Action::Test => &["test", "tests", "verify", "check"],
+        Action::Commit => &["commit"],
+        Action::Push => &["push"],
+        Action::Merge => &["merge"],
+        Action::Restart => &["restart", "reboot"],
+        Action::PluginReinstall => &["reinstall"],
+        Action::Delete => &["delete", "remove", "erase"],
+        Action::NetworkAcquireMedia => &["download", "fetch"],
+    }
+}
+
+fn japanese_authority_surface(action: Action, polarity: DeonticPolarity, surface: &str) -> bool {
+    let action_terms: &[&str] = match action {
+        Action::Edit => &["編集", "変更", "修正"],
+        Action::Test => &["テスト", "検証", "確認"],
+        Action::Commit => &["コミット"],
+        Action::Push => &["プッシュ"],
+        Action::Merge => &["マージ"],
+        Action::Restart => &["再起動"],
+        Action::PluginReinstall => &["再インストール"],
+        Action::Delete => &["削除", "消去"],
+        Action::NetworkAcquireMedia => &["取得", "ダウンロード"],
+    };
+    match polarity {
+        DeonticPolarity::Grant => ["してください", "して下さい", "すること"]
+            .iter()
+            .any(|suffix| {
+                action_terms
+                    .iter()
+                    .any(|term| surface.ends_with(&format!("{term}{suffix}")))
+            }),
+        DeonticPolarity::Deny => ["しないでください", "してはいけない", "しないこと", "禁止"]
+            .iter()
+            .any(|suffix| {
+                action_terms
+                    .iter()
+                    .any(|term| surface.ends_with(&format!("{term}{suffix}")))
+            }),
+        _ => false,
+    }
+}
+
+fn host_action_name(action: Action) -> &'static str {
+    match action {
+        Action::Edit => "edit",
+        Action::Test => "test",
+        Action::Commit => "commit",
+        Action::Push => "push",
+        Action::Merge => "merge",
+        Action::Restart => "restart",
+        Action::PluginReinstall => "plugin_reinstall",
+        Action::Delete => "delete",
+        Action::NetworkAcquireMedia => "network_acquire_media",
+    }
+}
+
+fn user_span_is_plain_prose(source: &str, span: SourceSpan) -> bool {
+    if span.start > span.end
+        || span.end > source.len()
+        || !source.is_char_boundary(span.start)
+        || !source.is_char_boundary(span.end)
+    {
+        return false;
+    }
+    let mut in_fence: Option<char> = None;
+    let mut offset = 0usize;
+    for line in source.split_inclusive('\n') {
+        let line_span = offset..offset + line.len();
+        let trimmed = line.trim_start();
+        let fence = trimmed.starts_with("```") || trimmed.starts_with("~~~");
+        if fence {
+            let marker = trimmed.chars().next();
+            if in_fence.is_none() {
+                in_fence = marker;
+            } else if marker == in_fence {
+                in_fence = None;
+            }
+        }
+        if line_span.start < span.end
+            && span.start < line_span.end
+            && (in_fence.is_some() || trimmed.starts_with('>'))
+        {
+            return false;
+        }
+        offset = line_span.end;
+    }
+    let excerpt = &source[span.start..span.end];
+    if excerpt.contains('<') && excerpt.contains('>') {
+        return false;
+    }
+    !authority_quote_ranges(source)
+        .iter()
+        .any(|quoted| span.start < quoted.end && quoted.start < span.end)
+}
+
+fn authority_quote_ranges(source: &str) -> Vec<Range<usize>> {
+    let mut ranges = Vec::new();
+    let mut stack = Vec::<(char, char, usize)>::new();
+    for (offset, character) in source.char_indices() {
+        let opener = match character {
+            '"' | '`' => Some((character, character)),
+            '“' => Some(('“', '”')),
+            '「' => Some(('「', '」')),
+            '『' => Some(('『', '』')),
+            _ => None,
+        };
+        if let Some((open, close)) = opener {
+            if open == close
+                && stack
+                    .last()
+                    .is_some_and(|(_, expected, _)| *expected == close)
+            {
+                if let Some((_, _, start)) = stack.pop() {
+                    ranges.push(start..offset + character.len_utf8());
+                }
+            } else {
+                stack.push((open, close, offset));
+            }
+        } else if stack
+            .last()
+            .is_some_and(|(_, expected, _)| *expected == character)
+        {
+            if let Some((_, _, start)) = stack.pop() {
+                ranges.push(start..offset + character.len_utf8());
+            }
+        }
+    }
+    for (_, _, start) in stack {
+        ranges.push(start..source.len());
+    }
+    ranges
 }
 
 fn read_key(path: &Path) -> Result<[u8; 32], HostError> {
@@ -779,8 +1586,15 @@ impl Drop for ReplayLock {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub enum HostError {
+    AuthorityHostMismatch,
+    AuthorityPermitRejected,
+    AuthorityScopeMismatch,
+    AuthoritySourceIneligible,
+    AuthoritySpanInvalid,
     ArtifactTurnMismatch,
     CandidateDigestMismatch,
+    InvalidHostOutputStage,
+    HostOutputStageConflict,
     HostSeedUnbound,
     InvalidUserSpan,
     MissingHostReceipt,

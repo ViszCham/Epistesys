@@ -1,15 +1,15 @@
 {
   "name": "epistesys",
-  "version": "6.3.2-alpha.1",
-  "description": "Epistesys (エピステシス) 6.3.2-alpha.1: a private clone of the v6.3.1 implementation with authenticated receipts, ProjectionDefectGraph v3, 2,048-evaluation GPU decision parity, bounded local-media candidates, and fail-closed release gates.",
+  "version": "6.3.2-alpha.2",
+  "description": "Epistesys (エピステシス) 6.3.2-alpha.2: experimental source-only AI control with inherited v6.3.1 surfaces, controlled JA/EN DeepGrammar, per-requirement IR/TL/evidence, bounded Cargo validation, actual repair and journal-backed fresh resume; research and real-host evidence remain pending.",
   "author": {
     "name": "Labyrinth-Codex authors"
   },
   "skills": "./skills/",
   "interface": {
-    "displayName": "Epistesys 6.3.2-alpha.1",
-    "shortDescription": "Run the private Epistesys clone of the v6.3.1 implementation.",
-    "longDescription": "An independent private clone that preserves the v6.3.1 implementation surface: principal/subject/scope-bound receipt verification, ProjectionDefectGraph v3 witnesses, shared natural/program syntax, revisioned discrete-continuous distillation, exact 256x8 world-evaluation materialization, eight-lane bounded-readback GPU decision parity, authority-attested local-media candidates, and authenticated durable-replay source paths.",
+    "displayName": "Epistesys 6.3.2-alpha.2",
+    "shortDescription": "Inspect bounded Epistesys control and DGCL source paths.",
+    "longDescription": "An experimental source-only control architecture derived from v6.3.1. Preserves authenticated receipts, ProjectionDefectGraph v3, 256x8 world materialization, GPU parity surfaces, bounded media candidates, and durable-replay source paths. Adds controlled JA/EN grammar, same-artifact IR/TL/completion, separate Cargo observations, externally authorized file repair, signed checkpoint heads and fresh resume, structural distillation and explicit consumer views. Independent semantic evaluation, general performance, real host pickup and host-wide enforcement are not established.",
     "developerName": "Epistesys authors",
     "category": "Developer Tools",
     "capabilities": [
@@ -17,7 +17,7 @@
       "Read"
     ],
     "defaultPrompt": [
-      "Audit this request through the Epistesys 6.3.2-alpha.1 clone.",
+      "Audit this request through the Epistesys 6.3.2-alpha.2 clone.",
       "Inspect inherited v6.3.1 behavior without changing files."
     ]
   }
