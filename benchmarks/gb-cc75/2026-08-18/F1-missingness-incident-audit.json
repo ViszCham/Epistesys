@@ -1,0 +1,412 @@
+{
+  "schema_version": "gb-cc75-missingness-incident-audit.v1",
+  "input_integrity_checkpoint_sha256": "258cb2269c518efa138f96cd5f31c0aaee0041c1656b7a90f6cbb46a352ecaea",
+  "technical_unscored_count": 10,
+  "technical_unscored": [
+    {
+      "ordinal": 197,
+      "packet_id": "pkt-739c1e4aefdb1172e0ad10a9",
+      "qid": "CIF-039",
+      "bindings": [
+        {
+          "route": "labyrinth",
+          "epoch": 1,
+          "raw_qid": "CIF-039-E1"
+        }
+      ],
+      "attempts": [
+        {
+          "attempt": 1,
+          "exit_code": 1073807364,
+          "timed_out": false,
+          "error": "judge error: judge result schema, packet ID, or verdict count mismatch",
+          "events_sha256": "bd92b57cbf4e79fd45518428d5e0dab9d109e953d5426c9d166869b3af513837",
+          "stderr_sha256": "a1d8c3d0497610eeb9e621b6737b76f3a68e4d9b972ae06ba46bf308b34fab3d"
+        },
+        {
+          "attempt": 2,
+          "exit_code": -1073741205,
+          "timed_out": false,
+          "error": "Codex produced no agent message",
+          "events_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ],
+      "score_disposition": "missing_not_zero"
+    },
+    {
+      "ordinal": 198,
+      "packet_id": "pkt-debbefd052b6bb0c18eb792f",
+      "qid": "CIF-039",
+      "bindings": [
+        {
+          "route": "direct",
+          "epoch": 3,
+          "raw_qid": "CIF-039-E3"
+        }
+      ],
+      "attempts": [
+        {
+          "attempt": 1,
+          "exit_code": -1073741205,
+          "timed_out": false,
+          "error": "Codex produced no agent message",
+          "events_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "attempt": 2,
+          "exit_code": -1073741205,
+          "timed_out": false,
+          "error": "Codex produced no agent message",
+          "events_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ],
+      "score_disposition": "missing_not_zero"
+    },
+    {
+      "ordinal": 199,
+      "packet_id": "pkt-4db718510e42672986114538",
+      "qid": "CIF-039",
+      "bindings": [
+        {
+          "route": "direct",
+          "epoch": 1,
+          "raw_qid": "CIF-039-E1"
+        }
+      ],
+      "attempts": [
+        {
+          "attempt": 1,
+          "exit_code": -1073741205,
+          "timed_out": false,
+          "error": "Codex produced no agent message",
+          "events_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "attempt": 2,
+          "exit_code": -1073741205,
+          "timed_out": false,
+          "error": "Codex produced no agent message",
+          "events_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ],
+      "score_disposition": "missing_not_zero"
+    },
+    {
+      "ordinal": 200,
+      "packet_id": "pkt-1675f71a5b07017c19a1fcd7",
+      "qid": "CIF-039",
+      "bindings": [
+        {
+          "route": "labyrinth",
+          "epoch": 2,
+          "raw_qid": "CIF-039-E2"
+        }
+      ],
+      "attempts": [
+        {
+          "attempt": 1,
+          "exit_code": -1073741205,
+          "timed_out": false,
+          "error": "Codex produced no agent message",
+          "events_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "attempt": 2,
+          "exit_code": -1073741205,
+          "timed_out": false,
+          "error": "Codex produced no agent message",
+          "events_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ],
+      "score_disposition": "missing_not_zero"
+    },
+    {
+      "ordinal": 201,
+      "packet_id": "pkt-0cb089fb83af0a2dc0a12296",
+      "qid": "CIF-039",
+      "bindings": [
+        {
+          "route": "labyrinth",
+          "epoch": 3,
+          "raw_qid": "CIF-039-E3"
+        }
+      ],
+      "attempts": [
+        {
+          "attempt": 1,
+          "exit_code": -1073741205,
+          "timed_out": false,
+          "error": "Codex produced no agent message",
+          "events_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "attempt": 2,
+          "exit_code": -1073741205,
+          "timed_out": false,
+          "error": "Codex produced no agent message",
+          "events_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ],
+      "score_disposition": "missing_not_zero"
+    },
+    {
+      "ordinal": 202,
+      "packet_id": "pkt-6e17d3b5b2fbda16255f315e",
+      "qid": "CIF-040",
+      "bindings": [
+        {
+          "route": "direct",
+          "epoch": 3,
+          "raw_qid": "CIF-040-E3"
+        }
+      ],
+      "attempts": [
+        {
+          "attempt": 1,
+          "exit_code": -1073741205,
+          "timed_out": false,
+          "error": "Codex produced no agent message",
+          "events_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "attempt": 2,
+          "exit_code": -1073741205,
+          "timed_out": false,
+          "error": "Codex produced no agent message",
+          "events_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ],
+      "score_disposition": "missing_not_zero"
+    },
+    {
+      "ordinal": 203,
+      "packet_id": "pkt-a15bd800c54b40579c2704e8",
+      "qid": "CIF-040",
+      "bindings": [
+        {
+          "route": "direct",
+          "epoch": 2,
+          "raw_qid": "CIF-040-E2"
+        }
+      ],
+      "attempts": [
+        {
+          "attempt": 1,
+          "exit_code": -1073741205,
+          "timed_out": false,
+          "error": "Codex produced no agent message",
+          "events_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "attempt": 2,
+          "exit_code": -1073741205,
+          "timed_out": false,
+          "error": "Codex produced no agent message",
+          "events_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ],
+      "score_disposition": "missing_not_zero"
+    },
+    {
+      "ordinal": 204,
+      "packet_id": "pkt-e06952d50238cda00bc9a36d",
+      "qid": "CIF-040",
+      "bindings": [
+        {
+          "route": "labyrinth",
+          "epoch": 3,
+          "raw_qid": "CIF-040-E3"
+        }
+      ],
+      "attempts": [
+        {
+          "attempt": 1,
+          "exit_code": -1073741205,
+          "timed_out": false,
+          "error": "Codex produced no agent message",
+          "events_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "attempt": 2,
+          "exit_code": -1073741205,
+          "timed_out": false,
+          "error": "Codex produced no agent message",
+          "events_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ],
+      "score_disposition": "missing_not_zero"
+    },
+    {
+      "ordinal": 205,
+      "packet_id": "pkt-a80838e2624f1926b46056f3",
+      "qid": "CIF-040",
+      "bindings": [
+        {
+          "route": "labyrinth",
+          "epoch": 2,
+          "raw_qid": "CIF-040-E2"
+        }
+      ],
+      "attempts": [
+        {
+          "attempt": 1,
+          "exit_code": -1073741205,
+          "timed_out": false,
+          "error": "Codex produced no agent message",
+          "events_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "attempt": 2,
+          "exit_code": -1073741205,
+          "timed_out": false,
+          "error": "Codex produced no agent message",
+          "events_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ],
+      "score_disposition": "missing_not_zero"
+    },
+    {
+      "ordinal": 206,
+      "packet_id": "pkt-47956d206dbb0bd49849d50d",
+      "qid": "CIF-040",
+      "bindings": [
+        {
+          "route": "labyrinth",
+          "epoch": 1,
+          "raw_qid": "CIF-040-E1"
+        }
+      ],
+      "attempts": [
+        {
+          "attempt": 1,
+          "exit_code": -1073741205,
+          "timed_out": false,
+          "error": "Codex produced no agent message",
+          "events_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "attempt": 2,
+          "exit_code": -1073741205,
+          "timed_out": false,
+          "error": "Codex produced no agent message",
+          "events_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ],
+      "score_disposition": "missing_not_zero"
+    }
+  ],
+  "eligible_pair_count": 171,
+  "successful_pair_count": 167,
+  "lost_pair_count": 4,
+  "lost_pairs": [
+    {
+      "qid": "CIF-039",
+      "epoch": 1,
+      "routes": [
+        {
+          "route": "direct",
+          "packet_id": "pkt-4db718510e42672986114538",
+          "scored": false
+        },
+        {
+          "route": "labyrinth",
+          "packet_id": "pkt-739c1e4aefdb1172e0ad10a9",
+          "scored": false
+        }
+      ]
+    },
+    {
+      "qid": "CIF-039",
+      "epoch": 3,
+      "routes": [
+        {
+          "route": "direct",
+          "packet_id": "pkt-debbefd052b6bb0c18eb792f",
+          "scored": false
+        },
+        {
+          "route": "labyrinth",
+          "packet_id": "pkt-0cb089fb83af0a2dc0a12296",
+          "scored": false
+        }
+      ]
+    },
+    {
+      "qid": "CIF-040",
+      "epoch": 2,
+      "routes": [
+        {
+          "route": "direct",
+          "packet_id": "pkt-a15bd800c54b40579c2704e8",
+          "scored": false
+        },
+        {
+          "route": "labyrinth",
+          "packet_id": "pkt-a80838e2624f1926b46056f3",
+          "scored": false
+        }
+      ]
+    },
+    {
+      "qid": "CIF-040",
+      "epoch": 3,
+      "routes": [
+        {
+          "route": "direct",
+          "packet_id": "pkt-6e17d3b5b2fbda16255f315e",
+          "scored": false
+        },
+        {
+          "route": "labyrinth",
+          "packet_id": "pkt-e06952d50238cda00bc9a36d",
+          "scored": false
+        }
+      ]
+    }
+  ],
+  "qids_with_eligible_pairs": 67,
+  "qids_complete_for_primary": 65,
+  "qids_lost_from_primary": [
+    "CIF-039",
+    "CIF-040"
+  ],
+  "incident": {
+    "kind": "contiguous_judge_execution_failure_burst",
+    "ordinal_start": 197.0,
+    "ordinal_end": 206.0,
+    "consecutive": true,
+    "affected_qids": [
+      "CIF-039",
+      "CIF-040"
+    ],
+    "causal_attribution": "not_established",
+    "primary_exclusion": "Only units lacking a valid score are missing; no incident-based deletion of valid scores is applied."
+  },
+  "recovery_policy": {
+    "retry_executed": false,
+    "missing_scored_as_zero": false,
+    "recovery_lane_required": true,
+    "recovery_lane_primary_merge_forbidden": true,
+    "rule": "Any later retry must be separately identified, digest-bound to this audit, and reported only as a recovery-lane sensitivity analysis."
+  },
+  "claim_boundary": "The ordinal burst and error strings establish clustered technical failure in this judge execution, not its root cause. Missing units are not scored zero and are not silently repaired."
+}

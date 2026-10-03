@@ -1,0 +1,83 @@
+{
+  "schema_version": "epistesys-gb-cc75-public-artifact-manifest.v1",
+  "study_date": "2026-08-18",
+  "import_date": "2026-10-03",
+  "source_identity": "Labyrinth-Codex historical published aggregate selection",
+  "source_relative_directory": "benchmarks/gb-cc75/observations/2026-08-18-codex-labyrinth-ab-v1-r2",
+  "normalization": "line endings normalized; JSON and CSV values retained",
+  "scope": "12 selected aggregate/audit artifacts; excludes raw answers, queues, credentials, host paths, original full freeze, README and this manifest",
+  "files": [
+    {
+      "path": "F1-missingness-incident-audit.json",
+      "bytes": 13100,
+      "sha256": "ef0dcca4ad4015d6a1ed090c8993b5332dabc73b55be7960ec98b807b5cb61d1",
+      "source_sha256": "ef0dcca4ad4015d6a1ed090c8993b5332dabc73b55be7960ec98b807b5cb61d1"
+    },
+    {
+      "path": "F2-audit-selection-r3.json",
+      "bytes": 3094,
+      "sha256": "d041df79554b1d395e52748caa4e91a92440264667ad97b9c16f119b1b10f425",
+      "source_sha256": "d041df79554b1d395e52748caa4e91a92440264667ad97b9c16f119b1b10f425"
+    },
+    {
+      "path": "F2-scoring-accuracy-audit-r2.json",
+      "bytes": 1329,
+      "sha256": "12c4f3464200b0b9a0061a027266bc4e8cada39ce266ca38c4ab5ab2e3257cbd",
+      "source_sha256": "12c4f3464200b0b9a0061a027266bc4e8cada39ce266ca38c4ab5ab2e3257cbd"
+    },
+    {
+      "path": "F3-paired-secondary.csv",
+      "bytes": 10493,
+      "sha256": "b681f2f588c298d0f5891238aa192240f5993c4bd1996c3ba3860e84b0157539",
+      "source_sha256": "b681f2f588c298d0f5891238aa192240f5993c4bd1996c3ba3860e84b0157539"
+    },
+    {
+      "path": "F3-qid-primary.csv",
+      "bytes": 4129,
+      "sha256": "13ad004df3498329b00e00b5a5c3aedce48498484e26013b43f1b4ff3f213e27",
+      "source_sha256": "13ad004df3498329b00e00b5a5c3aedce48498484e26013b43f1b4ff3f213e27"
+    },
+    {
+      "path": "F3-statistics-report.json",
+      "bytes": 3402,
+      "sha256": "a63370b57455d7c7b3bd7d4d1476f83b5b2d577b9ec41362fa920538fb3b769f",
+      "source_sha256": "a63370b57455d7c7b3bd7d4d1476f83b5b2d577b9ec41362fa920538fb3b769f"
+    },
+    {
+      "path": "F4-adjudication.csv",
+      "bytes": 14015,
+      "sha256": "850d5dbd4e1c37adb05636ccd35ad43da0d55425aa5819926cc0db0d9f63b179",
+      "source_sha256": "850d5dbd4e1c37adb05636ccd35ad43da0d55425aa5819926cc0db0d9f63b179"
+    },
+    {
+      "path": "F4-direct-collapse.csv",
+      "bytes": 1621,
+      "sha256": "f9b8c45a5e1323bffd8b717faabe09ee5959bb70689a1f331289ba71feb697a2",
+      "source_sha256": "f9b8c45a5e1323bffd8b717faabe09ee5959bb70689a1f331289ba71feb697a2"
+    },
+    {
+      "path": "F4-incident.csv",
+      "bytes": 1205,
+      "sha256": "3a62d071e43c34dc217602b619b9bfbaed5d165d6b05f38638dde346c042f213",
+      "source_sha256": "3a62d071e43c34dc217602b619b9bfbaed5d165d6b05f38638dde346c042f213"
+    },
+    {
+      "path": "F4-missingness-bounds.csv",
+      "bytes": 330,
+      "sha256": "c30f0e12694ac6c8ce989de3d208b5c8676a9a5eab54d4ad57e1d92defc83f7f",
+      "source_sha256": "c30f0e12694ac6c8ce989de3d208b5c8676a9a5eab54d4ad57e1d92defc83f7f"
+    },
+    {
+      "path": "F4-primary-source-reference.json",
+      "bytes": 1903,
+      "sha256": "48e676a4e5956c7655e0ccc138f795e9d7b1a12ef0b963538a5fbdf5cbf3364a",
+      "source_sha256": "48e676a4e5956c7655e0ccc138f795e9d7b1a12ef0b963538a5fbdf5cbf3364a"
+    },
+    {
+      "path": "GB_CC75_FINAL_SUMMARY.json",
+      "bytes": 6383,
+      "sha256": "cea936c2fe98886e0cdef433b9d283be64578cec366c27833f4c88994a9c1713",
+      "source_sha256": "cea936c2fe98886e0cdef433b9d283be64578cec366c27833f4c88994a9c1713"
+    }
+  ]
+}

@@ -1,2 +1,5 @@
 # Keep the pinned NLP worker bytes stable on Windows checkouts.
 *.py text eol=lf
+
+# Keep the public research bundle byte hashes stable across checkouts.
+/benchmarks/gb-cc75/2026-08-18/* text eol=lf

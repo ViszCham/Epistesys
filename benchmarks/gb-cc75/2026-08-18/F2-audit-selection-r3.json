@@ -1,0 +1,96 @@
+{
+  "schema_version": "gb-cc75-internal-audit-selection.v1",
+  "f1_checkpoint_sha256": "7f0e9f61979610424fa273779ea65e78971b86d2577152e026c6981f006517f9",
+  "selection_seed": "GB-CC75-INTERNAL-AUDIT-v1",
+  "timing_status": "post_result_selection_frozen_before_answer_content_reinspection",
+  "independent_preregistration": false,
+  "supersedes": [
+    {
+      "path": "public/F2-audit-selection.json",
+      "reason": "r1 used invalid string-property sorting for extreme-QID selection."
+    },
+    {
+      "path": "public/F2-audit-selection-r2.json",
+      "reason": "r2 corrected selection but its private queue order was process-dependent."
+    }
+  ],
+  "selection": [
+    {
+      "category": "outcome_stratum:labyrinth_win",
+      "qid": "CIF-056",
+      "epoch": 3,
+      "direct_fraction": 0.06666666666666667,
+      "labyrinth_fraction": 1.0,
+      "delta": 0.9333333333333333,
+      "criterion_limit_per_route": 4
+    },
+    {
+      "category": "outcome_stratum:tie",
+      "qid": "CIF-001",
+      "epoch": 2,
+      "direct_fraction": 1.0,
+      "labyrinth_fraction": 1.0,
+      "delta": 0.0,
+      "criterion_limit_per_route": 4
+    },
+    {
+      "category": "outcome_stratum:labyrinth_loss",
+      "qid": "CIF-014",
+      "epoch": 1,
+      "direct_fraction": 0.9166666666666666,
+      "labyrinth_fraction": 0.8333333333333334,
+      "delta": -0.08333333333333326,
+      "criterion_limit_per_route": 4
+    },
+    {
+      "category": "extreme_positive_qid",
+      "qid": "CIF-072",
+      "epoch": 2,
+      "direct_fraction": 0.0,
+      "labyrinth_fraction": 1.0,
+      "delta": 1.0,
+      "criterion_limit_per_route": 4
+    },
+    {
+      "category": "extreme_negative_qid",
+      "qid": "CIF-063",
+      "epoch": 3,
+      "direct_fraction": 1.0,
+      "labyrinth_fraction": 0.8235294117647058,
+      "delta": -0.17647058823529416,
+      "criterion_limit_per_route": 4
+    },
+    {
+      "category": "structural_collapse_pair",
+      "qid": "CIF-072",
+      "epoch": 2,
+      "direct_fraction": 0.0,
+      "labyrinth_fraction": 1.0,
+      "delta": 1.0,
+      "criterion_limit_per_route": 4
+    },
+    {
+      "category": "structural_collapse_pair",
+      "qid": "CIF-028",
+      "epoch": 1,
+      "direct_fraction": 0.0,
+      "labyrinth_fraction": 1.0,
+      "delta": 1.0,
+      "criterion_limit_per_route": 4
+    }
+  ],
+  "forced_known_flags": [
+    {
+      "qid": "CIF-001",
+      "epoch": 2,
+      "criterion_token": "criterion-08",
+      "routes": [
+        "direct",
+        "labyrinth"
+      ]
+    }
+  ],
+  "unique_criterion_judgments": 56,
+  "selection_method": "One deterministic QID from each automated outcome stratum; the most positive and most negative complete-case QIDs; two largest structural-collapse pairs; four criteria per selected route-pair with route-disagreement criteria prioritized; plus the known CIF-001-E2 criterion-08 flag.",
+  "claim_boundary": "This is a post-result internal accuracy audit by the same model family, frozen before content reinspection. It is not independent human adjudication, official scoring, or a preregistered validation sample."
+}
