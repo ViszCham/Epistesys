@@ -1,0 +1,22 @@
+{
+  "schema_version": "gb-cc75-scoring-accuracy-audit.v1",
+  "selection_sha256": "b4af2c1ceb93678b49f1dcb2286f426429881c031c38c14aa242ede5acf89cf1",
+  "decisions_sha256": "47d58c8b9034d2512a7896b7ce186935b212e8b7de3b936f8b44b511aacd3e52",
+  "selected_criterion_judgments": 56,
+  "selected_packets": 12,
+  "selected_qids": 6,
+  "automated_audit_agreements": 56,
+  "automated_audit_disagreements": 0,
+  "observed_agreement_fraction": 1.0,
+  "wording_ambiguities": 1,
+  "cif_001_e2_c08_conclusion": "Automated pass retained; the original false-positive suspicion is not confirmed under the literal criterion wording.",
+  "automated_original_rewritten": false,
+  "adjudicated_score_changes": 0,
+  "inferential_limitations": [
+    "The sample is post-result, deterministic, and enriched for route disagreements and extremes; it is not a simple random sample.",
+    "The secondary reviewer is the same model family used by the automated Judge, so correlated error is possible.",
+    "Zero observed disagreements does not prove zero error outside the inspected sample.",
+    "No independent human adjudication or official ComplexConstraints scorer was run."
+  ],
+  "claim_boundary": "This audit supports internal consistency on 56 selected criterion judgments only. It is not a validated accuracy estimate for the full Judge ledger."
+}

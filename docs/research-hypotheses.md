@@ -12,7 +12,8 @@ Epistesysは、AIが定義された信頼性を維持して扱える指示複雑
 | 設計目標 | 制約・権限・状態・証拠の明示保持、defectの可観測性、commit前の再検証を実装する |
 | 設計仮説 | 特定の機構が期待する効果を生むという、機構と結果の対応についての予想 |
 | 研究仮説 | 同じモデル・課題・総予算で、誤ったcommit・制約脱落等が減り、目標信頼度を満たす範囲が広がるという検証対象 |
-| 現在の観測 | CLI、schema、fixture、test等の実行・検査。研究効果の独立実証とは別 |
+| 現alphaの観測 | CLI、schema、fixture、test等の実行・検査。研究効果の独立実証とは別 |
+| 前身の経験的観測 | GB-CC75の歴史的な探索的集計。現alphaの改善や機構の因果的実証へ移転しない |
 
 ### 五つの研究課題
 
@@ -25,6 +26,12 @@ Epistesysは、AIが定義された信頼性を維持して扱える指示複雑
 | Reliable complexity frontier | 上記の制御を組み合わせて目標信頼度を満たす範囲を広げられるか | 独立に定義した難度・依存深度・状態量・session長と総予算ごとの信頼性 |
 
 長期整合性は記憶容量だけの問題ではなく、指示の有効範囲、状態更新、未解決事項、証拠の由来を再検証する問題として扱います。指示の長さと条件数を同じ難度とみなさず、別々に操作します。
+
+### 前身の観測が支持する範囲
+
+[GB-CC75](research/gb-cc75-study.md)はconstraint preservationに関係する探索的な研究背景です。主要65 QIDで平均74.38%→94.10%（+19.71ポイント）を観測しましたが、167ペアの全基準達成は39.52%→48.50%で、13 QIDでは負の差でした。独自Judge、取得／採点選択、未確定予算、版の移転を含む限界を保持します。hallucination、長期保持、authority安全性、frontier拡張は直接測定していません。
+
+[敵対監査](research/gb-cc75-adversarial-audit.md)と[前向き評価案](research/epistesys-prospective-evaluation-plan.md)を接続し、設計仮説、前身の経験的結果、Epistesys固有の検証を混同しません。既知の75問を新しいholdoutとして再利用しません。
 
 ### 評価方針と現在の状態
 
@@ -48,7 +55,8 @@ Epistesys is a long-term research project characterizing the instruction complex
 | Design objective | Implement explicit constraint/authority/state/evidence retention, observable defects, and revalidation before commitment |
 | Design hypothesis | A proposed mechanism-to-outcome relationship explaining how a mechanism could produce an expected effect |
 | Research hypothesis | A testable prediction of fewer erroneous commitments or dropped constraints and wider target-reliability coverage under the same model, tasks, and total budget |
-| Current observation | Execution/inspection of CLI, schema, fixture, and test surfaces, separate from independent demonstration of research effects |
+| Current-alpha observation | Execution/inspection of CLI, schema, fixture, and test surfaces, separate from independent demonstration of research effects |
+| Predecessor empirical observation | Historical exploratory GB-CC75 aggregates; not transferable to current-alpha improvement or causal mechanism evidence |
 
 ### Five research questions
 
@@ -61,6 +69,12 @@ Epistesys is a long-term research project characterizing the instruction complex
 | Reliable complexity frontier | Can combined control mechanisms expand coverage at a target reliability? | Reliability by independently defined difficulty, dependency depth, state volume, session length, and total budget |
 
 Long-horizon integrity concerns revalidation of instruction scope, state updates, unresolved items, and evidence provenance as well as memory capacity. Instruction length and condition count are manipulated separately rather than treated as equivalent difficulty.
+
+### What predecessor observations support
+
+[GB-CC75](research/gb-cc75-study.md) provides exploratory background related to constraint preservation. Primary mean increased from 74.38% to 94.10% (+19.71 points) across 65 QIDs, but all-criteria pass across 167 pairs changed from 39.52% to 48.50%, with negative differences on 13 QIDs. Retain limitations from the custom Judge, acquisition/scoring selection, unresolved budgets, and version transport. Hallucination, long retention, authority safety, and frontier expansion were not directly measured.
+
+Connect the [adversarial audit](research/gb-cc75-adversarial-audit.md) and [prospective plan](research/epistesys-prospective-evaluation-plan.md) without conflating design hypotheses, predecessor empirical results, and Epistesys-specific evaluation. Do not reuse the known 75 tasks as a new holdout.
 
 ### Evaluation policy and current status
 

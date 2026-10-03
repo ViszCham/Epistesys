@@ -1,0 +1,11 @@
+ordinal,packet_id,qid,route,epoch,attempt_count,last_error,score_disposition
+197,"pkt-739c1e4aefdb1172e0ad10a9","CIF-039","labyrinth",1,2,"Codex produced no agent message","missing_not_zero"
+198,"pkt-debbefd052b6bb0c18eb792f","CIF-039","direct",3,2,"Codex produced no agent message","missing_not_zero"
+199,"pkt-4db718510e42672986114538","CIF-039","direct",1,2,"Codex produced no agent message","missing_not_zero"
+200,"pkt-1675f71a5b07017c19a1fcd7","CIF-039","labyrinth",2,2,"Codex produced no agent message","missing_not_zero"
+201,"pkt-0cb089fb83af0a2dc0a12296","CIF-039","labyrinth",3,2,"Codex produced no agent message","missing_not_zero"
+202,"pkt-6e17d3b5b2fbda16255f315e","CIF-040","direct",3,2,"Codex produced no agent message","missing_not_zero"
+203,"pkt-a15bd800c54b40579c2704e8","CIF-040","direct",2,2,"Codex produced no agent message","missing_not_zero"
+204,"pkt-e06952d50238cda00bc9a36d","CIF-040","labyrinth",3,2,"Codex produced no agent message","missing_not_zero"
+205,"pkt-a80838e2624f1926b46056f3","CIF-040","labyrinth",2,2,"Codex produced no agent message","missing_not_zero"
+206,"pkt-47956d206dbb0bd49849d50d","CIF-040","labyrinth",1,2,"Codex produced no agent message","missing_not_zero"

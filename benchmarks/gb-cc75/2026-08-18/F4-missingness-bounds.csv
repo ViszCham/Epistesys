@@ -1,0 +1,3 @@
+analysis,planned_units,observed_units,missing_units,lower_delta,upper_delta,assumption
+primary_qid,67,65,2,0.16141159710712574,0.22111308964443918,"Each missing QID-level delta is bounded to [-1, 1]."
+secondary_pair,171,167,4,0.12178067147875588,0.16856429720975002,"Each missing eligible-epoch pair delta is bounded to [-1, 1]."

@@ -34,6 +34,21 @@ Epistesys（エピステシス）は、AIの推論・実行を外部から境界
 
 今後はhallucination、複雑なinstructionの制約保持、long-session retention、risk–coverage、誤ったcommitと過剰な保留、reliability frontierを測定する予定です。入力長、条件数、依存深度、状態保持量、session長、総予算を明示し、独立した評価で研究仮説を検証します。general performance、SOTA、formal proof、hallucination prevention、long-session robustnessは保証しません。
 
+### 前身システムの探索的評価：GB-CC75
+
+前身Labyrinth-Codexには、ComplexConstraints由来の75問を用いた、後ろ向き・探索的な対応付き評価の記録があります。2026-08-18の独自Judge集計における結果を、Epistesysの研究背景として公開します。
+
+| 指標・集計単位 | Direct Grok | Grok＋Labyrinth | 差 |
+| --- | ---: | ---: | ---: |
+| 主要：採用条件を満たす65 QIDの等重み平均ルーブリック適合度 | 74.38% | 94.10% | +19.71ポイント |
+| 記述：採点済み167対応ペアの全基準達成率 | 39.52%（66/167） | 48.50%（81/167） | +8.98ポイント |
+
+主要差の記録されたQID bootstrap 95%区間は+12.20〜+27.83ポイントです。差は丸め前に計算しています。平均適合は完全遵守や正答率ではなく、65 QIDでは32勝・20同点・13敗でした。計画75問から対応適格67問、主要65問へ、計画225ペアから適格171、採点済み167へ絞られています。
+
+**これは前身の限定観測であり、Epistesys alpha.2の改善、公式ComplexConstraintsスコア、独立した人間gold、TLの因果効果、hallucination削減、長期session保持の実証ではありません。** 区間は取得選択やJudge系統誤差を覆いません。Judgeは経路ラベル等の非提示を指定した設計ですが、Labyrinthを含む評価系の独立性は未確立です。
+
+[論文形式の研究本文](docs/research/gb-cc75-study.md)、[敵対的方法論監査](docs/research/gb-cc75-adversarial-audit.md)、[統計仕様](docs/research/gb-cc75-statistical-analysis.md)、[再計算可能な公開集計](benchmarks/gb-cc75/2026-08-18/README.md)を接続しています。Epistesys固有の効果は引き続きbenchmark pendingです。[前向き評価案](docs/research/epistesys-prospective-evaluation-plan.md)は未実行・未登録の案であり、既知のGB-CC75を新しいholdoutとは扱いません。
+
 ### 現在のalpha
 
 Epistesys（エピステシス）`6.3.2-alpha.2`は、Labyrinth-Codex v6.3.1の選択source snapshot由来のbaseline implementationです。当初private cloneとして新規Git履歴で独立して保存され、元の履歴、個人状態、credentials、cache、receipt root、replay ledgerを引き継いでいません。内部の`lc631-*` crate・command・schema IDは、挙動差を抑える互換識別子として当面保持します。
@@ -62,7 +77,7 @@ Epistesys（エピステシス）`6.3.2-alpha.2`は、Labyrinth-Codex v6.3.1の�
 
 v6.3.1から継承した次の実装面を、Epistesysのidentityと独立launcherの下で実行・検査できます。ここでの能力は実装経路の存在と動作を指し、上記の研究目標に対する効果を実証するものではありません。
 
-- Rust workspaceの12 crate、feature-reduced/default build、workspace test、strict clippy、locked release build。
+- 現sourceのRust workspaceは13 crate（継承baselineは12 crate）。feature-reduced/default build、workspace test、strict clippy、locked release build。
 - `lc631-tl-doctor`によるsource roundtrip、obligation、ProjectionDefect、Clarify/Hold境界の出力。
 - `lc631-world-doctor`による256 distinct world、8 projection、2,048 materialized evaluationの厳密なbudget検査。
 - `lc631-promotion-gate`による不足receiptのfail-closed判定、`promotion_allowed=false`と`automatic_promotion=false`の明示。
@@ -103,6 +118,11 @@ Codexで既定として使う設定と、明示的な別line選択の境界は[C
 
 ### 文書入口
 
+- [研究仮説と評価方針](docs/research-hypotheses.md)：研究目標・設計目標・検証対象の分離
+- [GB-CC75研究本文](docs/research/gb-cc75-study.md)：前身の探索的な対応付き評価、結果と限界
+- [GB-CC75方法と由来](docs/research/gb-cc75-methods-and-provenance.md)：設定の証拠段階、欠測、公開scope
+- [GB-CC75公開集計](benchmarks/gb-cc75/2026-08-18/README.md)：CSV／JSONと再計算手順
+- [Epistesys前向き評価案](docs/research/epistesys-prospective-evaluation-plan.md)：未使用holdout・独立採点・同等予算の計画
 - [Clone contract](docs/migration-contract.md)：継承・除外・初回版の境界
 - [Adoption manifest](docs/adoption-manifest.md)：採用119 filesと除外4項目
 - [Clone verification](docs/clone-verification.md)：EPI-05の実行結果
@@ -155,6 +175,21 @@ The current `6.3.2-alpha.2` does not demonstrate Epistesys-specific reasoning im
 
 Planned measurements cover hallucination, constraint preservation under complex instructions, long-session retention, risk–coverage, erroneous commitment and excessive withholding, and the reliability frontier. Input length, condition count, dependency depth, retained state, session length, and total budget will be made explicit, with independent evaluation of the hypotheses. General performance, SOTA, formal proof, hallucination prevention, and long-session robustness are not guaranteed.
 
+### Exploratory evaluation of the predecessor system: GB-CC75
+
+The predecessor Labyrinth-Codex has records of a retrospective exploratory paired evaluation using 75 tasks adapted from ComplexConstraints. Results from the custom Judge aggregation dated 2026-08-18 are published as research background for Epistesys.
+
+| Metric and aggregation unit | Direct Grok | Grok plus Labyrinth | Difference |
+| --- | ---: | ---: | ---: |
+| Primary: equal-QID-weighted mean rubric adherence across 65 eligible primary QIDs | 74.38% | 94.10% | +19.71 points |
+| Descriptive: all-criteria pass across 167 scored pairs | 39.52% (66/167) | 48.50% (81/167) | +8.98 points |
+
+The recorded QID-bootstrap 95% interval for the primary difference is +12.20 to +27.83 points. Differences are calculated before rounding. Mean adherence is neither complete compliance nor task accuracy; the 65-QID comparison had 32 wins, 20 ties, and 13 losses. Selection narrowed 75 planned tasks to 67 paired-eligible and 65 primary tasks, and 225 planned pairs to 171 eligible and 167 scored pairs.
+
+**These are bounded predecessor observations, not evidence of alpha.2 improvement, an official ComplexConstraints score, independent human gold, causal TL effects, hallucination reduction, or long-session retention.** Intervals exclude acquisition selection and systematic Judge error. The Judge design specifies withholding route labels and other identifiers, but independence of the Labyrinth-based evaluator is not established.
+
+Follow the [manuscript-style study](docs/research/gb-cc75-study.md), [adversarial methodological audit](docs/research/gb-cc75-adversarial-audit.md), [statistical specification](docs/research/gb-cc75-statistical-analysis.md), and [recomputable public aggregates](benchmarks/gb-cc75/2026-08-18/README.md). Epistesys-specific effects remain benchmark pending. The [prospective plan](docs/research/epistesys-prospective-evaluation-plan.md) is unexecuted and unregistered; known GB-CC75 tasks are not a new holdout.
+
 ### Current alpha
 
 Epistesys (Japanese: エピステシス) `6.3.2-alpha.2` is a baseline implementation derived from a selected Labyrinth-Codex v6.3.1 source snapshot. It was initially stored independently as a private clone with a new Git history and does not inherit original history, personal state, credentials, caches, receipt roots, or replay ledgers. Internal `lc631-*` crate, command, and schema IDs remain compatibility identifiers for now to limit behavioral drift.
@@ -183,7 +218,7 @@ Epistesys (Japanese: エピステシス) `6.3.2-alpha.2` is a baseline implement
 
 The following implementation surfaces inherited from v6.3.1 can be executed and inspected under the Epistesys identity and independent launcher. Capabilities here refer to the presence and operation of implementation paths; they do not demonstrate effects on the research goals above.
 
-- A 12-crate Rust workspace with feature-reduced/default builds, workspace tests, strict clippy, and a locked release build.
+- The current Rust workspace has 13 crates (12 in the inherited baseline), with feature-reduced/default builds, workspace tests, strict clippy, and a locked release build.
 - `lc631-tl-doctor` output for source roundtrip, obligations, ProjectionDefects, and Clarify/Hold boundaries.
 - `lc631-world-doctor` exact budget checks for 256 distinct worlds, eight projections, and 2,048 materialized evaluations.
 - `lc631-promotion-gate` fail-closed decisions when receipts are missing, explicitly returning `promotion_allowed=false` and `automatic_promotion=false`.
@@ -224,6 +259,11 @@ See [Codex default routing](docs/codex-default-routing.md) for configured-defaul
 
 ### Documentation entry points
 
+- [Research hypotheses and evaluation policy](docs/research-hypotheses.md): separate research goals, design objectives, and testable predictions
+- [GB-CC75 study](docs/research/gb-cc75-study.md): predecessor exploratory paired evaluation, results, and limitations
+- [GB-CC75 methods/provenance](docs/research/gb-cc75-methods-and-provenance.md): evidence levels for settings, missingness, disclosure scope
+- [GB-CC75 public aggregates](benchmarks/gb-cc75/2026-08-18/README.md): CSV/JSON and recomputation steps
+- [Epistesys prospective plan](docs/research/epistesys-prospective-evaluation-plan.md): unused holdouts, independent grading, matched budgets
 - [Clone contract](docs/migration-contract.md): inheritance, exclusions, and initial-version boundaries
 - [Adoption manifest](docs/adoption-manifest.md): 119 adopted files and four exclusions
 - [Clone verification](docs/clone-verification.md): EPI-05 execution results

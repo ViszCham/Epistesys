@@ -1,0 +1,83 @@
+{
+  "schema_version": "gb-cc75-final-statistics-report.v1",
+  "input_sha256": "006fb21c0a861a14975ce5f27e20afb7647d9909366c062b61af5474c4dbb602",
+  "f2_checkpoint_sha256": "7d77026adfb815ae62d7b01ddc8743a8ea548ddfc72a189fc260a2b43220a0b9",
+  "primary_estimand": "Equal-weight mean over 65 QIDs whose every eligible A/B epoch-pair has a valid automated score; within-QID delta is the mean of that QID's eligible epoch-pair normalized criterion-score differences.",
+  "secondary_estimand": "Mean normalized criterion-score difference over 167 successfully scored eligible A/B epoch-pairs; uncertainty resamples or sign-flips whole QID clusters.",
+  "primary": {
+    "unit": "qid",
+    "count": 65,
+    "cluster_count": 65,
+    "direct_mean": 0.7438498997878829,
+    "labyrinth_mean": 0.9409972383444583,
+    "delta": 0.19714733855657576,
+    "delta_percentage_points": 19.714733855657578,
+    "relative_uplift": 0.265036452398252,
+    "wins": 32,
+    "ties": 20,
+    "losses": 13,
+    "bootstrap_95_percent": {
+      "lower": 0.1219820268486995,
+      "upper": 0.27828873902747925,
+      "confidence": 0.95,
+      "method": "fixed_seed_qid_percentile_bootstrap"
+    },
+    "two_sided_sign_flip_p_value": 9.99990000099999e-6
+  },
+  "secondary": {
+    "unit": "eligible_epoch_pair",
+    "count": 167,
+    "cluster_count": 65,
+    "direct_mean": 0.7916833062102477,
+    "labyrinth_mean": 0.9403329758082553,
+    "delta": 0.14864966959800752,
+    "delta_percentage_points": 14.864966959800752,
+    "relative_uplift": 0.18776405720816167,
+    "wins": 55,
+    "ties": 78,
+    "losses": 34,
+    "bootstrap_95_percent": {
+      "lower": 0.08833979681335986,
+      "upper": 0.21626584633114243,
+      "confidence": 0.95,
+      "method": "fixed_seed_qid_cluster_percentile_bootstrap"
+    },
+    "two_sided_sign_flip_p_value": 9.99990000099999e-6
+  },
+  "criterion_weighted_descriptive": {
+    "direct_passed": 2841,
+    "labyrinth_passed": 3311,
+    "criteria_total_per_route": 3521,
+    "direct_rate": 0.8068730474297074,
+    "labyrinth_rate": 0.9403578528827038,
+    "delta": 0.13348480545299635,
+    "delta_percentage_points": 13.348480545299635,
+    "direct_strict_passes": 66,
+    "labyrinth_strict_passes": 81,
+    "pair_count": 167,
+    "direct_strict_rate": 0.39520958083832336,
+    "labyrinth_strict_rate": 0.48502994011976047,
+    "strict_delta_percentage_points": 8.982035928143711
+  },
+  "primary_missingness_bounds": {
+    "planned_units": 67,
+    "observed_units": 65,
+    "missing_units": 2,
+    "lower_delta": 0.16141159710712574,
+    "upper_delta": 0.22111308964443918,
+    "assumption": "Each missing QID-level delta is bounded to [-1, 1]."
+  },
+  "secondary_missingness_bounds": {
+    "planned_units": 171,
+    "observed_units": 167,
+    "missing_units": 4,
+    "lower_delta": 0.12178067147875588,
+    "upper_delta": 0.16856429720975002,
+    "assumption": "Each missing eligible-epoch pair delta is bounded to [-1, 1]."
+  },
+  "bootstrap_seed": 5566811321892736085,
+  "bootstrap_resamples": 100000,
+  "permutation_seed": 4847648875745931313,
+  "permutation_samples": 100000,
+  "claim_boundary": "Primary inference uses equal-weight complete-case QIDs. Secondary point estimates use successful eligible epoch-pairs while uncertainty preserves QID clusters. Bounds address technical scoring missingness only; acquisition ineligibility and correlated Judge error remain outside these intervals."
+}

@@ -1,0 +1,145 @@
+{
+  "schema_version": "gb-cc75-final-result-summary.v1",
+  "status": "FINALIZED_INTERNAL_ADAPTED_A_B_RESULT",
+  "run_id": "20260816T174216284-grok-bench-embedded",
+  "f3_checkpoint_sha256": "2cedfcc18c0010ad60a4d3c42bddf0998bde560029a4a14a24aff35315e9d07a",
+  "relation_to_official": "adapted_from_not_equivalent_to_official_complexconstraints",
+  "source": {
+    "organization": "Surge AI",
+    "dataset": "surgeai/ComplexConstraints",
+    "immutable_revision": "e9625c6f635f42b72cb85a04c2be64746f945126",
+    "immutable_tree_url": "https://huggingface.co/datasets/surgeai/ComplexConstraints/tree/e9625c6f635f42b72cb85a04c2be64746f945126",
+    "readme_url": "https://huggingface.co/datasets/surgeai/ComplexConstraints/blob/e9625c6f635f42b72cb85a04c2be64746f945126/README.md",
+    "readme_sha256": "c647dfc34bf9ba95465a125b8669a8379c9bfe1f140e7b7e43583f9428f07055",
+    "csv_sha256": "3e2e5776af7f21a91e0fb9ac770b10aff525b8db5da114bcad72190f3b3ec413",
+    "license": "CC-BY-4.0",
+    "prompt_count": 75,
+    "criterion_count": 1559
+  },
+  "integrity": {
+    "terminal_packets": 370,
+    "scored_packets": 360,
+    "technically_unscored_packets": 10,
+    "duplicate_terminal_ordinals": 0,
+    "duplicate_terminal_packet_ids": 0,
+    "referenced_evidence_hash_mismatches": 0,
+    "orphan_interrupted_evidence_files": 6,
+    "frozen_input_file_count": 779,
+    "frozen_input_inventory_sha256": "22168c820a474990cca3a2e2a1817a55b938eee8e42962e8b8d82c4630dcaed5"
+  },
+  "missingness_incident": {
+    "eligible_pairs": 171,
+    "successful_pairs": 167,
+    "lost_pairs": 4,
+    "technically_unscored_packets": 10,
+    "affected_qids": [
+      "CIF-039",
+      "CIF-040"
+    ],
+    "ordinal_start": 197,
+    "ordinal_end": 206,
+    "missing_scored_as_zero": false,
+    "recovery_lane_executed": false
+  },
+  "automated_result": {
+    "schema_version": "gb-cc75-final-statistics-report.v1",
+    "input_sha256": "006fb21c0a861a14975ce5f27e20afb7647d9909366c062b61af5474c4dbb602",
+    "f2_checkpoint_sha256": "7d77026adfb815ae62d7b01ddc8743a8ea548ddfc72a189fc260a2b43220a0b9",
+    "primary_estimand": "Equal-weight mean over 65 QIDs whose every eligible A/B epoch-pair has a valid automated score; within-QID delta is the mean of that QID's eligible epoch-pair normalized criterion-score differences.",
+    "secondary_estimand": "Mean normalized criterion-score difference over 167 successfully scored eligible A/B epoch-pairs; uncertainty resamples or sign-flips whole QID clusters.",
+    "primary": {
+      "unit": "qid",
+      "count": 65,
+      "cluster_count": 65,
+      "direct_mean": 0.7438498997878829,
+      "labyrinth_mean": 0.9409972383444583,
+      "delta": 0.19714733855657576,
+      "delta_percentage_points": 19.714733855657578,
+      "relative_uplift": 0.265036452398252,
+      "wins": 32,
+      "ties": 20,
+      "losses": 13,
+      "bootstrap_95_percent": {
+        "lower": 0.1219820268486995,
+        "upper": 0.27828873902747925,
+        "confidence": 0.95,
+        "method": "fixed_seed_qid_percentile_bootstrap"
+      },
+      "two_sided_sign_flip_p_value": 9.99990000099999E-06
+    },
+    "secondary": {
+      "unit": "eligible_epoch_pair",
+      "count": 167,
+      "cluster_count": 65,
+      "direct_mean": 0.7916833062102477,
+      "labyrinth_mean": 0.9403329758082553,
+      "delta": 0.14864966959800752,
+      "delta_percentage_points": 14.864966959800752,
+      "relative_uplift": 0.18776405720816167,
+      "wins": 55,
+      "ties": 78,
+      "losses": 34,
+      "bootstrap_95_percent": {
+        "lower": 0.08833979681335986,
+        "upper": 0.21626584633114243,
+        "confidence": 0.95,
+        "method": "fixed_seed_qid_cluster_percentile_bootstrap"
+      },
+      "two_sided_sign_flip_p_value": 9.99990000099999E-06
+    },
+    "criterion_weighted_descriptive": {
+      "direct_passed": 2841,
+      "labyrinth_passed": 3311,
+      "criteria_total_per_route": 3521,
+      "direct_rate": 0.8068730474297074,
+      "labyrinth_rate": 0.9403578528827038,
+      "delta": 0.13348480545299635,
+      "delta_percentage_points": 13.348480545299635,
+      "direct_strict_passes": 66,
+      "labyrinth_strict_passes": 81,
+      "pair_count": 167,
+      "direct_strict_rate": 0.39520958083832336,
+      "labyrinth_strict_rate": 0.48502994011976047,
+      "strict_delta_percentage_points": 8.982035928143711
+    },
+    "primary_missingness_bounds": {
+      "planned_units": 67,
+      "observed_units": 65,
+      "missing_units": 2,
+      "lower_delta": 0.16141159710712574,
+      "upper_delta": 0.22111308964443918,
+      "assumption": "Each missing QID-level delta is bounded to [-1, 1]."
+    },
+    "secondary_missingness_bounds": {
+      "planned_units": 171,
+      "observed_units": 167,
+      "missing_units": 4,
+      "lower_delta": 0.12178067147875588,
+      "upper_delta": 0.16856429720975002,
+      "assumption": "Each missing eligible-epoch pair delta is bounded to [-1, 1]."
+    },
+    "bootstrap_seed": 5566811321892736085,
+    "bootstrap_resamples": 100000,
+    "permutation_seed": 4847648875745931313,
+    "permutation_samples": 100000,
+    "claim_boundary": "Primary inference uses equal-weight complete-case QIDs. Secondary point estimates use successful eligible epoch-pairs while uncertainty preserves QID clusters. Bounds address technical scoring missingness only; acquisition ineligibility and correlated Judge error remain outside these intervals."
+  },
+  "adjudicated_result": {
+    "selected_criterion_judgments": 56,
+    "agreements": 56,
+    "disagreements": 0,
+    "score_changes": 0,
+    "same_as_automated_result": true,
+    "cif_001_e2_c08": "Automated pass retained; the original false-positive suspicion is not confirmed under the literal criterion wording.",
+    "independent_human_adjudication": false
+  },
+  "collapse_pattern": {
+    "direct_at_most_25_percent_and_labyrinth_at_least_75_percent_pairs": 25,
+    "affected_qids": 18,
+    "stub_like_direct_answers_within_those_pairs": 21,
+    "direct_zero_score_pairs": 7,
+    "labyrinth_minus_direct_at_least_50_points_pairs": 30,
+    "reverse_collapse_pairs": 0
+  },
+  "claim_boundary": "This is a finalized internal result for an adapted A/B benchmark under a custom Codex-Labyrinth Judge. It is not the official ComplexConstraints scorer, an official leaderboard entry, independent human ground truth, or proof of provider-side model/tool/network state beyond recorded evidence."
+}

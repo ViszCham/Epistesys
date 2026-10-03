@@ -6,7 +6,19 @@ Epistesys 6.3.2-alpha.2の文書は、clone契約、採否、実行検証、証�
 
 ### 研究目的と設計
 
-研究目標は、定義した信頼性を維持できる範囲の把握と拡張可能性の検証です。設計目標は制約・権限・状態・証拠の明示保持、defectの可観測性、commit前の再検証です。その結果として信頼性が改善するかは未検証の研究仮説です。[研究仮説と評価方針](research-hypotheses.md)に五つの研究課題・設計手段・測定項目を整理しています。benchmarkと独立評価は未実施です。
+研究目標は、定義した信頼性を維持できる範囲の把握と拡張可能性の検証です。設計目標は制約・権限・状態・証拠の明示保持、defectの可観測性、commit前の再検証です。その結果として信頼性が改善するかは未検証の研究仮説です。[研究仮説と評価方針](research-hypotheses.md)に五つの研究課題・設計手段・測定項目を整理しています。Epistesys固有のbenchmarkと独立評価は未実施です。前身の探索的なGB-CC75観測とは区別します。
+
+### 前身の経験的観測と将来の評価
+
+- [GB-CC75研究本文](research/gb-cc75-study.md)：要旨、研究問い、方法、結果、妥当性への脅威、考察
+- [敵対的方法論監査](research/gb-cc75-adversarial-audit.md)：改訂前監査A01〜A12、文書上の対処と未解決の実験課題
+- [方法と由来](research/gb-cc75-methods-and-provenance.md)：75→67→65 QID、225→171→167ペア、Judge設計と未確定設定
+- [統計仕様](research/gb-cc75-statistical-analysis.md)：estimand、反復依存、歴史的区間・検定、限定欠測bound
+- [失敗分析](research/gb-cc75-failure-analysis.md)：strict未達、負の差、事後taxonomyと未同梱subgroupの境界
+- [公開集計bundle](../benchmarks/gb-cc75/2026-08-18/README.md)：選択12ファイル、hash、点推定の再計算
+- [Epistesys前向き評価案](research/epistesys-prospective-evaluation-plan.md)：未実行・未登録のholdout／独立Judge／予算統制計画
+
+主要65 QIDの平均74.38%→94.10%（差+19.71ポイント）は前身の独自Judge下の結果です。167ペアのstrictは39.52%→48.50%であり、平均は完全遵守ではありません。これをalpha.2の改善やhallucination／長期sessionの効果へ移転しません。
 
 ### 実装能力の入口
 
@@ -44,7 +56,19 @@ Epistesys 6.3.2-alpha.2 documentation is organized so that clone contract, dispo
 
 ### Research purpose and design
 
-The research goal is to characterize reliable coverage and test its possible expansion. Design objectives are explicit retention of constraints, authority, state, and evidence, observable defects, and revalidation before commitment. Whether these improve reliability is an untested research hypothesis. The [research hypotheses and evaluation plan](research-hypotheses.md) maps five research questions to design mechanisms and measurements. Benchmarking and independent evaluation are pending.
+The research goal is to characterize reliable coverage and test its possible expansion. Design objectives are explicit retention of constraints, authority, state, and evidence, observable defects, and revalidation before commitment. Whether these improve reliability is an untested research hypothesis. The [research hypotheses and evaluation plan](research-hypotheses.md) maps five research questions to design mechanisms and measurements. Epistesys-specific benchmarking and independent evaluation are pending, separate from exploratory predecessor GB-CC75 observations.
+
+### Predecessor observations and future evaluation
+
+- [GB-CC75 study](research/gb-cc75-study.md): abstract, questions, methods, results, validity threats, discussion
+- [Adversarial methodological audit](research/gb-cc75-adversarial-audit.md): pre-revision A01–A12, documentation corrections, unresolved experiments
+- [Methods/provenance](research/gb-cc75-methods-and-provenance.md): 75→67→65 QIDs, 225→171→167 pairs, Judge design, unresolved settings
+- [Statistical specification](research/gb-cc75-statistical-analysis.md): estimands, repeated dependence, historical intervals/tests, limited missingness bounds
+- [Failure analysis](research/gb-cc75-failure-analysis.md): strict failures, negative differences, post hoc taxonomy and unpublished subgroup boundaries
+- [Public aggregate bundle](../benchmarks/gb-cc75/2026-08-18/README.md): 12 selected files, hashes, point-estimate recomputation
+- [Epistesys prospective plan](research/epistesys-prospective-evaluation-plan.md): unexecuted/unregistered holdout, independent-Judge, and budget-control proposal
+
+Primary mean 74.38%→94.10% (+19.71 points) across 65 QIDs is a predecessor result under its custom Judge. Strict pass across 167 pairs is 39.52%→48.50%; means are not complete compliance. Do not transfer this to alpha.2 improvement or hallucination/long-session effects.
 
 ### Entry point for implemented capabilities
 

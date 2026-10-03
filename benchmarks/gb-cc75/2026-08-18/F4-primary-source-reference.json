@@ -1,0 +1,31 @@
+{
+  "schema_version": "gb-cc75-primary-source-reference.v1",
+  "benchmark_relation": "adapted_from_not_equivalent_to_official_complexconstraints",
+  "official_dataset": {
+    "organization": "Surge AI",
+    "dataset": "surgeai/ComplexConstraints",
+    "immutable_revision": "e9625c6f635f42b72cb85a04c2be64746f945126",
+    "immutable_tree_url": "https://huggingface.co/datasets/surgeai/ComplexConstraints/tree/e9625c6f635f42b72cb85a04c2be64746f945126",
+    "readme_url": "https://huggingface.co/datasets/surgeai/ComplexConstraints/blob/e9625c6f635f42b72cb85a04c2be64746f945126/README.md",
+    "readme_sha256": "c647dfc34bf9ba95465a125b8669a8379c9bfe1f140e7b7e43583f9428f07055",
+    "csv_sha256": "3e2e5776af7f21a91e0fb9ac770b10aff525b8db5da114bcad72190f3b3ec413",
+    "license": "CC-BY-4.0",
+    "prompt_count": 75,
+    "criterion_count": 1559
+  },
+  "official_harness": {
+    "repository": "https://github.com/surge-ai/complex-constraints",
+    "revision": "9ef1dd73d20030be94bdc399fd1c6ef7970f68d1",
+    "readme_url": "https://github.com/surge-ai/complex-constraints/blob/9ef1dd73d20030be94bdc399fd1c6ef7970f68d1/README.md",
+    "readme_sha256": "d9e75df9554411068c3e7c6e824e39a9189e6e77738f452d3dec7cbec7c7a9f2",
+    "protocol_notes": [
+      "One model completion per prompt with no tools or agent.",
+      "An LLM Judge grades one rubric criterion at a time from only the response and criterion.",
+      "The published harness reports all_pass/mean and mean_criteria/mean."
+    ]
+  },
+  "checked_on": "2026-08-18",
+  "attribution": "Complex Constraints Benchmark Set, Surge AI (surgeai/ComplexConstraints)",
+  "copied_harness_code": false,
+  "claim_boundary": "Official sources define the reference dataset and harness. GB-CC75 adds A/B routes, three acquisition epochs, eligibility filtering, custom scoring transport, and a non-official Judge; its results are not official leaderboard results."
+}
