@@ -2,282 +2,200 @@
 
 ## 日本語
 
-> **シードは仕様ではない。** \
-> **シード以前からコミットまで、すべての射影に証跡を。** \
-> Epistesysは、解釈・権限・証拠・計算・検証・出力コミットを、ひとつの境界付き制御経路として扱います。
+Epistesys（エピステシス）は、AIシステムの**要求管理、実行権限、証拠の由来、状態更新、出力検証**を一つの処理系として扱う、実験的なAI制御・信頼性研究プロジェクトです。生成モデルを改変するのではなく、その外部に構造化された制御状態と検証手続きを配置します。
 
-### Epistesysとは
+対象とする問題は、裏付けのない生成の確定、複雑な指示に含まれる制約の脱落、長期対話での状態・権限・証拠の失効、未解決事項を残したままの実行です。研究上の評価対象は、所定の信頼性を維持できる**指示複雑性・依存深度・状態量・対話長の運用範囲**です。以下では、実装された機構、その局所検証、今後検証する効果を区別します。
 
-Epistesys（エピステシス）は、AIの推論・実行を外部から境界付きで制御する、長期的な**AI control / reliability research project**です。解釈（interpretation）、権限（authority）、証拠（evidence）、状態（state）、計算（computation）、検証（validation）、出力コミット（output commitment）を一つのbounded control pathとして扱う、実験的なAI制御アーキテクチャを研究しています。
+### 現在の位置付け
 
-生成が誤り得ることを前提に、unsupported candidate、missing evidence、projection defect、未解決obligationを、回答の確定やactionへ進む前に観測・制御できるようにする設計です。未検証・矛盾・証拠不足の状態が検証済みの事実として通過するfailureを、検出・抑制・封じ込めできるかを調べます。生成そのものの無誤謬性や「hallucination-free AI」を主張するものではありません。
+| 項目 | 現在の状態 |
+| --- | --- |
+| バージョン | `6.3.2-alpha.2` |
+| 実装の由来 | Labyrinth-Codex v6.3.1の選択source snapshotに、DGCLの構文解析・検証・修復経路を追加 |
+| ソース検証 | 宣言された実行条件に対する`SourceReleaseReady`。条件と記録は[最終検証](validation/epia2-alpha2-release-verification-2026-10-02.md)に記載 |
+| 配布 | source-only。モデルweight、秘密鍵、個人設定、未監査の配布binaryを同梱しない |
+| ホスト接続 | adapter・receipt・replayの実装を含む。実ホストのcallback／delivery観測は`PendingHostObservation` |
+| 研究評価 | Epistesys固有の効果と独立評価は未実施。独立gold corpusは`PendingNoCorpus` |
 
-長期のinteractionでもinstruction、state、evidence lineageを保持・再検証する制御系が研究対象です。bounded control、明示的なevidence/state表現、defect tracking、validation gates、replay/provenance、long-horizon state integrityを通して、信頼性を保てる運用範囲をどこまで広げられるかを研究します。これらの効果と、そのための機構の実装・実行確認は別に評価します。
+ソース経路の局所検証は、任意指示の意味的正確性、ハルシネーション抑制、長期対話の性能を実証するものではありません。現在のalphaは長期研究の基盤実装であり、研究目標の達成版ではありません。Epistesys-7はこの版の範囲外です。
 
-### 研究目標
+### 制御対象とアーキテクチャ
 
-- **Hallucination containment（裏付けのない生成の封じ込め）**：unsupportedなcandidateや推測が、十分なevidenceなしにvalidated / committed stateへ昇格するfailureを減らせるか研究します。誤った生成の検出・封じ込めを目指す設計であり、hallucinationの防止効果は未検証です。
-- **Constraint preservation（制約の保持）**：長い・複雑・多段・入れ子・相互依存・競合するinstructionで、重要なconstraint、exception、dependency、intentの脱落・融解・誤解釈を抑え、保持・再検証できるか研究します。
-- **Long-horizon instruction integrity（長期interactionでの指示整合性）**：sessionが長くなったとき、初期instruction、state、authority、未解決obligation、decision history、evidence provenanceの忘却・drift・脱落を抑えられるか研究します。記憶容量だけでなく、指示の有効範囲、状態の更新、証拠の由来、過去の判断を再検証できることを扱います。
-- **Failure observability（失敗の可観測性）**：不明確さ、missing evidence、projection defect、contradiction、未解決dependencyを、commit前に`Clarify` / `Hold`等の明示状態として露出できる設計を研究します。証拠不足のまま回答・actionへ進むfailureと、不必要に保留するfailureの両方を評価します。
-- **Reliable complexity frontier（信頼性を維持できる複雑性の範囲）**：instruction complexity、dependency depth、保持すべきstate量、session lengthが増えても、定義したreliability targetを維持できる範囲を拡張できるか研究します。複雑性やsession長に伴うreliability collapseを測定し、課題族・総計算予算・目標信頼度を定めた**reliable operating envelope**の変化として評価します。
+主要なデータフローは、**入力の保存 → 構文・要求の抽出 → 要求中間表現 → 射影の不整合記録 → 検証計画 → 証拠の再検証 → 出力候補の確定**です。実行権限の検証と実ホストへの送信・受領確認は、別の境界として扱います。
 
-長期目標は、AIが定義された信頼性を維持したまま扱える指示複雑性・状態量・session長の範囲を押し広げることです。現在のalphaはそのためのbaseline implementationであり、プロジェクトの最終到達点ではありません。
+| 機構 | 現行の実装範囲 |
+| --- | --- |
+| 構文・要求解析 | CommonMark文書領域、Rust CST、pin済み日英Stanza dependency worker、予算付きEarley controlled instruction grammar |
+| 要求の追跡 | 否定・条件・例外・時間・scope・参照・依存を、source revisionと要求別Program IRに結び付ける |
+| 射影の検査 | TranslationLoss v3の`ProjectionDefectGraph`で、対応・欠落・矛盾・比較不能を保持する。幾何的提案は補助情報 |
+| 権限・証拠 | principal、scope、revision、nonce、期限、parent、payload digestを持つreceiptを検証する |
+| Coding検証・修復 | compiler check、runtime test、production接続、acceptance testを別観測として扱い、限定ファイル修復と新snapshotの再検証を接続する |
+| 仮説探索・GPU | 256のdistinct world × 8 projection＝2,048 evaluation rows。数値計算経路とCPU最終検証を分離する |
+| Program Analysis・Media | Rust／Python／AssemblyのRPA型、媒体のsource・backend・model・license・method・budgetに束縛した候補と観測 |
+| 出力・再開 | exact output digest、HostOutputReceipt v2、Stop hook、sink検査、checkpoint、append-only journal／replay |
 
-### 研究状態
+**DGCL**はDeepGrammarからCodingの要求別完了判定までを接続する経路です。未知の条件の真偽や未対応文法を推測で補わず、`Unsupported`／`Unresolved`／`Ambiguous`として保持します。外部モデルを使わない構成と、設定済みStanza構成を区別します。
 
-**上記は研究目標です。設計機構はその達成手段であり、期待される信頼性改善は未検証の研究仮説です。Epistesysとしてのbenchmark検証と独立評価は未実施です（benchmark pending / independent evaluation pending）。**
+alpha.2は、実ファイル修復、非上書きbackup、最大4回のrepair coordinator、writer lock、ledgerと別管理の署名head、状態更新を伴う離散・連続表現の蒸留、明示的consumer view v1/v2を追加しています。Rust workspaceは13 crateです。修復・再開の事前条件と検証範囲は[DGCL実行契約](docs/dgcl-operating-profile-and-closure.md)、型・境界・継承機構の詳細は[システムアーキテクチャ](docs/system-architecture.md)に整理しています。
 
-研究目標は、定義した信頼性を維持できる範囲を明らかにし、その拡張可能性を検証することです。設計目標は、制約・権限・状態・証拠を明示的に保持し、defectを観測可能にし、commit前に再検証できる経路を作ることです。「これらの機構により、同じモデル・課題・総予算で誤ったcommitや制約脱落が減る」という予想が研究仮説です。機構と予想効果の対応を設計仮説として記録し、[研究仮説と評価方針](docs/research-hypotheses.md)で区別します。
+### 検証状態を読むための区別
 
-現在の`6.3.2-alpha.2`は、Epistesys固有のreasoning improvementを実証した版ではありません。hallucination reduction、complex-instruction reliability、long-session retention、reliable complexity frontierの拡張は今後検証する研究仮説です。現在確認しているのは主にimplementation surface、state/evidence boundary、およびCLI・schema・fixture・testの実行・検査です。build/test/CLI結果から一般性能や、長期session・複雑指示における改善を推論しません。
+- **候補と検証済み状態**：`candidate`は生成・解析された候補です。`Validated`等の状態には、対象revisionに対応する所定の証拠が必要です。
+- **証拠と権限**：テスト成功、低いloss、hash一致、schema適合は、操作の許可を生成しません。
+- **出力確定と配信**：standalone candidateの確定、hostへの送信、sinkの受領、durable replayは別々に観測します。
+- **実装検証と研究効果**：build／test／CLIの成功から、一般性能、形式証明、完全な文法理解、host全体の強制を推論しません。
 
-今後はhallucination、複雑なinstructionの制約保持、long-session retention、risk–coverage、誤ったcommitと過剰な保留、reliability frontierを測定する予定です。入力長、条件数、依存深度、状態保持量、session長、総予算を明示し、独立した評価で研究仮説を検証します。general performance、SOTA、formal proof、hallucination prevention、long-session robustnessは保証しません。
+本書の「出力確定」はアプリケーション内のoutput commitmentを指し、Git commitや事実の真理性とは異なります。用語の操作的定義と検証項目は[アーキテクチャの用語表](docs/system-architecture.md#terminology-ja)、未観測範囲は[既知の制約](docs/known-limitations.md)を参照してください。
+
+### 研究課題と評価方針
+
+| 研究課題 | 評価する失敗・指標 |
+| --- | --- |
+| 裏付けのない生成の確定 | unsupported claim、誤ったcommit、検出漏れ、回答coverage |
+| 複雑指示の制約保持 | 条件別適合、全条件達成、例外・依存・意図の保持、回帰 |
+| 長期対話の指示整合性 | 初期指示の脱落、状態drift、古い権限・証拠の誤使用 |
+| 失敗の可観測性 | 不整合検出、適切な保留、過剰な保留、risk–coverage |
+| 信頼性を維持できる運用範囲 | 入力長、条件数、依存深度、状態量、対話長、総計算予算ごとの信頼性 |
+
+これらは**研究目標**です。制約・権限・状態・証拠の明示保持は**設計目標**であり、その機構が同じモデル・課題・総予算で失敗を減らすかは**検証対象の仮説**です。モデル、system instruction、tool、出力上限、retry、controller costを含む比較条件を記録します。[研究仮説と評価方針](docs/research-hypotheses.md)に測定項目、[前向き評価案](docs/research/epistesys-prospective-evaluation-plan.md)に未実行・未登録の計画を記載しています。
 
 ### 前身システムの探索的評価：GB-CC75
 
-前身Labyrinth-Codexには、ComplexConstraints由来の75問を用いた、後ろ向き・探索的な対応付き評価の記録があります。2026-08-18の独自Judge集計における結果を、Epistesysの研究背景として公開します。
+2026-08-18の前身Labyrinth-Codexに関する、ComplexConstraints由来の75問を用いた後ろ向き・探索的な対応付き評価です。
 
-| 指標・集計単位 | Direct Grok | Grok＋Labyrinth | 差 |
+| 集計単位 | Direct Grok | Grok＋Labyrinth | 差 |
 | --- | ---: | ---: | ---: |
-| 主要：採用条件を満たす65 QIDの等重み平均ルーブリック適合度 | 74.38% | 94.10% | +19.71ポイント |
-| 記述：採点済み167対応ペアの全基準達成率 | 39.52%（66/167） | 48.50%（81/167） | +8.98ポイント |
+| 主要：65 QIDの等重み平均ルーブリック適合度 | 74.38% | 94.10% | +19.71ポイント |
+| 記述：167対応ペアの全基準達成率 | 39.52%（66/167） | 48.50%（81/167） | +8.98ポイント |
 
-主要差の記録されたQID bootstrap 95%区間は+12.20〜+27.83ポイントです。差は丸め前に計算しています。平均適合は完全遵守や正答率ではなく、65 QIDでは32勝・20同点・13敗でした。計画75問から対応適格67問、主要65問へ、計画225ペアから適格171、採点済み167へ絞られています。
+主要差の記録されたQID bootstrap 95%区間は+12.20〜+27.83ポイントで、差は丸め前に計算しています。主要65 QIDでは32勝・20同点・13敗でした。選択は75→67→65 QID、225→171→167ペアです。平均適合度は完全遵守や正答率ではなく、区間は取得選択やJudgeの系統誤差を含みません。
 
-**これは前身の限定観測であり、Epistesys alpha.2の改善、公式ComplexConstraintsスコア、独立した人間gold、TLの因果効果、hallucination削減、長期session保持の実証ではありません。** 区間は取得選択やJudge系統誤差を覆いません。Judgeは経路ラベル等の非提示を指定した設計ですが、Labyrinthを含む評価系の独立性は未確立です。
+これは**前身の限定観測**で、Epistesys alpha.2の改善、公式ComplexConstraintsスコア、独立human gold、TLの因果効果、ハルシネーション削減、長期保持の実証ではありません。経路ラベル等を非提示とするJudge設計ですが、Labyrinthを含む評価系の独立性は未確立です。既知の75問を新しいholdoutとして扱いません。
 
-[論文形式の研究本文](docs/research/gb-cc75-study.md)、[敵対的方法論監査](docs/research/gb-cc75-adversarial-audit.md)、[統計仕様](docs/research/gb-cc75-statistical-analysis.md)、[再計算可能な公開集計](benchmarks/gb-cc75/2026-08-18/README.md)を接続しています。Epistesys固有の効果は引き続きbenchmark pendingです。[前向き評価案](docs/research/epistesys-prospective-evaluation-plan.md)は未実行・未登録の案であり、既知のGB-CC75を新しいholdoutとは扱いません。
+[研究本文](docs/research/gb-cc75-study.md)・[方法と由来](docs/research/gb-cc75-methods-and-provenance.md)・[統計仕様](docs/research/gb-cc75-statistical-analysis.md)・[方法論監査](docs/research/gb-cc75-adversarial-audit.md)・[再計算可能な集計](benchmarks/gb-cc75/2026-08-18/README.md)を提供しています。
 
-### 現在のalpha
+### 実行例
 
-Epistesys（エピステシス）`6.3.2-alpha.2`は、Labyrinth-Codex v6.3.1の選択source snapshot由来のbaseline implementationです。当初private cloneとして新規Git履歴で独立して保存され、元の履歴、個人状態、credentials、cache、receipt root、replay ledgerを引き継いでいません。内部の`lc631-*` crate・command・schema IDは、挙動差を抑える互換識別子として当面保持します。
-
-**Capability:** receipt検証、TL/TLDG、256×8 world materialization、RPA-00〜39、candidate-only Media、Host replay v2を、Epistesys identityの下で実行できます。
-
-**Outcome:** seedからcandidate・validation・outputまでの状態と証拠境界を、CLI・schema・fixture・Rust testとして追跡できます。
-
-**First action:** `./scripts/run-epistesys.ps1 lc631-tl-doctor --prompt "mixed seed"`を実行します。
-
-**First result:** TL doctorはsource roundtrip、parse defect、Clarify/Hold境界をJSONで返します。world budgetとpromotion predicateは、それぞれworld doctorとpromotion gateで観測します。
-
-**Evidence:** Cargo build/test/clippy、主要CLI、RepoSeiri、Assurance-Compilerの記録を個別に保持します。
-
-**Constraint:** alphaはsource-onlyで、外部receipt、fresh host pickup、外部backend、remote CI、occupancy、一般性能を自動保証しません。
-
-### 継承した実装面
-
-- **Authenticated receipt**：principal、receipt class、subject revision、scope、nonce、payload digest、期限、parentを検証し、wire入力を`Untrusted`へ戻してからopaque verified stateだけを強いgateへ通します。
-- **Unified DeepGrammar / TranslationLoss v3**：自然言語とprogramをlossless source、token/region lattice、UnifiedSyntaxHypergraph、constraint graph、semantic viewへ投影し、ProjectionDefectGraphで対応・欠落・矛盾・比較不能を保持します。geometry proposalはcanonical truthやauthorityを生成しません。
-- **措定世界とGPU数値島**：256個のdistinct worldを8 projectionへ通し、2,048 evaluation rowsとして扱います。8 logical lane、bounded sparse relation、device-side reduction、CPU final validation、fault quarantineを持ちます。
-- **Program Analysis / Media**：Rust・Python・AssemblyをRPA-00〜39のtyped stageとして扱い、EvidenceStateとClosureStateを分離します。Mediaはauthenticated local source、backend、model、license、method、budgetへ束縛し、candidateを自動的にValidatedへ昇格させません。
-- **Host / replay**：exact output bytes digest、HostOutputReceipt v2、Stop hook、sink再検証、append-only replayを接続します。legacy fieldは互換表示であり、強い証拠ではありません。
-
-### 実装済みで使える能力
-
-v6.3.1から継承した次の実装面を、Epistesysのidentityと独立launcherの下で実行・検査できます。ここでの能力は実装経路の存在と動作を指し、上記の研究目標に対する効果を実証するものではありません。
-
-- 現sourceのRust workspaceは13 crate（継承baselineは12 crate）。feature-reduced/default build、workspace test、strict clippy、locked release build。
-- `lc631-tl-doctor`によるsource roundtrip、obligation、ProjectionDefect、Clarify/Hold境界の出力。
-- `lc631-world-doctor`による256 distinct world、8 projection、2,048 materialized evaluationの厳密なbudget検査。
-- `lc631-promotion-gate`による不足receiptのfail-closed判定、`promotion_allowed=false`と`automatic_promotion=false`の明示。
-- RPA-00〜39のRust/Python/Assembly解析型、EvidenceStateとClosureStateの分離、tool provenanceの保持。
-- authenticated local Media計画、候補型、Media observation、TranslationEnvelope接続。YouTube URLや任意JSONだけではValidatedになりません。
-- exact output digest、HostOutputReceipt v2、Stop hook、sink再検証、append-only replayのsource経路。
-- `run-epistesys.ps1`をclone外のcwdから呼び出せる独立起動。
-
-これらはcloneで実行・検査できる機能です。外部receipt、実Host v2 pickup、外部parser/model、remote CI、shader occupancy、一般的な性能比較が未成立でも、上記の実装面そのものを未実装とは扱いません。
-
-### DGCL / EPIA2の追加実装と閉鎖範囲
-
-現在のsource状態は**6.3.2-alpha.2 SourceReleaseReady**です。[最終検証記録](validation/epia2-alpha2-release-verification-2026-10-02.md)と[release notes](docs/epistesys-6.3.2-alpha.2-release-notes-2026-10-02.md)に、alpha.2 identityで取り直したgateと未実証範囲を記録しています。
-
-alpha.2は継承baselineにDGCLの実装・接続を追加した実験版です。[対応範囲と閉鎖](docs/dgcl-operating-profile-and-closure.md)と[昇格前functional gate](validation/epia2-prepromotion-functional-pass-2026-10-02.md)を参照してください。source readiness、配布検証、実host activationは別状態です。修復CLIは`--ledger-root`と別管理の`--head-root`を要求し、`lc631-dgcl-package-resume`は再書込みせずfresh証拠を要求します。grammar revisionは`controlled-ja-en-instruction-earley.v2`で、materializationはIR/TL/plan/candidate identityへ束縛されます。
-
-DGCL/EPIA2では、pin済みCommonMark event parser・Rust tree-sitter CST・実日英Stanza dependency worker・予算付きEarley controlled instruction grammarから、要求別Program IR→TranslationLoss→completion plan→署名evidence gap→exact最終candidateへ、source identityを保持した経路を追加しました。否定・条件・例外・時間・scope・参照・依存を独立構造として保持し、未確定のtruthや任意自然言語の完全理解を推測で埋めません。公開reportの成功flagは検証済みcompletionへ昇格できず、専用constructorが全receiptとcurrent lifecycleを再検証します。
-
-Codingでは、登録済みCargo、外部発行Authority receipt、独立intent bindingに束縛した、別々のcompiler check・runtime test・production API接続呼出し・acceptance testを実行できます。root/fileに限定した実ファイルrepair、非上書きbackup、変更後build snapshot、最大4回のrepair coordinator、全要求の新receipt再評価を接続しました。writer lock、v1/v2 checkpoint、ledger外の署名head保存・resume、実stateを次epochへ渡す蒸留、decision-aware評価APIも追加しています。モデル・credentials・receipt rootは配布しません。[対応範囲と閉鎖](docs/dgcl-operating-profile-and-closure.md)にCLI/SDKの条件と残存riskを記録しています。
-
-これらはdeclared profileの実装・接続に関する追加であり、任意指示の意味精度、完全な自然言語文法、hallucination reduction、host-wide enforcement、形式証明を実証したことを意味しません。candidate ≠ Validated、local test ≠ correctness/general performanceを維持します。独立goldはなく、研究評価はPendingNoCorpus、実host callback/deliveryはPendingHostObservationです。歴史的な[DGCL実装状況](docs/dgcl-implementation-status-2026-09-28.md)と[修復監査](validation/epia2-repair-blocker-audit-2026-10-02.md)は区別します。
-
-`lc631-dgcl-verify`と`lc631-dgcl-finalize`は実binaryを起動するため、明示的な`--execute`を要求します。finalizerは必須引数とreceipt環境をcheckpoint作成前に検査します。
-
-### 起動
-
-Codexで既定として使う設定と、明示的な別line選択の境界は[Codex既定ルーティング](docs/codex-default-routing.md)を参照してください。既定設定と全host強制は別です。
+次は診断用の例です。解析結果から実行権限は発行されません。副作用を伴うverify／finalizeには明示的な`--execute`と、登録tool・外部receipt等の条件が必要です。
 
 ```powershell
-./scripts/run-epistesys.ps1 lc631-tl-doctor --prompt "mixed seed"
-./scripts/run-epistesys.ps1 lc631-dg1-doctor --prompt "実装してください。 Do not publish."
-./scripts/run-epistesys.ps1 lc631-coding-closure --prompt "Please update the implementation."
-./scripts/run-epistesys.ps1 lc631-world-doctor --prompt "mixed seed"
+./scripts/run-epistesys.ps1 lc631-tl-doctor --prompt "Please test the package. Do not publish."
+./scripts/run-epistesys.ps1 lc631-world-doctor --prompt "Please test the package. Do not publish."
 ./scripts/run-epistesys.ps1 lc631-doctor --repo .
 ```
 
-`lc631-*`は継承した互換commandです。Epistesys用launcherは自身の配置からrunnerを解決し、旧リポジトリの絶対pathへfallbackしません。
+launcherは自身の配置からrunnerを解決します。別cwdからの起動を含む手順は[実行ガイド](docs/execution-guide.md)、CodexのUTF-8 stdin／既定facadeは[ルーティング契約](docs/codex-default-routing.md)を参照してください。既定設定はhost全体への強制とは異なります。
 
-### 文書入口
+### 文書の読み順
 
-- [研究仮説と評価方針](docs/research-hypotheses.md)：研究目標・設計目標・検証対象の分離
-- [GB-CC75研究本文](docs/research/gb-cc75-study.md)：前身の探索的な対応付き評価、結果と限界
-- [GB-CC75方法と由来](docs/research/gb-cc75-methods-and-provenance.md)：設定の証拠段階、欠測、公開scope
-- [GB-CC75公開集計](benchmarks/gb-cc75/2026-08-18/README.md)：CSV／JSONと再計算手順
-- [Epistesys前向き評価案](docs/research/epistesys-prospective-evaluation-plan.md)：未使用holdout・独立採点・同等予算の計画
-- [Clone contract](docs/migration-contract.md)：継承・除外・初回版の境界
-- [Adoption manifest](docs/adoption-manifest.md)：採用119 filesと除外4項目
-- [Clone verification](docs/clone-verification.md)：EPI-05の実行結果
-- [Assurance boundary](docs/assurance-compiler-status.md)：bounded static reviewのstatus
-- [Known limitations](docs/known-limitations.md)：alphaの未観測・保留・再検証条件
-- [DGCL implementation status](docs/dgcl-implementation-status-2026-09-28.md)：DeepGrammar/Coding Closureのslice状態と未完了gate
-- [DGCL独立gold収集手順](docs/dgcl-gold-collection-protocol.md)：未作成の評価データを収集・裁定する条件
-- [RepoSeiri audit](docs/reposeiri-audit.md)：構成・文言・保留状態の監査記録
-- [Initial clone release](docs/initial-clone-release-record.md)：root commitとmain bootstrapの記録
+| 読者の関心 | 入口 |
+| --- | --- |
+| システム境界・データフロー・用語 | [システムアーキテクチャ](docs/system-architecture.md) |
+| 実行条件・修復・再開 | [実行ガイド](docs/execution-guide.md) → [DGCL実行契約](docs/dgcl-operating-profile-and-closure.md) |
+| wire形式・互換性 | [DGCL wire互換性](docs/dgcl-wire-compatibility.md) → [schema契約](schemas/closure-and-receipt-contract.md) |
+| 評価設計・経験的結果 | [研究仮説](docs/research-hypotheses.md) → [GB-CC75研究本文](docs/research/gb-cc75-study.md) |
+| 現行の検証・残存条件 | [alpha.2最終検証](validation/epia2-alpha2-release-verification-2026-10-02.md) → [既知の制約](docs/known-limitations.md) |
+| sourceの由来・除外・履歴 | [移行契約](docs/migration-contract.md) → [文書索引](docs/README.md) |
 
-`docs/`内のv6.3.1文書は継承元の履歴的な設計・監査記録です。Epistesys独自の機能追加を示すものではなく、現在のidentityと状態は本README、clone verification、known limitationsを基準にします。
+初期cloneは独立したGit履歴で保存され、個人状態、credentials、cache、receipt root、replay ledgerを継承していません。`lc631-*`は挙動差を抑える互換識別子です。詳細な実装記録と継承元の設計・監査文書は[文書索引](docs/README.md)で現行仕様から区別しています。
 
-### 初回alphaの状態
-
-現在のalphaはsource-onlyです。移植元のWindows/macOS packaged binaryは絶対build path監査のため除外しました。EPI-05のEpistesys sourceからのrelease buildは成功していますが、生成binaryにもbuild pathが残るため、配布物には採用していません。継承したUnavailable、Hold、Clarify、fallback、未観測範囲は未解決のまま記録します。local testの成功はcorrectnessやgeneral performanceを意味せず、形式証明、host-level enforcement、外部backendの完成も意味しません。candidateとValidatedは異なる状態であり、general-performance claimは引き続き検証待ちです。
-
-Epistesys-7は、初回cloneの挙動比較と情報分離が完了した後に、別版・別変更として設計します。
+---
 
 ## English
 
-> **Seed is not spec.** \
-> **From pre-seed to commit, every projection leaves a witness.** \
-> Epistesys governs interpretation, authority, evidence, computation, validation, and output commitment as one bounded control path.
+Epistesys is an experimental **AI control and reliability research project** that treats requirements, execution authority, evidence provenance, state updates, and output validation as one processing system. It places structured control state and verification procedures outside a generative model rather than modifying that model.
 
-### What is Epistesys?
+The failure model includes commitment of unsupported generation, omitted constraints in complex instructions, expired or drifting state/authority/evidence during long interactions, and execution with unresolved obligations. Its research target is the **operating range of instruction complexity, dependency depth, retained state, and session length at a defined reliability level**. Implemented mechanisms, local verification, and effects awaiting evaluation are distinguished below.
 
-Epistesys (Japanese: エピステシス) is a long-term **AI control / reliability research project** studying bounded external control of AI reasoning and execution. It researches an experimental AI control architecture that treats interpretation, authority, evidence, state, computation, validation, and output commitment as one bounded control path.
+### Current status
 
-Its design assumes generation can be wrong and aims to make unsupported candidates, missing evidence, projection defects, and unresolved obligations observable and controllable before an answer is committed or an action proceeds. It investigates whether this path can detect, reduce, and contain failures in which unverified, contradictory, or insufficiently supported states pass as validated facts. It does not assume infallible generation or claim “hallucination-free AI.”
+| Item | Current state |
+| --- | --- |
+| Version | `6.3.2-alpha.2` |
+| Implementation provenance | Selected Labyrinth-Codex v6.3.1 source snapshot with added DGCL parsing, validation, and repair paths |
+| Source verification | `SourceReleaseReady` for declared operating conditions; conditions and records are in the [final verification](validation/epia2-alpha2-release-verification-2026-10-02.md) |
+| Distribution | Source-only; excludes model weights, private keys, personal settings, and unaudited distribution binaries |
+| Host integration | Includes adapter/receipt/replay implementations; real-host callback/delivery observations remain `PendingHostObservation` |
+| Research evaluation | Epistesys-specific effects and independent evaluation are pending; independent gold corpus remains `PendingNoCorpus` |
 
-The research also concerns control systems designed to preserve and revalidate instruction, state, and evidence lineage during long-horizon interaction. Through bounded control, explicit evidence/state representation, defect tracking, validation gates, replay/provenance, and long-horizon state integrity, the project investigates how far reliable operation can extend. These effects are evaluated separately from implementation and execution of the mechanisms intended to support them.
+Local source-path verification does not establish arbitrary-instruction semantic accuracy, hallucination containment, or long-session performance. The alpha is a baseline for long-term research, not completion of the research objectives. Epistesys-7 is outside this version.
 
-### Research goals
+### Control scope and architecture
 
-- **Hallucination containment:** investigate whether failures in which unsupported candidates or guesses advance to validated / committed states without sufficient evidence can be reduced. The architecture is designed to detect and contain unsupported generation; hallucination-prevention effects remain untested.
-- **Constraint preservation:** investigate whether important constraints, exceptions, dependencies, and intent can be preserved and revalidated across long, complex, multi-stage, nested, interdependent, or competing instructions, reducing omission, erosion, and misinterpretation.
-- **Long-horizon instruction integrity:** investigate whether forgetting, drift, and loss of initial instructions, state, authority, unresolved obligations, decision history, and evidence provenance can be reduced as sessions grow. This concerns instruction scope, state updates, evidence lineage, and revalidation of earlier decisions as well as memory capacity.
-- **Failure observability:** research designs that expose ambiguity, missing evidence, projection defects, contradictions, and unresolved dependencies as explicit states such as `Clarify` / `Hold` before commitment. Evaluate both proceeding to an answer/action with insufficient evidence and unnecessarily withholding a response.
-- **Reliable complexity frontier:** investigate whether the range that meets a defined reliability target can expand as instruction complexity, dependency depth, required state retention, and session length increase. Measure reliability collapse under increasing complexity or session length, evaluating changes in the **reliable operating envelope** for specified task families, total compute budgets, and target reliability.
+The principal dataflow is **source preservation → syntax/requirement extraction → requirement IR → projection-defect recording → validation planning → evidence revalidation → candidate finalization**. Execution-authority checks and real-host send/receipt observations are separate boundaries.
 
-The long-term goal is to expand the range of instruction complexity, state volume, and session length that AI can handle while maintaining defined reliability. The current alpha is a baseline implementation, not the endpoint of the project.
+| Mechanism | Current implementation scope |
+| --- | --- |
+| Syntax and requirement parsing | CommonMark regions, Rust CST, pinned Japanese/English Stanza dependency workers, budgeted Earley controlled instruction grammar |
+| Requirement traceability | Bind negation, conditions, exceptions, time, scope, references, and dependencies to source revision and per-requirement Program IR |
+| Projection checks | TranslationLoss v3 `ProjectionDefectGraph` retains correspondence, omissions, contradictions, and incomparability; geometric proposals are advisory |
+| Authority and evidence | Validate receipts containing principal, scope, revision, nonce, expiry, parent, and payload digest |
+| Coding validation and repair | Separate compiler checks, runtime tests, production connections, and acceptance observations; connect bounded file repair and revalidation of changed snapshots |
+| Hypothesis exploration and GPU | 256 distinct worlds × 8 projections = 2,048 evaluation rows; separate numeric computation from CPU final validation |
+| Program Analysis and Media | Rust/Python/Assembly RPA types; candidates/observations bound to source, backend, model, license, method, and budget |
+| Output and resume | Exact output digests, HostOutputReceipt v2, Stop hook, sink checks, checkpoints, append-only journals/replay |
 
-### Research status
+**DGCL** connects DeepGrammar to per-requirement Coding completion decisions. Unknown predicate truth and unsupported grammar remain `Unsupported`/`Unresolved`/`Ambiguous`, not guessed. No-external-model and configured-Stanza profiles are distinct.
 
-**The goals above are research goals. Design mechanisms are means toward those goals; expected reliability improvements are untested research hypotheses. Epistesys-specific benchmarking and independent evaluation remain pending.**
+Alpha.2 adds real file repair, non-overwriting backups, a four-attempt repair coordinator, writer locks, signed heads managed separately from ledgers, state-changing discrete/continuous distillation, and explicit consumer views v1/v2. The Rust workspace contains 13 crates. See the [DGCL execution contract](docs/dgcl-operating-profile-and-closure.md) for repair/resume prerequisites and scope; the [system architecture](docs/system-architecture.md) details types, boundaries, and inherited mechanisms.
 
-The research goal is to characterize the range that maintains defined reliability and test whether it can expand. Design objectives are to retain constraints, authority, state, and evidence explicitly, expose defects, and enable revalidation before commitment. The prediction that these mechanisms reduce erroneous commitments or dropped constraints under the same model, tasks, and total budget is a research hypothesis. Mechanism-to-effect expectations are recorded as design hypotheses, distinguished in the [research hypotheses and evaluation plan](docs/research-hypotheses.md).
+### Interpreting verification states
 
-The current `6.3.2-alpha.2` does not demonstrate Epistesys-specific reasoning improvement. Hallucination reduction, complex-instruction reliability, long-session retention, and expansion of the reliable complexity frontier are hypotheses for future evaluation. Current observations primarily concern implementation surfaces, state/evidence boundaries, and execution/inspection of CLI, schema, fixture, and test surfaces. Build/test/CLI results do not establish general performance or improvements on long sessions or complex instructions.
+- **Candidate versus validated state:** a `candidate` is a generated or parsed proposal. States such as `Validated` require the specified evidence for the relevant revision.
+- **Evidence versus authority:** test success, low loss, matching hashes, and schema validity do not grant operation permissions.
+- **Finalization versus delivery:** standalone candidate finalization, host send, sink receipt, and durable replay are separately observed.
+- **Implementation verification versus research effects:** build/test/CLI success does not establish general performance, formal proof, complete grammar understanding, or host-wide enforcement.
 
-Planned measurements cover hallucination, constraint preservation under complex instructions, long-session retention, risk–coverage, erroneous commitment and excessive withholding, and the reliability frontier. Input length, condition count, dependency depth, retained state, session length, and total budget will be made explicit, with independent evaluation of the hypotheses. General performance, SOTA, formal proof, hallucination prevention, and long-session robustness are not guaranteed.
+“Output commitment” here means application-level finalization, not a Git commit or truth of a claim. See the [operational terminology](docs/system-architecture.md#terminology-en) and [known limitations](docs/known-limitations.md).
 
-### Exploratory evaluation of the predecessor system: GB-CC75
+### Research questions and evaluation policy
 
-The predecessor Labyrinth-Codex has records of a retrospective exploratory paired evaluation using 75 tasks adapted from ComplexConstraints. Results from the custom Judge aggregation dated 2026-08-18 are published as research background for Epistesys.
+| Research question | Failures/metrics to evaluate |
+| --- | --- |
+| Commitment of unsupported generation | Unsupported claims, erroneous commitments, missed detections, response coverage |
+| Constraint preservation | Per-criterion and all-criteria adherence, exception/dependency/intent retention, regressions |
+| Long-horizon instruction integrity | Initial-instruction omission, state drift, misuse of stale authority/evidence |
+| Failure observability | Defect detection, appropriate and excessive holds, risk–coverage |
+| Reliable operating range | Reliability by input length, condition count, dependency depth, state volume, session length, and total compute |
 
-| Metric and aggregation unit | Direct Grok | Grok plus Labyrinth | Difference |
+These are **research goals**. Explicit retention of constraints, authority, state, and evidence is a **design objective**; whether those mechanisms reduce failures under the same model, tasks, and total budget is a **testable hypothesis**. Comparisons record model, system instructions, tools, output limits, retries, and controller cost. The [research hypotheses](docs/research-hypotheses.md) define measurements; the [prospective evaluation plan](docs/research/epistesys-prospective-evaluation-plan.md) remains unexecuted and unregistered.
+
+### Exploratory predecessor evaluation: GB-CC75
+
+A retrospective exploratory paired evaluation of predecessor Labyrinth-Codex, dated 2026-08-18, using 75 tasks adapted from ComplexConstraints.
+
+| Aggregation unit | Direct Grok | Grok + Labyrinth | Difference |
 | --- | ---: | ---: | ---: |
-| Primary: equal-QID-weighted mean rubric adherence across 65 eligible primary QIDs | 74.38% | 94.10% | +19.71 points |
-| Descriptive: all-criteria pass across 167 scored pairs | 39.52% (66/167) | 48.50% (81/167) | +8.98 points |
+| Primary: equal-weight mean rubric adherence over 65 QIDs | 74.38% | 94.10% | +19.71 points |
+| Descriptive: all-criteria pass over 167 paired observations | 39.52% (66/167) | 48.50% (81/167) | +8.98 points |
 
-The recorded QID-bootstrap 95% interval for the primary difference is +12.20 to +27.83 points. Differences are calculated before rounding. Mean adherence is neither complete compliance nor task accuracy; the 65-QID comparison had 32 wins, 20 ties, and 13 losses. Selection narrowed 75 planned tasks to 67 paired-eligible and 65 primary tasks, and 225 planned pairs to 171 eligible and 167 scored pairs.
+The recorded QID-bootstrap 95% interval is +12.20 to +27.83 points; differences use unrounded values. The primary 65 QIDs show 32 wins, 20 ties, and 13 losses. Selection is 75→67→65 QIDs and 225→171→167 pairs. Mean adherence is neither complete compliance nor task accuracy; the interval excludes acquisition selection and systematic Judge error.
 
-**These are bounded predecessor observations, not evidence of alpha.2 improvement, an official ComplexConstraints score, independent human gold, causal TL effects, hallucination reduction, or long-session retention.** Intervals exclude acquisition selection and systematic Judge error. The Judge design specifies withholding route labels and other identifiers, but independence of the Labyrinth-based evaluator is not established.
+These are **bounded predecessor observations**, not evidence of alpha.2 improvement, official ComplexConstraints scores, independent human gold, causal TL effects, hallucination reduction, or long retention. The Judge design withholds route labels and other identifiers, but independence of the Labyrinth-based evaluator is unestablished. Known tasks are not a new holdout.
 
-Follow the [manuscript-style study](docs/research/gb-cc75-study.md), [adversarial methodological audit](docs/research/gb-cc75-adversarial-audit.md), [statistical specification](docs/research/gb-cc75-statistical-analysis.md), and [recomputable public aggregates](benchmarks/gb-cc75/2026-08-18/README.md). Epistesys-specific effects remain benchmark pending. The [prospective plan](docs/research/epistesys-prospective-evaluation-plan.md) is unexecuted and unregistered; known GB-CC75 tasks are not a new holdout.
+See the [study](docs/research/gb-cc75-study.md), [methods/provenance](docs/research/gb-cc75-methods-and-provenance.md), [statistical specification](docs/research/gb-cc75-statistical-analysis.md), [methodological audit](docs/research/gb-cc75-adversarial-audit.md), and [recomputable aggregates](benchmarks/gb-cc75/2026-08-18/README.md).
 
-### Current alpha
+### Execution examples
 
-Epistesys (Japanese: エピステシス) `6.3.2-alpha.2` is a baseline implementation derived from a selected Labyrinth-Codex v6.3.1 source snapshot. It was initially stored independently as a private clone with a new Git history and does not inherit original history, personal state, credentials, caches, receipt roots, or replay ledgers. Internal `lc631-*` crate, command, and schema IDs remain compatibility identifiers for now to limit behavioral drift.
-
-**Capability:** Epistesys executes receipt verification, TL/TLDG, 256×8 world materialization, RPA-00 through RPA-39, candidate-only Media, and Host replay v2 under its own identity.
-
-**Outcome:** It tracks states and evidence boundaries from seed through candidate, validation, and output using CLI, schema, fixture, and Rust-test surfaces.
-
-**First action:** run `./scripts/run-epistesys.ps1 lc631-tl-doctor --prompt "mixed seed"`.
-
-**First result:** the TL doctor returns source roundtrip, parse defects, and Clarify/Hold boundaries as JSON. Observe the world budget and promotion predicates through the world doctor and promotion gate respectively.
-
-**Evidence:** keep Cargo build/test/clippy, major CLI, RepoSeiri, and Assurance-Compiler records separately.
-
-**Constraint:** the alpha is source-only and does not automatically guarantee external receipts, fresh host pickup, external backends, remote CI, occupancy, or general performance.
-
-### Inherited implementation surface
-
-- **Authenticated receipts:** verify principal, receipt class, subject revision, scope, nonce, payload digest, expiry, and parent; return wire inputs to `Untrusted` and admit only opaque verified states to strong gates.
-- **Unified DeepGrammar / TranslationLoss v3:** project natural language and programs through lossless source, token/region lattices, UnifiedSyntaxHypergraph, constraint graph, and semantic views; retain correspondence, omissions, contradictions, and incomparability in ProjectionDefectGraph. Geometry proposals create no canonical truth or authority.
-- **Posited worlds and GPU numeric islands:** pass 256 distinct worlds through eight projections as 2,048 evaluation rows. The inherited surface includes eight logical lanes, bounded sparse relations, device-side reduction, CPU final validation, and fault quarantine.
-- **Program Analysis / Media:** represent Rust, Python, and Assembly through RPA-00 through RPA-39 typed stages and keep EvidenceState separate from ClosureState. Media binds an authenticated local source to backend, model, license, method, and budget; candidates do not auto-promote to Validated.
-- **Host / replay:** connect exact output-byte digests, HostOutputReceipt v2, the Stop hook, sink re-verification, and append-only replay. Legacy fields remain compatibility views and are not strong evidence.
-
-### Implemented and usable capabilities
-
-The following implementation surfaces inherited from v6.3.1 can be executed and inspected under the Epistesys identity and independent launcher. Capabilities here refer to the presence and operation of implementation paths; they do not demonstrate effects on the research goals above.
-
-- The current Rust workspace has 13 crates (12 in the inherited baseline), with feature-reduced/default builds, workspace tests, strict clippy, and a locked release build.
-- `lc631-tl-doctor` output for source roundtrip, obligations, ProjectionDefects, and Clarify/Hold boundaries.
-- `lc631-world-doctor` exact budget checks for 256 distinct worlds, eight projections, and 2,048 materialized evaluations.
-- `lc631-promotion-gate` fail-closed decisions when receipts are missing, explicitly returning `promotion_allowed=false` and `automatic_promotion=false`.
-- RPA-00 through RPA-39 typed Rust/Python/Assembly analysis, separate EvidenceState and ClosureState, and retained tool provenance.
-- Authenticated local Media plans, candidate types, Media observations, and TranslationEnvelope linkage. A YouTube URL or arbitrary JSON alone cannot become Validated.
-- Source paths for exact output digests, HostOutputReceipt v2, the Stop hook, sink re-verification, and append-only replay.
-- Independent startup through `run-epistesys.ps1` from a cwd outside the clone.
-
-These capabilities execute and can be inspected in the clone. Missing external receipts, fresh Host v2 pickup, external parsers/models, remote CI, shader occupancy, and general performance comparisons do not make the implementation surfaces above nonexistent.
-
-### Added DGCL / EPIA2 implementation and closure scope
-
-Current source state: **6.3.2-alpha.2 SourceReleaseReady**. The [final verification](validation/epia2-alpha2-release-verification-2026-10-02.md) and [release notes](docs/epistesys-6.3.2-alpha.2-release-notes-2026-10-02.md) record gates rerun under alpha.2 identity and unproven scope.
-
-Alpha.2 is an experimental version adding DGCL implementation/connectivity to the inherited baseline. See the [operating profile and closure](docs/dgcl-operating-profile-and-closure.md) and [prepromotion functional gates](validation/epia2-prepromotion-functional-pass-2026-10-02.md). Source readiness, distribution validation, and real host activation are separate states. Repair CLI requires `--ledger-root` and a separately managed `--head-root`; `lc631-dgcl-package-resume` requires fresh evidence without rewriting. Grammar revision is `controlled-ja-en-instruction-earley.v2`; materialization binds IR/TL/plan/candidate identity.
-
-DGCL/EPIA2 adds a source-identity-preserving path from pinned CommonMark event parsing, Rust tree-sitter CST, actual Japanese/English Stanza dependency workers, and budgeted Earley controlled instruction grammar through per-requirement Program IR→TranslationLoss→completion plans→signed evidence gaps→exact final candidates. Negation, conditions, exceptions, time, scopes, references, and dependencies remain independent structures; unknown truth and complete arbitrary-language understanding are not filled in by guesswork. Public-report success flags cannot promote verified completion; a dedicated constructor reverifies every receipt and the current lifecycle.
-
-Coding can execute separate compiler checks, runtime tests, production API connection invocations, and acceptance tests bound to registered Cargo tools, externally issued Authority receipts, and independent intent binding. Actual root/file-bounded repairs, non-overwriting backups, post-change build snapshots, a four-attempt repair coordinator, and reevaluation of every requirement from fresh receipts are connected. Writer locks, v1/v2 checkpoints, separately stored signed heads/resume, next-epoch distillation over changed content state, and decision-aware evaluation APIs are also added. Models, credentials, and receipt roots are not distributed. [Operating profile and closure](docs/dgcl-operating-profile-and-closure.md) records CLI/SDK prerequisites and residual risks.
-
-These are additions to implementation/connectivity within the declared profile; they do not establish arbitrary-instruction semantic accuracy, complete natural-language grammar, hallucination reduction, host-wide enforcement, or formal proof. Retain candidate ≠ Validated and local test ≠ correctness/general performance. No independent gold exists: research evaluation remains PendingNoCorpus; real host callbacks/delivery remain PendingHostObservation. Distinguish the historical [DGCL implementation status](docs/dgcl-implementation-status-2026-09-28.md) from the [repair audit](validation/epia2-repair-blocker-audit-2026-10-02.md).
-
-`lc631-dgcl-verify` and `lc631-dgcl-finalize` launch a real binary and therefore require explicit `--execute`. The finalizer checks required arguments and the receipt environment before creating a checkpoint.
-
-### Startup
-
-See [Codex default routing](docs/codex-default-routing.md) for configured-default use and explicit selection of another line. Defaults are not host-wide enforced interception.
+These are diagnostics; parsing does not issue execution authority. Effectful verify/finalize commands require explicit `--execute` and conditions including registered tools and external receipts.
 
 ```powershell
-./scripts/run-epistesys.ps1 lc631-tl-doctor --prompt "mixed seed"
-./scripts/run-epistesys.ps1 lc631-dg1-doctor --prompt "Implement it. Do not publish."
-./scripts/run-epistesys.ps1 lc631-coding-closure --prompt "Please update the implementation."
-./scripts/run-epistesys.ps1 lc631-world-doctor --prompt "mixed seed"
+./scripts/run-epistesys.ps1 lc631-tl-doctor --prompt "Please test the package. Do not publish."
+./scripts/run-epistesys.ps1 lc631-world-doctor --prompt "Please test the package. Do not publish."
 ./scripts/run-epistesys.ps1 lc631-doctor --repo .
 ```
 
-`lc631-*` are inherited compatibility commands. The Epistesys launcher resolves its runner from its own installation and never falls back to an absolute path in the old repository.
+The launcher resolves its runner relative to its installation. See the [execution guide](docs/execution-guide.md) for startup including other working directories, and the [routing contract](docs/codex-default-routing.md) for UTF-8 stdin/default Codex facades. Configured defaults are not host-wide enforcement.
 
-### Documentation entry points
+### Documentation routes
 
-- [Research hypotheses and evaluation policy](docs/research-hypotheses.md): separate research goals, design objectives, and testable predictions
-- [GB-CC75 study](docs/research/gb-cc75-study.md): predecessor exploratory paired evaluation, results, and limitations
-- [GB-CC75 methods/provenance](docs/research/gb-cc75-methods-and-provenance.md): evidence levels for settings, missingness, disclosure scope
-- [GB-CC75 public aggregates](benchmarks/gb-cc75/2026-08-18/README.md): CSV/JSON and recomputation steps
-- [Epistesys prospective plan](docs/research/epistesys-prospective-evaluation-plan.md): unused holdouts, independent grading, matched budgets
-- [Clone contract](docs/migration-contract.md): inheritance, exclusions, and initial-version boundaries
-- [Adoption manifest](docs/adoption-manifest.md): 119 adopted files and four exclusions
-- [Clone verification](docs/clone-verification.md): EPI-05 execution results
-- [Assurance boundary](docs/assurance-compiler-status.md): bounded static-review status
-- [Known limitations](docs/known-limitations.md): alpha observations, holds, and revalidation conditions
-- [DGCL implementation status](docs/dgcl-implementation-status-2026-09-28.md): DeepGrammar/Coding Closure slice state and incomplete gates
-- [Independent DGCL gold collection protocol](docs/dgcl-gold-collection-protocol.md): conditions for collecting and adjudicating the missing evaluation corpus
-- [RepoSeiri audit](docs/reposeiri-audit.md): repository-structure, wording, and hold observations
-- [Initial clone release](docs/initial-clone-release-record.md): root commit and main-bootstrap record
+| Reader interest | Entry point |
+| --- | --- |
+| System boundaries, dataflow, terminology | [System architecture](docs/system-architecture.md) |
+| Execution, repair, resume | [Execution guide](docs/execution-guide.md) → [DGCL execution contract](docs/dgcl-operating-profile-and-closure.md) |
+| Wire formats and compatibility | [DGCL wire compatibility](docs/dgcl-wire-compatibility.md) → [schema contract](schemas/closure-and-receipt-contract.md) |
+| Evaluation design and observations | [Research hypotheses](docs/research-hypotheses.md) → [GB-CC75 study](docs/research/gb-cc75-study.md) |
+| Current verification and residual conditions | [Alpha.2 final verification](validation/epia2-alpha2-release-verification-2026-10-02.md) → [Known limitations](docs/known-limitations.md) |
+| Source provenance, exclusions, history | [Migration contract](docs/migration-contract.md) → [Documentation index](docs/README.md) |
 
-The v6.3.1 documents under `docs/` are inherited historical design and audit records. They do not describe new Epistesys features; the current identity and state are defined by this README, clone verification, and known limitations.
-
-### Initial alpha state
-
-The current alpha is source-only. The source Windows/macOS packaged binaries were excluded by the absolute-build-path audit. The EPI-05 release build from Epistesys source succeeded, but the resulting binary also retained build paths and is not included in distribution. Inherited Unavailable, Hold, Clarify, fallback, and unobserved ranges remain recorded. Local test success does not establish correctness or general performance, formal proof, host-level enforcement, or completed external backends. Candidate and Validated are distinct states; general-performance claims remain pending evaluation.
-
-Epistesys-7 will be designed as a separate version and change set after initial clone behavior and information separation are complete.
+The initial clone uses independent Git history and excludes personal state, credentials, caches, receipt roots, and replay ledgers. `lc631-*` names are compatibility identifiers retained to limit behavior changes. The [documentation index](docs/README.md) separates detailed implementation records and inherited design/audit history from the current specification.

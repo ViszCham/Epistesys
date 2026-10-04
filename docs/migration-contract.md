@@ -8,11 +8,7 @@ Epistesys（エピステシス）は、Labyrinth-Codex v6.3.1の実装挙動を�
 
 上流の固有プロジェクト名、内部関係、由来、非公開URL、個人用資料、個人用状態、非開示の設計情報は持ち込みません。名称の置換だけでは分離完了とせず、本文、リンク、図、JSON、コメント、fixture、埋込み文字列、metadata、binaryのsource検査を行います。権利表示とlicense表示は削除しません。
 
-標語は次を継承します。
-
-> **シードは仕様ではない。** \
-> **シード以前からコミットまで、すべての射影に証跡を。** \
-> Epistesysは、解釈・権限・証拠・計算・検証・出力コミットを、ひとつの境界付き制御経路として扱います。
+設計上は、入力・解釈された要求・実行権限・検証証拠・出力状態を区別し、各変換をsource revisionと対応付けます。2026-10-04の文書改訂では標語による説明を廃止し、これらの操作的定義へ置き換えました。clone由来と非開示情報の除外条件、実装の互換識別子は変更しません。[システムアーキテクチャ](system-architecture.md)を参照してください。
 
 初回cloneの完了は、機能全体の完成、一般性能、形式証明、host-level enforcement、外部backendの検証済み状態を意味しません。継承した未観測、Unavailable、Hold、Clarify、fallback、既知の制約は残します。commit、push、tag、plugin install、host reloadは、この契約から自動的には許可されません。
 
@@ -24,10 +20,6 @@ The inheritance set is the pinned v6.3.1 source revision, required Rust workspac
 
 Upstream-specific project names, relationships, provenance, private URLs, personal materials, personal state, and non-disclosable design information are not transferred. Renaming alone does not complete separation; inspect prose, links, diagrams, JSON, comments, fixtures, embedded strings, metadata, and binaries. Do not remove required rights or license notices.
 
-The slogans are inherited:
-
-> **Seed is not spec.** \
-> **From pre-seed to commit, every projection leaves a witness.** \
-> Epistesys governs interpretation, authority, evidence, computation, validation, and output commitment as one bounded control path.
+The design distinguishes input, interpreted requirements, execution authority, validation evidence, and output states, binding each transformation to a source revision. The 2026-10-04 documentation revision replaces slogans with these operational definitions. Clone provenance, non-disclosable-information exclusions, and compatibility identifiers remain unchanged. See [system architecture](system-architecture.md).
 
 Initial clone completion does not mean complete functionality, general performance, formal proof, host-level enforcement, or validated external backends. Retain inherited unobserved, Unavailable, Hold, Clarify, fallback, and known-limit states. Commit, push, tag, plugin installation, and host reload are not automatically authorized by this contract.

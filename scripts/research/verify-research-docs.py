@@ -17,6 +17,9 @@ DOCS = [
         "epistesys-prospective-evaluation-plan",
     )],
     "validation/gb-cc75-documentation-verification-2026-10-03.md",
+    "docs/system-architecture.md", "docs/execution-guide.md",
+    "docs/dgcl-operating-profile-and-closure.md", "docs/migration-contract.md",
+    "docs/implementation-status.md",
 ]
 METRIC_TOKENS = (
     "74.38%", "94.10%", "19.71", "39.52%", "48.50%", "8.98",
