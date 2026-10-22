@@ -9,6 +9,7 @@
 | 目的 | 読む順序 | 確認できる内容 |
 | --- | --- | --- |
 | システム工学・情報科学の観点で構造を把握する | [README](../README.md) → [アーキテクチャ](system-architecture.md) | 対象とする失敗、用語、データフロー、信頼境界 |
+| Coding支援を利用・統合する | [Coding概要](../README.md#coding-assistance-ja) → [実行ガイド](execution-guide.md) → [DGCL実行契約](dgcl-operating-profile-and-closure.md) | 明示選択、要求追跡、検証、候補適用、再開、判定範囲 |
 | sourceを実行・検査する | [実行ガイド](execution-guide.md) → [DGCL実行契約](dgcl-operating-profile-and-closure.md) | 診断、権限・tool条件、修復、再開、適用範囲 |
 | interfaceを統合する | [wire互換性](dgcl-wire-compatibility.md) → [schema契約](../schemas/closure-and-receipt-contract.md) | field・stage・consumer view、失効と互換性 |
 | 効果を評価する | [研究仮説](research-hypotheses.md) → [前向き評価案](research/epistesys-prospective-evaluation-plan.md) | 仮説、予算統制、holdout、Judge、欠測 |
@@ -25,6 +26,8 @@
 | 補助監査 | [Assurance境界](assurance-compiler-status.md)、[RepoSeiri記録](reposeiri-audit.md) | 監査範囲・未対応・保留を保持する。一般安全性の証明ではない |
 
 現alphaのsource検証、配布検証、実host activation、研究効果は別状態です。candidate／Validated、証拠／権限、出力確定／配信を同一視しません。共通の定義は[用語表](system-architecture.md#terminology-ja)に集約しています。
+
+Coding支援の説明と実装範囲を照合した今回の所見・修正・検証範囲は[文書改訂の敵対監査記録](../validation/coding-documentation-adversarial-review.md)に記録しています。
 
 ### GB-CC75：前身の探索的な経験的観測
 
@@ -50,7 +53,7 @@
 - [初回commit候補](initial-commit-candidate.md)、[初回preflight](initial-commit-preflight.md)
 - [DGCL実装状態：2026-09-28](dgcl-implementation-status-2026-09-28.md)、[alpha.2詳細roadmap](epistesys-6.3.2-alpha.2-dgcl-closure-roadmap-2026-10-01.md)
 - [昇格前functional gate](../validation/epia2-prepromotion-functional-pass-2026-10-02.md)、[修復監査](../validation/epia2-repair-blocker-audit-2026-10-02.md)
-- [Codex既定ルーティング](codex-default-routing.md)：現在のfacade契約。host強制とは区別する
+- [Codex明示選択時のルーティング](codex-default-routing.md)：現在のfacade利用契約。host強制とは区別する
 
 </details>
 
@@ -81,6 +84,7 @@ This index separates current specifications, operating conditions, verification 
 | Purpose | Reading order | Information |
 | --- | --- | --- |
 | Understand the structure from systems engineering/computer science | [README](../README.md) → [Architecture](system-architecture.md) | Failure model, terminology, dataflow, trust boundaries |
+| Use/integrate Coding assistance | [Coding overview](../README.md#coding-assistance-en) → [Execution guide](execution-guide.md) → [DGCL contract](dgcl-operating-profile-and-closure.md) | Explicit selection, requirement traceability, validation, candidate application, resume, decision scope |
 | Execute/inspect source | [Execution guide](execution-guide.md) → [DGCL contract](dgcl-operating-profile-and-closure.md) | Diagnostics, authority/tool conditions, repair, resume, scope |
 | Integrate interfaces | [Wire compatibility](dgcl-wire-compatibility.md) → [schema contract](../schemas/closure-and-receipt-contract.md) | Fields/stages/consumer views, invalidation, compatibility |
 | Evaluate effects | [Research hypotheses](research-hypotheses.md) → [Prospective plan](research/epistesys-prospective-evaluation-plan.md) | Hypotheses, budgets, holdouts, Judges, missingness |
@@ -97,6 +101,8 @@ This index separates current specifications, operating conditions, verification 
 | Advisory audit | [Assurance boundary](assurance-compiler-status.md), [RepoSeiri record](reposeiri-audit.md) | Scope, unsupported cases, and holds; not general-safety proof |
 
 Source verification, distribution verification, real host activation, and research effects are separate states. Candidate/Validated, evidence/authority, and finalization/delivery differ. Definitions are centralized in the [terminology table](system-architecture.md#terminology-en).
+
+The [documentation adversarial-review record](../validation/coding-documentation-adversarial-review.md) records this revision's findings, corrections, and verification scope for Coding assistance and its implementation boundaries.
 
 ### GB-CC75: exploratory predecessor observations
 
@@ -122,7 +128,7 @@ The following are not prerequisites for the current specification. Consult them 
 - [Initial commit candidate](initial-commit-candidate.md), [initial preflight](initial-commit-preflight.md)
 - [DGCL status: 2026-09-28](dgcl-implementation-status-2026-09-28.md), [detailed alpha.2 roadmap](epistesys-6.3.2-alpha.2-dgcl-closure-roadmap-2026-10-01.md)
 - [Prepromotion functional gates](../validation/epia2-prepromotion-functional-pass-2026-10-02.md), [repair audit](../validation/epia2-repair-blocker-audit-2026-10-02.md)
-- [Default Codex routing](codex-default-routing.md): current facade contract, distinct from host-wide enforcement
+- [Codex routing after explicit selection](codex-default-routing.md): current facade-use contract, distinct from host-wide enforcement
 
 </details>
 

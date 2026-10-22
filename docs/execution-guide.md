@@ -29,9 +29,21 @@ launcherは自身の配置からrunnerを解決するため、別cwdでもchecko
 
 ### Codexからの入力
 
-Codex facadeの既定はalpha.2です。codingとconversationのfacadeを重複実行せず、元入力をUTF-8 stdinで`lc631-dgcl-run --prompt-stdin`へ渡します。source／Program IR／TL／candidate／未解決状態を同artifactで確認します。具体的なroutingは[Codex既定ルーティング](codex-default-routing.md)に記載しています。
+Epistesysを明示選択し、host側で利用を有効にした場合、codingにはCoding Projector、通常会話にはConversation Projectorを使用します。両facadeを重複実行せず、元入力をUTF-8 stdinで`lc631-dgcl-run --prompt-stdin`へ渡します。source／Program IR／TL／candidate／未解決状態を同artifactで確認します。具体的な手順は[明示選択時のルーティング](codex-default-routing.md)に記載しています。repositoryを開くことやEpistesysへの言及だけで、自動利用を選択したことにはなりません。
 
 configured-Stanzaは明示的なworker/model/runtime pinを必要とします。未設定構成の出力を実Stanza観測へ読み替えません。
+
+### Coding作業を進める順序
+
+| 段階 | 入口・必要な材料 | 確認する結果 |
+| --- | --- | --- |
+| 要求を調べる | 明示選択したfacadeと`lc631-dgcl-run` | sourceに対応する要求、未対応・曖昧性、IR/TL/planのidentity |
+| 検証を計画する | 要求別のtarget、外部intent binding、登録toolとvalidation plan | 各gapで必要な証拠と対象snapshot |
+| 検証する | 外部権限と材料を与える`lc631-dgcl-package-finalize` | 個別のcompiler/runtime/connection/acceptance観測、残るgap、candidate |
+| 候補を適用する | 呼出側のreplacement、Edit/Test権限、journal/headを与える`lc631-dgcl-package-repair` | backup、実変更後snapshot、新しい証拠と要求別再判定 |
+| 中断後に再検証する | 同bundle・ledger・headとfresh材料を与える`lc631-dgcl-package-resume` | 現在のsource・権限・証拠に対する状態。未確認作用は診断を保持 |
+
+コマンド名は各操作への入口を示します。実行には[DGCL実行契約](dgcl-operating-profile-and-closure.md)の入力条件が必要です。現在のpackage repair CLIは1件のrequest/replacementを受け取り、SDKの最大4回という上限から自動候補生成は導出しません。finalizationの出力は要求・gap ledgerの検査結果であり、hostへの送信・受領は別に観測します。
 
 ### 副作用を伴う操作
 
@@ -75,9 +87,21 @@ Launchers resolve runners relative to their installation, so reference the check
 
 ### Codex input
 
-Alpha.2 is the default facade. Do not double-run coding/conversation facades; pass original input as UTF-8 stdin to `lc631-dgcl-run --prompt-stdin`. Check source/Program IR/TL/candidate/residuals within the same artifact. The [default-routing contract](codex-default-routing.md) specifies the route.
+When Epistesys is explicitly selected and enabled on the host, use the Coding Projector for coding and the Conversation Projector for ordinary conversation. Do not double-run these facades; pass original input as UTF-8 stdin to `lc631-dgcl-run --prompt-stdin`. Check source/Program IR/TL/candidate/residuals within the same artifact. See [routing after explicit selection](codex-default-routing.md). Opening the repository or mentioning Epistesys alone does not select automatic use.
 
 Configured Stanza requires explicit worker/model/runtime pins. Never reinterpret unconfigured output as observed Stanza execution.
+
+### Coding workflow
+
+| Stage | Entry point / required material | Result to inspect |
+| --- | --- | --- |
+| Inspect requirements | Explicitly selected facade and `lc631-dgcl-run` | Source-linked requirements, unsupported/ambiguous states, IR/TL/plan identities |
+| Plan validation | Per-requirement targets, external intent binding, registered tools/plans | Required evidence for each gap and target snapshot |
+| Validate | `lc631-dgcl-package-finalize` with external authority/material | Separate compiler/runtime/connection/acceptance observations, remaining gaps, candidate |
+| Apply a candidate | `lc631-dgcl-package-repair` with caller replacement, Edit/Test authority, journal/head | Backup, changed snapshot, fresh evidence, per-requirement reevaluation |
+| Revalidate after interruption | `lc631-dgcl-package-resume` with the same bundle/ledger/head and fresh material | State against current source/authority/evidence; retain unconfirmed-effect diagnostics |
+
+Command names identify entry points; execution requires the inputs in the [DGCL contract](dgcl-operating-profile-and-closure.md). The current package repair CLI accepts 1 request/replacement; the SDK ceiling of 4 attempts does not imply automatic candidate generation. Finalization reports the checked requirement/gap ledger; host send/receipt requires separate observation.
 
 ### Effectful operations
 

@@ -29,14 +29,24 @@ Epistesys（エピステシス）は、AIシステムの**要求管理、実行�
 | 要求の追跡 | 否定・条件・例外・時間・scope・参照・依存を、source revisionと要求別Program IRに結び付ける |
 | 射影の検査 | TranslationLoss v3の`ProjectionDefectGraph`で、対応・欠落・矛盾・比較不能を保持する。幾何的提案は補助情報 |
 | 権限・証拠 | principal、scope、revision、nonce、期限、parent、payload digestを持つreceiptを検証する |
-| Coding検証・修復 | compiler check、runtime test、production接続、acceptance testを別観測として扱い、限定ファイル修復と新snapshotの再検証を接続する |
+| Coding検証・修復 | compiler check、runtime test、指定APIからexecutorへの呼出し、acceptance testを別観測として扱い、限定ファイル修復と新snapshotの再検証を接続する |
 | 仮説探索・GPU | 256のdistinct world × 8 projection＝2,048 evaluation rows。数値計算経路とCPU最終検証を分離する |
 | Program Analysis・Media | Rust／Python／AssemblyのRPA型、媒体のsource・backend・model・license・method・budgetに束縛した候補と観測 |
 | 出力・再開 | exact output digest、HostOutputReceipt v2、Stop hook、sink検査、checkpoint、append-only journal／replay |
 
 **DGCL**はDeepGrammarからCodingの要求別完了判定までを接続する経路です。未知の条件の真偽や未対応文法を推測で補わず、`Unsupported`／`Unresolved`／`Ambiguous`として保持します。外部モデルを使わない構成と、設定済みStanza構成を区別します。
 
-alpha.2は、実ファイル修復、非上書きbackup、最大4回のrepair coordinator、writer lock、ledgerと別管理の署名head、状態更新を伴う離散・連続表現の蒸留、明示的consumer view v1/v2を追加しています。Rust workspaceは13 crateです。修復・再開の事前条件と検証範囲は[DGCL実行契約](docs/dgcl-operating-profile-and-closure.md)、型・境界・継承機構の詳細は[システムアーキテクチャ](docs/system-architecture.md)に整理しています。
+alpha.2は、実ファイル修復、非上書きbackup、最大4回を上限とするSDK repair coordinator、writer lock、ledgerと別管理の署名head、状態更新を伴う離散・連続表現の蒸留、明示的consumer view v1/v2を追加しています。Rust workspaceは13 crateです。修復・再開の事前条件と検証範囲は[DGCL実行契約](docs/dgcl-operating-profile-and-closure.md)、型・境界・継承機構の詳細は[システムアーキテクチャ](docs/system-architecture.md)に整理しています。
+
+<a id="coding-assistance-ja"></a>
+
+### コーディング支援：要求追跡・検証・修復
+
+コーディング支援は、Epistesysの主要な適用先の一つです。対応するprofileでは、要求、実装対象、呼び出し経路、検証結果を対応づけ、完了判定の根拠を追跡する制御経路を実装しています。対象とする問題には、要求の一部欠落、追加した機能の未接続、検証不足、変更前の証拠の再利用があります。
+
+Epistesysを明示的に選択した場合、Coding Projectorが設計・実装・テスト・レビューの依頼を解析経路へ渡します。原文に結び付く要求と未解決事項をProgram IRに保持し、要求ごとの検証計画へ接続します。要求と実装対象の対応、コンパイラ検査、指定した実行時テスト、APIからexecutorへの呼び出し、受入試験を別々の検証材料として扱います。例えば、コンパイラ検査が成功しても、計画で要求した呼び出しの証拠がなければ、その接続のgapは残ります。
+
+修復経路は、呼び出し側が提供した候補を、許可された既存Rustファイルへ適用し、変更前の内容を保存して、変更後snapshotと新しい証拠から要求を再評価します。再開時にも現在のsource・権限・証拠を確認します。完了判定の範囲は、抽出・登録された要求と検証計画です。要求抽出の意味精度、一般的なCoding性能、実hostへの出力・配信は別の評価・観測対象です。[利用手順](docs/execution-guide.md)、[実行契約](docs/dgcl-operating-profile-and-closure.md)、[既知の制約](docs/known-limitations.md)で条件を確認できます。
 
 ### 検証状態を読むための区別
 
@@ -84,12 +94,13 @@ alpha.2は、実ファイル修復、非上書きbackup、最大4回のrepair co
 ./scripts/run-epistesys.ps1 lc631-doctor --repo .
 ```
 
-launcherは自身の配置からrunnerを解決します。別cwdからの起動を含む手順は[実行ガイド](docs/execution-guide.md)、CodexのUTF-8 stdin／既定facadeは[ルーティング契約](docs/codex-default-routing.md)を参照してください。既定設定はhost全体への強制とは異なります。
+launcherは自身の配置からrunnerを解決します。別cwdからの起動を含む手順は[実行ガイド](docs/execution-guide.md)、Epistesysを明示選択した場合のCodexのUTF-8 stdin／facadeは[ルーティング契約](docs/codex-default-routing.md)を参照してください。インストールと利用の選択は別の操作です。
 
 ### 文書の読み順
 
 | 読者の関心 | 入口 |
 | --- | --- |
+| コーディング支援の利用場面と判定条件 | [概要](#coding-assistance-ja) → [実行ガイド](docs/execution-guide.md) → [DGCL実行契約](docs/dgcl-operating-profile-and-closure.md) |
 | システム境界・データフロー・用語 | [システムアーキテクチャ](docs/system-architecture.md) |
 | 実行条件・修復・再開 | [実行ガイド](docs/execution-guide.md) → [DGCL実行契約](docs/dgcl-operating-profile-and-closure.md) |
 | wire形式・互換性 | [DGCL wire互換性](docs/dgcl-wire-compatibility.md) → [schema契約](schemas/closure-and-receipt-contract.md) |
@@ -130,14 +141,24 @@ The principal dataflow is **source preservation → syntax/requirement extractio
 | Requirement traceability | Bind negation, conditions, exceptions, time, scope, references, and dependencies to source revision and per-requirement Program IR |
 | Projection checks | TranslationLoss v3 `ProjectionDefectGraph` retains correspondence, omissions, contradictions, and incomparability; geometric proposals are advisory |
 | Authority and evidence | Validate receipts containing principal, scope, revision, nonce, expiry, parent, and payload digest |
-| Coding validation and repair | Separate compiler checks, runtime tests, production connections, and acceptance observations; connect bounded file repair and revalidation of changed snapshots |
+| Coding validation and repair | Separate compiler checks, runtime tests, specified API-to-executor invocations, and acceptance observations; connect bounded file repair and revalidation of changed snapshots |
 | Hypothesis exploration and GPU | 256 distinct worlds × 8 projections = 2,048 evaluation rows; separate numeric computation from CPU final validation |
 | Program Analysis and Media | Rust/Python/Assembly RPA types; candidates/observations bound to source, backend, model, license, method, and budget |
 | Output and resume | Exact output digests, HostOutputReceipt v2, Stop hook, sink checks, checkpoints, append-only journals/replay |
 
 **DGCL** connects DeepGrammar to per-requirement Coding completion decisions. Unknown predicate truth and unsupported grammar remain `Unsupported`/`Unresolved`/`Ambiguous`, not guessed. No-external-model and configured-Stanza profiles are distinct.
 
-Alpha.2 adds real file repair, non-overwriting backups, a four-attempt repair coordinator, writer locks, signed heads managed separately from ledgers, state-changing discrete/continuous distillation, and explicit consumer views v1/v2. The Rust workspace contains 13 crates. See the [DGCL execution contract](docs/dgcl-operating-profile-and-closure.md) for repair/resume prerequisites and scope; the [system architecture](docs/system-architecture.md) details types, boundaries, and inherited mechanisms.
+Alpha.2 adds real file repair, non-overwriting backups, an SDK repair coordinator capped at four attempts, writer locks, signed heads managed separately from ledgers, state-changing discrete/continuous distillation, and explicit consumer views v1/v2. The Rust workspace contains 13 crates. See the [DGCL execution contract](docs/dgcl-operating-profile-and-closure.md) for repair/resume prerequisites and scope; the [system architecture](docs/system-architecture.md) details types, boundaries, and inherited mechanisms.
+
+<a id="coding-assistance-en"></a>
+
+### Coding assistance: requirement traceability, validation, and repair
+
+Coding assistance is one of Epistesys's principal application areas. Within supported profiles, it implements a control path relating requirements, implementation targets, invocation paths, and validation results, making the basis for completion decisions traceable. The failure model includes omitted requirements, disconnected functionality, missing validation, and reuse of evidence collected before a change.
+
+When Epistesys is explicitly selected, the Coding Projector routes design, implementation, testing, and review requests into the analysis path. Source-linked requirements and unresolved items are retained in Program IR and connected to per-requirement validation plans. Requirement-to-implementation bindings, compiler checks, specified runtime tests, API-to-executor invocations, and acceptance tests are treated as distinct validation materials. For example, a successful compiler check still leaves a connection gap open when evidence for the invocation required by the plan is missing.
+
+The repair path applies a caller-provided candidate to an authorized existing Rust file, preserves its previous contents, and reevaluates requirements using the changed snapshot and fresh evidence. Resume also checks current source, authority, and evidence. Completion decisions cover the extracted and registered requirements and validation plans. Semantic accuracy of requirement extraction, general coding performance, and real-host output and delivery require separate evaluation or observation. See the [execution guide](docs/execution-guide.md), [execution contract](docs/dgcl-operating-profile-and-closure.md), and [known limitations](docs/known-limitations.md) for conditions.
 
 ### Interpreting verification states
 
@@ -185,12 +206,13 @@ These are diagnostics; parsing does not issue execution authority. Effectful ver
 ./scripts/run-epistesys.ps1 lc631-doctor --repo .
 ```
 
-The launcher resolves its runner relative to its installation. See the [execution guide](docs/execution-guide.md) for startup including other working directories, and the [routing contract](docs/codex-default-routing.md) for UTF-8 stdin/default Codex facades. Configured defaults are not host-wide enforcement.
+The launcher resolves its runner relative to its installation. See the [execution guide](docs/execution-guide.md) for startup including other working directories, and the [routing contract](docs/codex-default-routing.md) for UTF-8 stdin/facades when Epistesys is explicitly selected in Codex. Installation and selection for use are separate operations.
 
 ### Documentation routes
 
 | Reader interest | Entry point |
 | --- | --- |
+| Coding use cases and decision conditions | [Overview](#coding-assistance-en) → [Execution guide](docs/execution-guide.md) → [DGCL execution contract](docs/dgcl-operating-profile-and-closure.md) |
 | System boundaries, dataflow, terminology | [System architecture](docs/system-architecture.md) |
 | Execution, repair, resume | [Execution guide](docs/execution-guide.md) → [DGCL execution contract](docs/dgcl-operating-profile-and-closure.md) |
 | Wire formats and compatibility | [DGCL wire compatibility](docs/dgcl-wire-compatibility.md) → [schema contract](schemas/closure-and-receipt-contract.md) |

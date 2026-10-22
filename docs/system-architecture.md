@@ -57,9 +57,21 @@ source roundtripは原文byteの保存を表します。意味理解の正確性
 
 ### Coding検証・修復・再開
 
+Coding Projectorは、Epistesysを明示選択した利用者の依頼をDGCLへ渡すfacadeです。通常の`lc631-dgcl-run`はsource解析と候補の構築を行います。権限付きの検証、ファイル修復、再開は、追加の入力契約を持つpackage操作です。facadeの呼出しだけではこれらの操作は実行されません。
+
+| 機構 | Coding経路で扱う内容 |
+| --- | --- |
+| DeepGrammar・Program IR・TL | 原文に結び付く要求、関係、未対応・曖昧性、射影の不整合 |
+| completion plan・gap ledger | 要求と実装対象の対応、必要な検証材料、未解決gap |
+| 検証producer | 実装binding、コンパイラ検査、指定runtime、指定APIからexecutorへの到達、受入試験の別観測 |
+| repair・resume | 呼出側の候補適用、backup、新snapshot、証拠の再取得、中断後の再検証 |
+| package finalization candidate | 必要な証拠を再検査した要求・gap ledgerと、その正確な出力bytes |
+
+判定は抽出・登録された要求と計画に束縛されます。要求抽出の漏れ、実装bindingの意味的妥当性、受入oracleの網羅性は、それぞれ評価を要します。登録経路の到達観測を、全呼出し経路や配備済みサービスの検証へ拡張しません。
+
 Codingでは、compiler check、library runtime test、production API接続呼出し、acceptance testを独立した観測として扱います。登録tool、外部Authority receipt、独立intent bindingを必要とします。
 
-CLIのpackage finalizerは条件なしRequired要求の限定profileを扱います。repairは既存Rust fileとrepository/fileのscopeに束縛され、修復前bytesを非上書きbackupへ保存します。変更後snapshotと新しいreceiptで要求を再検証します。SDK repair coordinatorの予算は最大4回で、NoProgress、cycle、stale/expired evidence、未確認作用を区別します。
+CLIのpackage finalizerは条件なしRequired要求の限定profileを扱います。repairは呼出側が提供したreplacementを、既存Rust fileとrepository/fileのscopeに束縛して適用し、修復前bytesを非上書きbackupへ保存します。変更後snapshotと新しいreceiptで要求を再検証します。SDK repair coordinatorの予算は最大4回ですが、現在のpackage repair CLIは1件のrequestとreplacementを渡します。NoProgress、cycle、stale/expired evidence、未確認作用を区別します。詳細は[DGCL実行契約](dgcl-operating-profile-and-closure.md)に集約しています。
 
 再開は「保存された完了flagの復元」ではありません。writer lock、append-only journal、別管理の署名headを用い、現在のsource・権限・intent・Cargo観測を再評価します。`MayHaveApplied`は未確認作用であり、成功やrollback済みを意味しません。
 
@@ -148,9 +160,21 @@ Exact source roundtrip preserves bytes, not semantic accuracy, general-grammar c
 
 ### Coding validation, repair, and resume
 
+The Coding Projector is a facade routing requests to DGCL when the user explicitly selects Epistesys. Ordinary `lc631-dgcl-run` performs source analysis and candidate construction. Authorized validation, file repair, and resume are package operations with additional input contracts; invoking the facade alone does not execute them.
+
+| Mechanism | Information handled in the Coding path |
+| --- | --- |
+| DeepGrammar, Program IR, TL | Source-linked requirements, relations, unsupported/ambiguous states, projection defects |
+| Completion plans and gap ledger | Requirement-to-target bindings, required validation material, unresolved gaps |
+| Validation producers | Distinct implementation-binding, compiler, specified-runtime, specified-API-to-executor, and acceptance observations |
+| Repair and resume | Caller-supplied candidate application, backups, changed snapshots, fresh evidence, interrupted-run revalidation |
+| Package finalization candidate | Requirement/gap ledger rechecked against required evidence and its exact output bytes |
+
+Decisions are bound to extracted/registered requirements and plans. Extraction omissions, semantic validity of implementation bindings, and acceptance-oracle coverage each require evaluation. Observed reachability of a registered route does not establish coverage of every invocation path or a deployed service.
+
 Compiler checks, library runtime tests, production API connection invocations, and acceptance tests are distinct observations. Registered tools, external Authority receipts, and independent intent binding are required.
 
-Package finalization uses a bounded profile of unconditional Required requirements. Repair is scoped to existing Rust files and repository/file identities; preserve preimage bytes in non-overwriting backups. Revalidate changed snapshots with fresh receipts. The SDK repair coordinator permits at most four attempts and separates NoProgress, cycles, stale/expired evidence, and unconfirmed effects.
+Package finalization uses a bounded profile of unconditional Required requirements. Repair applies a caller-provided replacement within existing-Rust-file and repository/file scopes, preserving preimage bytes in non-overwriting backups. Revalidate changed snapshots with fresh receipts. The SDK repair coordinator permits at most four attempts, while the current package repair CLI supplies one request and replacement. NoProgress, cycles, stale/expired evidence, and unconfirmed effects remain distinct. The [DGCL execution contract](dgcl-operating-profile-and-closure.md) centralizes details.
 
 Resume is not restoration of a saved completion flag. Writer locks, append-only journals, and separately managed signed heads support revalidation of current source/authority/intent/Cargo evidence. `MayHaveApplied` denotes unconfirmed effects, neither success nor completed rollback.
 

@@ -1,8 +1,10 @@
-# Codex default routing / Codex既定ルーティング
+# Codex明示選択時のルーティング / Codex routing after explicit selection
 
 ## 日本語
 
-Epistesys 6.3.2-alpha.2を既定に設定したhostでは、明示的な別engine/version指定がない限り、非codingに`epistesys:lc631-conversation-projector`、coding/review/testに`epistesys:lc631-coding-projector`を一つだけ使用する。既存Labyrinth lineは比較・明示指定用に保持し、通常の二重実行や故障時の無断fallbackは行わない。この方針はuser instructionとplugin/skill設定であり、全sessionの実行を数学的に保証するhost interceptionではない。
+この文書は、利用者がEpistesysを明示選択し、host側で利用を有効にした場合の手順である。非codingには`epistesys:lc631-conversation-projector`、coding/review/testには`epistesys:lc631-coding-projector`を一つだけ使用する。version指定がなければ対象は6.3.2-alpha.2とする。選択範囲は利用者が指定したtask/sessionに従い、repositoryの閲覧・編集やEpistesysへの言及だけでは利用を選択しない。古いskill内の「既定」表現より、利用者の明示指示を優先する。
+
+既存Labyrinth lineも明示指定用に保持し、通常の二重実行や故障時の無断fallbackは行わない。要求されたlineが利用不能なら、その状態を報告する。これはhost設定・利用者指示で選択するルーティングであり、host interceptionではない。ファイル名は既存linkとの互換性のため維持している。
 
 alpha.2の主経路は`lc631-dgcl-run`で、同sourceのDeepGrammar→Program IR→TL→plan→candidateを保持する。外部modelなしとconfigured Stanzaを区別し、unknown/Unsupported/未検証をtruthや権限へ昇格しない。通常会話のsource-candidate Holdを返答禁止と同一視せず、明示的に許可された作業への権限判断は元user instructionから別に行う。危険作用、実装完了、host送信はそれぞれの検証・権限を必要とする。
 
@@ -18,7 +20,9 @@ source release、plugin登録/cache install、enabled設定、host pickup、再�
 
 ## English
 
-On hosts configured to use Epistesys 6.3.2-alpha.2 by default, select exactly one facade unless the user explicitly chooses another engine/version: `epistesys:lc631-conversation-projector` for non-coding, `epistesys:lc631-coding-projector` for coding/review/tests. Retain existing Labyrinth lines for comparisons/explicit selection, without routine double execution or silent failure fallback. This policy is implemented through user instructions and plugin/skill settings, not mathematically guaranteed host interception across sessions.
+This document describes use after the user explicitly selects Epistesys and enables it on the host. Select exactly one facade: `epistesys:lc631-conversation-projector` for non-coding or `epistesys:lc631-coding-projector` for coding/review/tests. Use 6.3.2-alpha.2 when no version is specified. Respect the task/session scope stated by the user; browsing/editing the repository or mentioning Epistesys alone does not select its use. Explicit user instructions take precedence over older default-use wording in skills.
+
+Retain existing Labyrinth lines for explicit selection, without routine double execution or silent failure fallback. Report an unavailable requested line. This routing is selected through host settings/user instructions, not host interception. The existing filename is retained for link compatibility.
 
 Alpha.2's primary route is `lc631-dgcl-run`, retaining same-source DeepGrammar→Program IR→TL→plan→candidate. Distinguish no-external-model and configured Stanza profiles; unknown/Unsupported/unverified states never become truth or authority. A conversational source-candidate Hold is not a ban on responding; authorization for explicitly requested work is separately classified from the original user instruction. Dangerous effects, implementation completion, and host sending require their own validation/authority.
 

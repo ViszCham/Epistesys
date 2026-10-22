@@ -10,8 +10,10 @@
 | --- | --- | --- |
 | 研究効果 | hallucination containment、制約保持、長期整合性、risk–coverage、運用範囲の拡張は未実証 | 独立gold、未使用holdout、同等予算、反復・欠測・劣化を含む評価 |
 | 構文・意味 | controlled grammar外の完全理解は対象外。exact source roundtripは意味的等価性ではない | 対応文法別の独立評価、configured parser/modelの実観測 |
+| Codingの要求抽出と受入条件 | 完了判定は抽出・登録済み要求と計画に限定。未抽出要求や受入oracleの不足が残りうる | 独立goldによる要求recall、target bindingとoracle妥当性、偽保留・誤受入の評価 |
 | 権限・証拠 | 外部receiptとcaller/host trust rootに依存。local署名は実hostや人間の独立性を証明しない | issuer/key provenance、失効・scope・snapshotの確認 |
 | Coding・build | 宣言profileの検証・修復・再開を実装。任意build world、opaque build script/proc macro、OS sandboxは未保証 | dependency/build条件と実行環境の個別検証 |
+| Codingの修復と接続観測 | 既存Rust fileに呼出側候補を適用。CLIは1件のrequest、SDK上限は4回。接続証拠は登録run/target/経路に限定 | 候補作成主体と各試行、追加経路、受入条件を個別に確認する |
 | 再開・永続化 | journalと別管理headの不一致を検出。joint rollback、同一administrator改変、全OSのdirectory fsyncは範囲外 | 運用上のhead分離、key保護、OS別durability試験 |
 | GPU | local materializationと数値経路を実装。parity、readback、timing、overlap、occupancy、device-lossは別観測 | 対象backend・device・workload別の測定 |
 | Media・外部解析 | source/backend/model/license/method/budgetの条件付き候補・観測 | parser、vision、ASR等の登録・license・receipt・実backend試験 |
@@ -44,8 +46,10 @@ This document maps unobserved/unproven scope in `6.3.2-alpha.2` to required chec
 | --- | --- | --- |
 | Research effects | Hallucination containment, constraint preservation, long-horizon integrity, risk–coverage, and operating-range expansion are unproven | Independent gold, unused holdouts, matched budgets, repetitions/missingness/regressions |
 | Syntax/semantics | Complete interpretation outside controlled grammar is excluded; exact roundtrip is not semantic equivalence | Independent grammar-specific evaluation and observed configured parsers/models |
+| Coding extraction and acceptance conditions | Completion covers extracted/registered requirements and plans; unextracted requirements and incomplete oracles may remain | Requirement recall against independent gold, target-binding/oracle validity, false-hold/false-acceptance evaluation |
 | Authority/evidence | Depend on external receipts/caller-host trust roots; local signatures do not prove real-host or human independence | Issuer/key provenance, revocation, scope, snapshot verification |
 | Coding/build | Implement declared-profile validation/repair/resume, not arbitrary build worlds, opaque scripts/proc macros, or OS sandbox guarantees | Individual dependency/build/environment checks |
+| Coding repair and connection observations | Apply caller candidates to existing Rust files; CLI supplies 1 request, SDK ceiling is 4 attempts; connection evidence covers registered run/target/route | Individually inspect candidate authorship/attempts, additional paths, and acceptance conditions |
 | Resume/persistence | Detect journal/separate-head mismatch; joint rollback, same-administrator mutation, and universal directory fsync are excluded | Operational head separation, key custody, OS-specific durability tests |
 | GPU | Implement local materialization/numeric paths; parity/readback/timing/overlap/occupancy/device-loss are separate observations | Backend/device/workload-specific measurement |
 | Media/external analysis | Conditional source/backend/model/license/method/budget-bound candidates/observations | Parser/vision/ASR registration, licensing, receipts, actual backend tests |
