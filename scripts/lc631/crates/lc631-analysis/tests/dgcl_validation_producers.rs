@@ -56,6 +56,96 @@ fn epr_18_non_utf8_repository_names_cannot_collapse_to_one_lossy_identity() {
     }
 }
 
+#[cfg(unix)]
+fn snapshot_for_path_identity(
+    root: &std::path::Path,
+) -> Result<DgclExecutionSnapshot, DgclValidationProducerError> {
+    let source = "Please test the package.";
+    let pipeline = build_dgcl_pipeline(
+        source,
+        DgclBackendSet {
+            english: None,
+            japanese: None,
+        },
+    )
+    .unwrap();
+    let fingerprint = stable_sha256("snapshot identity fixture key only");
+    let principal =
+        PrincipalBinding::from_attested_seed(&stable_sha256("snapshot fixture only"), &fingerprint)
+            .unwrap();
+    capture_dgcl_cargo_snapshot(
+        root,
+        source,
+        &pipeline,
+        &ExecutionPermitContext {
+            principal: &principal,
+            action: Action::Test,
+            scope: "snapshot-identity-fixture",
+            source_revision: &pipeline.source_revision,
+            authority_revision: AuthorityRevision(1),
+            now_epoch: 100,
+            revocation_revision: 0,
+            revoked_permit_digests: &[],
+            caller_origin: CallerOrigin::HostVerifiedUser,
+            trusted_host_fingerprint: &fingerprint,
+        },
+    )
+}
+
+#[cfg(unix)]
+#[test]
+fn epr_18_snapshot_rejects_non_utf8_input_keys_without_omitting_or_overwriting() {
+    use std::os::unix::ffi::OsStringExt;
+    let root = fixture_package();
+    assert!(snapshot_for_path_identity(&root).is_ok());
+    for byte in [0x80, 0x81] {
+        let path = root.join(std::ffi::OsString::from_vec(vec![
+            b'r', byte, b'.', b'r', b's',
+        ]));
+        std::fs::write(path, "pub fn example() {}\n").unwrap();
+    }
+    assert_eq!(
+        snapshot_for_path_identity(&root).err(),
+        Some(DgclValidationProducerError::UnsafePath)
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn epr_18_snapshot_rejects_literal_backslash_input_instead_of_aliasing_a_directory() {
+    let root = fixture_package();
+    assert!(snapshot_for_path_identity(&root).is_ok());
+    std::fs::write(root.join("src\\lib.rs"), "pub fn distinct_file() {}\n").unwrap();
+    assert!(root.join("src/lib.rs").is_file());
+    assert_ne!(
+        root.join("src\\lib.rs").canonicalize().unwrap(),
+        root.join("src/lib.rs").canonicalize().unwrap()
+    );
+    assert_eq!(
+        snapshot_for_path_identity(&root).err(),
+        Some(DgclValidationProducerError::UnsafePath)
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn epr_18_repository_literal_backslash_cannot_alias_a_nested_directory() {
+    let base = fixture_package();
+    let literal = base.join("branch\\nested");
+    let nested = base.join("branch/nested");
+    std::fs::create_dir_all(&literal).unwrap();
+    std::fs::create_dir_all(&nested).unwrap();
+    assert_ne!(
+        literal.canonicalize().unwrap(),
+        nested.canonicalize().unwrap()
+    );
+    assert!(dgcl_repository_root_digest(&nested).is_ok());
+    assert_eq!(
+        dgcl_repository_root_digest(&literal),
+        Err(DgclValidationProducerError::UnsafePath)
+    );
+}
+
 #[test]
 fn epr_08_an_unrelated_library_summary_is_not_connection_evidence() {
     assert!(!check_cargo_test_result(

@@ -30,6 +30,7 @@
     { "$ref": "#/$defs/finalization" },
     { "$ref": "#/$defs/standalone_run" },
     { "$ref": "#/$defs/cargo_validation_plan" },
+    { "$ref": "#/$defs/registered_connection_spec" },
     { "$ref": "#/$defs/package_validation_bundle" },
     { "$ref": "#/$defs/package_finalization" },
     { "$ref": "#/$defs/package_repair_bundle" },
@@ -80,8 +81,29 @@
         "candidate": { "$ref": "#/$defs/standalone_candidate" }, "claims": { "type": "array", "maxItems": 40 },
         "processes": { "type": "array", "maxItems": 32 }, "journal": { "$ref": "#/$defs/resume_observation" },
         "repair_reapplied": { "const": false }, "completion_restored_from_checkpoint": { "const": false },
+        "history_authenticated": { "type": "boolean" },
+        "historical_head_renewed_after_fresh_validation": { "type": "boolean" },
         "authority_created": { "const": false }, "host_send_authorized": { "const": false }, "output_commit_allowed": { "const": false },
         "host_observation": { "const": "pending" }, "research_evaluation": { "const": "pending_no_corpus" } }
+    },
+    "registered_connection_spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "integration_target", "test_name", "entrypoint", "implementation_path", "driver_path", "driver_digest", "observer_id", "oracle_id", "oracle_revision", "coverage"],
+      "properties": {
+        "schema_version": { "const": "epistesys-dgcl-connection-spec.v1" },
+        "integration_target": { "type": "string", "pattern": "^[A-Za-z0-9_-]+$" },
+        "test_name": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+        "entrypoint": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*::[A-Za-z_][A-Za-z0-9_]*$" },
+        "implementation_path": { "type": "string", "minLength": 1 },
+        "driver_path": { "type": "string", "pattern": "^tests/[A-Za-z0-9_-]+\\.rs$" },
+        "driver_digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "observer_id": { "const": "cargo-exact-direct-api-driver.v1" },
+        "oracle_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "oracle_revision": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "coverage": { "const": "registered_driver_direct_public_api_and_pinned_assertion" },
+        "registration": { "type": ["object", "null"] }
+      }
     },
     "cargo_validation_plan": {
       "type": "object", "additionalProperties": false,
@@ -96,7 +118,8 @@
         "repository_root_digest": { "$ref": "#/$defs/digest" },
         "acceptance_target": { "type": ["string", "null"] }, "acceptance_test": { "type": ["string", "null"] },
         "timeout_ms": { "type": "integer", "minimum": 1, "maximum": 120000 },
-        "tool_registration": { "type": ["object", "null"] }
+        "tool_registration": { "type": ["object", "null"] },
+        "connection": { "oneOf": [{ "$ref": "#/$defs/registered_connection_spec" }, { "type": "null" }] }
       }
     },
     "package_seed_receipt": {

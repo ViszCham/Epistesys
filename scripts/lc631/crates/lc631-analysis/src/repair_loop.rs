@@ -409,12 +409,6 @@ pub fn run_dgcl_repair_loop(
                 DgclRepairStatus::Conflict,
             ));
         }
-        let lifecycle_now = driver.observation_epoch().unwrap_or_else(|| {
-            input
-                .authorization
-                .now_epoch
-                .saturating_add(started.elapsed().as_secs())
-        });
         let Some(target) = snapshot
             .targets
             .iter()
@@ -447,7 +441,12 @@ pub fn run_dgcl_repair_loop(
                 DgclRepairStatus::Hold,
             ));
         }
-        let lifecycle_now = driver.observation_epoch().unwrap_or(lifecycle_now);
+        let lifecycle_now = driver.observation_epoch().unwrap_or_else(|| {
+            input
+                .authorization
+                .now_epoch
+                .saturating_add(started.elapsed().as_secs())
+        });
         if validate_dgcl_target_lease(
             &current_lease,
             &snapshot,
@@ -564,7 +563,15 @@ pub fn run_dgcl_repair_loop(
                 DgclRepairStatus::Conflict,
             ));
         }
-        let lifecycle_now = driver.observation_epoch().unwrap_or(lifecycle_now);
+        // Resample after the effect. Reusing the pre-apply epoch falsely
+        // rejects a lease legitimately issued after crossing a clock second.
+        // Never advance time from the public lease or receipt itself.
+        let lifecycle_now = driver.observation_epoch().unwrap_or_else(|| {
+            input
+                .authorization
+                .now_epoch
+                .saturating_add(started.elapsed().as_secs())
+        });
         if validate_dgcl_target_lease(
             &application.after_lease,
             &application.after_snapshot,

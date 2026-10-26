@@ -71,11 +71,21 @@ pub fn dgcl_repository_root_digest(root: &Path) -> Result<String, DgclValidation
     if !canonical.is_dir() {
         return Err(DgclValidationProducerError::UnsafePath);
     }
-    let text = canonical
-        .to_str()
-        .ok_or(DgclValidationProducerError::UnsafePath)?
-        .replace('\\', "/");
+    let text = validation_path_key(&canonical)?;
     Ok(stable_sha256(text.strip_prefix("//?/").unwrap_or(&text)))
+}
+
+fn validation_path_key(path: &Path) -> Result<String, DgclValidationProducerError> {
+    let text = path
+        .to_str()
+        .ok_or(DgclValidationProducerError::UnsafePath)?;
+    // On Unix a backslash is a literal filename byte, not a separator. The
+    // portable slash-key profile cannot silently equate it with a directory.
+    #[cfg(unix)]
+    if text.contains('\\') {
+        return Err(DgclValidationProducerError::UnsafePath);
+    }
+    Ok(text.replace('\\', "/"))
 }
 
 pub fn dgcl_cargo_registration_payload(path: &str, digest: &str) -> String {
@@ -764,13 +774,18 @@ pub fn capture_dgcl_cargo_snapshot(
                 if inputs.len() >= 4096 {
                     return Err(DgclValidationProducerError::InvalidLifecycle);
                 }
-                inputs.insert(
-                    path.strip_prefix(root)
-                        .map_err(|_| DgclValidationProducerError::UnsafePath)?
-                        .to_string_lossy()
-                        .replace('\\', "/"),
-                    digest_validation_file(&path)?,
-                );
+                let relative = path
+                    .strip_prefix(root)
+                    .map_err(|_| DgclValidationProducerError::UnsafePath)?;
+                let key = validation_path_key(relative)?;
+                match inputs.entry(key) {
+                    std::collections::btree_map::Entry::Vacant(entry) => {
+                        entry.insert(digest_validation_file(&path)?);
+                    }
+                    std::collections::btree_map::Entry::Occupied(_) => {
+                        return Err(DgclValidationProducerError::UnsafePath);
+                    }
+                }
             }
         }
     }

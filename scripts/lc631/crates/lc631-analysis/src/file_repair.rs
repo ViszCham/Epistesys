@@ -114,7 +114,9 @@ impl<'a> DgclFileRepairDriver<'a> {
 
 impl DgclRepairDriver for DgclFileRepairDriver<'_> {
     fn observation_epoch(&self) -> Option<u64> {
-        self.config.epoch_clock.map(|_| self.now())
+        // Leases and the coordinator must observe the same clock, including
+        // the SDK's monotonic logical fallback when no host clock is supplied.
+        Some(self.now())
     }
     fn apply(
         &mut self,

@@ -44,6 +44,8 @@ legacy pipeline/connection/checkpoint fixture、新pipeline、repair request/rep
 
 以下はEPR候補の境界強化です。既存JSON fieldを維持しても、従来許可された入力への検査強化や未知enumの追加が全consumerの動作互換を意味するわけではありません。alpha.2の検証記録と新候補のgate結果は分離します。
 
+`dgcl_repository_root_digest`は存在するdirectoryのcanonical identityを使い、UTF-8へ厳密に変換できないroot名を拒否します。以前のlexical path／short aliasに束縛したMAC scopeが新identityと一致しない場合、信頼する発行主体によるfreshなbindingが必要です。JSON shapeがadditiveでも、旧署名payloadの書換え、旧Grantの自動移行、旧scopeの暗黙承認は行いません。
+
 - checked-text型は従来と同じJSON文字列shapeを保ち、deserializeでもconstructorと同じ境界を検査する。`subject_revision`／issuer binding等の追加情報と内部保持の元receiptを、callerが編集できる成功fieldで代替しない。
 - `DgclConnectionSpec`はdriver digest、entrypoint、observer、oracle revision、coverageと登録receiptを明示する。legacy planのdecode成功は、この新しいdirect-driver接続証拠の充足を意味しない。
 - `TypedConstraintGraph.token_bindings`は`token_id`・`syntax_node`・`source_span`の対応をadditiveに保持する。ordinalの一致をgraph ID対応や意味証明と見なさない。
@@ -94,6 +96,8 @@ Legacy pipeline/connection/checkpoint fixtures, the new pipeline, repair request
 ### EPR candidate additive changes and strict consumers
 
 The following strengthen boundaries in the EPR candidate. Preserving existing JSON fields does not make stronger input checks or additional enum variants behaviorally compatible with every consumer. Historical alpha.2 verification remains separate from the new candidate's gate results.
+
+`dgcl_repository_root_digest` uses the canonical identity of an existing directory and rejects root names that cannot be represented exactly in UTF-8. If a MAC scope bound to an earlier lexical path/short alias differs from the new identity, fresh binding from a trusted issuer is required. An additive JSON shape does not rewrite signed payloads, automatically migrate old Grants, or implicitly accept old scopes.
 
 - Checked-text types preserve the existing JSON-string shape and enforce constructor boundaries during deserialization. Added `subject_revision`/issuer bindings and internally retained original receipts cannot be replaced by caller-editable success fields.
 - `DgclConnectionSpec` makes the driver digest, entrypoint, observer, oracle revision, coverage, and registration receipt explicit. Successful legacy-plan decoding does not satisfy the new direct-driver connection-evidence contract.
