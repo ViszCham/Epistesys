@@ -1,0 +1,48 @@
+{
+  "schema_version": "epistesys-epr-residual-risk-ledger.v1",
+  "date_jst": "2026-10-27",
+  "source_release_scope": "Declared standalone source/build profiles",
+  "known_priority_findings_are_not_discharged_by_this_ledger": true,
+  "unobserved_or_outside_profile": [
+    {
+      "scope": "Independent semantic evaluation",
+      "state": "PendingNoCorpus",
+      "boundary": "Engineering counterexamples and local tests do not establish general reasoning/hallucination/long-session improvements."
+    },
+    {
+      "scope": "Real host pickup/delivery and account-wide enforcement",
+      "state": "PendingHostObservation",
+      "boundary": "Source, package, plugin configuration and real host callback are distinct. This task does not reinstall/restart the host."
+    },
+    {
+      "scope": "Key custody, instantaneous external revocation and hostile privileged owners",
+      "state": "HostDependent",
+      "boundary": "Caller-supplied trusted roots/clocks/revocations are assumptions, not derived from text or low loss."
+    },
+    {
+      "scope": "Arbitrary Cargo build worlds",
+      "state": "UntrackedOutsideBoundedProfile",
+      "boundary": "Registered direct-driver observation is not a hermetic or malicious-build proof for ambient config/build scripts/proc macros/global constructors."
+    },
+    {
+      "scope": "OS-wide isolation and escaped process groups",
+      "state": "OutsideContainmentProfile",
+      "boundary": "Windows Job and Unix process-group observations are scoped; per-process AS and Job commit limits are not RSS guarantees."
+    },
+    {
+      "scope": "GPU full-vector equality/occupancy/saturation/speedup",
+      "state": "NotEstablished",
+      "boundary": "Observed numeric summaries/masks/finalists/decision digests and native completion are not full-vector proof or performance measurement."
+    },
+    {
+      "scope": "Media accuracy/model rights and inferred internal states",
+      "state": "NotEstablished",
+      "boundary": "Actual decoder/vision/CPU ASR candidate execution is not independent accuracy/license review, identity/emotion/intent commitment."
+    },
+    {
+      "scope": "Assurance unsupported units/external dependencies",
+      "state": "AdvisoryGapsRetained",
+      "boundary": "blocked_with_diagnostics/needs_evidence/stale inputs remain explicit; no repository-wide or runtime safety proof."
+    }
+  ]
+}

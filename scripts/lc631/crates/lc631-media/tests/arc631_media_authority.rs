@@ -107,8 +107,8 @@ fn arc631_20_21_arbitrary_script_output_stays_candidate_and_enters_tl_envelope()
         "model_revision": model_sha,
         "model_cache_manifest_sha256": model_sha,
         "model_card_license_hint": "test-only",
-        "executed_families": ["decode"],
-        "executed_methods": {"decode": "ffmpeg-cli"},
+        "executed_families": ["decode", "object_detection"],
+        "executed_methods": {"decode": "ffmpeg-cli", "object_detection": "opencv-hog-default-people-detector"},
         "observations": [{
             "observation_id": "obs-1",
             "kind": "object_box",
@@ -153,16 +153,17 @@ fn arc631_20_21_arbitrary_script_output_stays_candidate_and_enters_tl_envelope()
         Some(model_sha),
         Some("test-license".into()),
     );
+    let config = MediaBackendConfig {
+        python_executable: python,
+        backend_script: script,
+        ffmpeg_executable: ffmpeg,
+        model_cache,
+        timeout_seconds: 10,
+    };
     let receipt = execute_local_media_backend_attested(
         &authority,
         &descriptor,
-        &MediaBackendConfig {
-            python_executable: python,
-            backend_script: script,
-            ffmpeg_executable: ffmpeg,
-            model_cache,
-            timeout_seconds: 10,
-        },
+        &config,
         &MediaResourceBudget::default(),
         &issuer,
         &verifier,
@@ -180,5 +181,29 @@ fn arc631_20_21_arbitrary_script_output_stays_candidate_and_enters_tl_envelope()
         "media"
     );
     assert!(receipt.authenticity_receipt_digest.is_some());
+    let mut wrong_family = payload.clone();
+    wrong_family["executed_families"] = serde_json::json!(["decode"]);
+    wrong_family["executed_methods"] = serde_json::json!({"decode":"ffmpeg-cli"});
+    fs::write(
+        &config.backend_script,
+        format!(
+            "import json\nprint(json.dumps(json.loads({:?}), sort_keys=True))\n",
+            wrong_family.to_string()
+        ),
+    )
+    .unwrap();
+    assert!(matches!(
+        execute_local_media_backend_attested(
+            &authority,
+            &descriptor,
+            &config,
+            &MediaResourceBudget::default(),
+            &issuer,
+            &verifier,
+            &mut replay,
+            1
+        ),
+        Err(lc631_media::MediaError::BackendMethodMismatch)
+    ));
     fs::remove_dir_all(root).unwrap();
 }

@@ -99,6 +99,28 @@ impl ManagedChild {
         Ok(accounting.ActiveProcesses)
     }
 
+    pub fn memory_limit_bytes(&self) -> io::Result<Option<usize>> {
+        let mut limits = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
+        // SAFETY: this is our retained Job handle, not a guest's ambiguous NULL
+        // job query; the writable structure matches this information class.
+        if unsafe {
+            QueryInformationJobObject(
+                self.job.0,
+                JobObjectExtendedLimitInformation,
+                (&mut limits as *mut JOBOBJECT_EXTENDED_LIMIT_INFORMATION).cast(),
+                size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+                null_mut(),
+            )
+        } == 0
+        {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(
+            (limits.BasicLimitInformation.LimitFlags & JOB_OBJECT_LIMIT_JOB_MEMORY != 0)
+                .then_some(limits.JobMemoryLimit),
+        )
+    }
+
     pub fn wait_for_tree_empty(&self, timeout: Duration) -> io::Result<bool> {
         let deadline = Instant::now() + timeout;
         loop {
@@ -320,6 +342,11 @@ impl Pipe {
 }
 
 struct OwnedHandle(HANDLE);
+
+// SAFETY: this uniquely owned process/job/pipe handle may be transferred between
+// threads. Windows permits these handle operations across threads; ownership
+// prevents a concurrent close, and no aliased mutable Rust reference is created.
+unsafe impl Send for OwnedHandle {}
 
 impl OwnedHandle {
     fn new(handle: HANDLE) -> io::Result<Self> {

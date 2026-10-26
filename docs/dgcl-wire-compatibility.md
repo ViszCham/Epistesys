@@ -40,6 +40,17 @@ Host output stageはPreCommitCandidate → PostSendObserved → SinkDeliveryObse
 
 legacy pipeline/connection/checkpoint fixture、新pipeline、repair request/report、standalone candidate、host stage ledgerをDraft 2020-12 schemaで局所検査する。strict Rust decoder、remote CI、実Codex host pickupは別の検証対象であり、未観測ならそのまま記録する。
 
+### EPR候補のadditive変更と厳格consumer
+
+以下はEPR候補の境界強化です。既存JSON fieldを維持しても、従来許可された入力への検査強化や未知enumの追加が全consumerの動作互換を意味するわけではありません。alpha.2の検証記録と新候補のgate結果は分離します。
+
+- checked-text型は従来と同じJSON文字列shapeを保ち、deserializeでもconstructorと同じ境界を検査する。`subject_revision`／issuer binding等の追加情報と内部保持の元receiptを、callerが編集できる成功fieldで代替しない。
+- `DgclConnectionSpec`はdriver digest、entrypoint、observer、oracle revision、coverageと登録receiptを明示する。legacy planのdecode成功は、この新しいdirect-driver接続証拠の充足を意味しない。
+- `TypedConstraintGraph.token_bindings`は`token_id`・`syntax_node`・`source_span`の対応をadditiveに保持する。ordinalの一致をgraph ID対応や意味証明と見なさない。
+- 新enum `historical_head_matched`は期限切れでも真正な履歴の確認に限定する。current authority／completionへ写像しない。明示renewalは`head-<index>.renew-<issued>.json`に保存し、同一request/root/chainの対応を検査する。未知enumやrenewal filenameを拒否する旧head readerには明示upgrade／consumer確認が必要であり、透過互換を主張しない。
+- `CliFailure`の作用・validation・durability・delivery、request digest、logical journal参照は別の状態である。Mediaのmemory scope、family/method、kind、canonical model manifestの情報も、実行記録やcandidateをValidatedへ昇格させない。
+- Host stage ledgerは同一seed receipt digestの連続性を検査する。MACで保護されたbinding originと異なるreport flagを受け入れず、legacy flagを実host callbackへ読み替えない。
+
 ## English
 
 ### Purpose and claim boundary
@@ -79,3 +90,14 @@ Host output stages are verified with separate stage-scoped receipts in the order
 The added adapter explicitly selects `epistesys-dgcl-consumer-view.v1/v2`. The strict v1 decoder rejects v2, unknown fields, and true completion/send/commit booleans. V2 displays reported state without generating permission. Package finalization provides both under `consumer_views`. Program IR's `structural_distillation`, finalization's `snapshot/consumer_views`, repair's `journal`, RepairRequest's `repository_root_digest`, and validation's `closure_claims` are additive. Package resume uses its own `epistesys-dgcl-package-resume.v1` schema.
 
 Legacy pipeline/connection/checkpoint fixtures, the new pipeline, repair request/report, standalone candidate, and host stage ledger are locally checked against the Draft 2020-12 schema. Strict Rust decoder behavior, remote CI, and real Codex host pickup are separate verification targets and remain explicitly unobserved when not run.
+
+### EPR candidate additive changes and strict consumers
+
+The following strengthen boundaries in the EPR candidate. Preserving existing JSON fields does not make stronger input checks or additional enum variants behaviorally compatible with every consumer. Historical alpha.2 verification remains separate from the new candidate's gate results.
+
+- Checked-text types preserve the existing JSON-string shape and enforce constructor boundaries during deserialization. Added `subject_revision`/issuer bindings and internally retained original receipts cannot be replaced by caller-editable success fields.
+- `DgclConnectionSpec` makes the driver digest, entrypoint, observer, oracle revision, coverage, and registration receipt explicit. Successful legacy-plan decoding does not satisfy the new direct-driver connection-evidence contract.
+- `TypedConstraintGraph.token_bindings` additively retains `token_id`/`syntax_node`/`source_span` correspondence. Equal ordinals do not establish graph-ID correspondence or semantic proof.
+- The new `historical_head_matched` enum variant denotes authentic expired history only; it never maps to current authority/completion. Explicit renewals use `head-<index>.renew-<issued>.json`, checking same-request/root/chain correspondence. Old head readers rejecting unknown enums or renewal filenames require explicit upgrades/consumer checks; transparent compatibility is not claimed.
+- `CliFailure` separates effects, validation, durability, delivery, request digests, and logical journal references. Media memory scope, family/method, kind, and canonical-model-manifest information likewise do not promote execution records or candidates to Validated.
+- Host stage ledgers check continuity of the same seed-receipt digest. Report flags inconsistent with the MAC-covered binding origin are rejected; legacy flags are not reinterpreted as real-host callbacks.

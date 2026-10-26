@@ -37,19 +37,19 @@ source signature、`--execute`、low loss、tool hash、slot存在はGrantを発
 `lc631-dgcl-package-finalize`は以下を行います。
 
 1. 外部Authority、登録tool、独立intent、validation planを確認する。
-2. Cargo check、library runtime test、production API→executor接続呼出し、明示acceptance testを別々に観測する。
+2. Cargo check、library runtime test、登録direct driverによるpublic API呼出しとpin済みassertion、明示acceptance testを別々に観測する。
 3. 同sourceの要求とgapを、現在のreceipt・lifecycleに対して再評価する。
 4. 所定の条件を満たすexact candidateを構築する。
 
 | evidence kind | 指定profileで必要な材料 |
 | --- | --- |
 | `ImplementationBinding` | 要求・実装target・source snapshotへ束縛した外部intent binding |
-| `ProductionConnection` | 登録計画で指定したAPIからexecutorへの呼出し観測 |
+| `ProductionConnection` | 登録direct driverが指定public APIを呼び、pin済みassertionを実行した観測 |
 | `StaticValidation` | 登録された現在のCargo check観測 |
 | `RuntimeValidation` | 登録計画で指定したlibrary runtime test観測 |
 | `AcceptanceTest` | 登録計画の明示acceptance testと、その受入条件の観測 |
 
-kindは自動的に相互代替しません。接続観測の範囲は指定run・target・経路であり、全経路や実サービスの配備検証ではありません。受入試験の成功は、そのoracleで検査した条件についての観測です。
+kindは自動的に相互代替しません。EPR候補の`DgclConnectionSpec`はdriver・entrypoint・oracle・coverageを登録receiptへ束縛します。genericな`--lib`成功、推移的なexecutor到達、hermetic build、全経路や実サービスの配備検証を意味しません。別runへの分離はoracleの独立性の証明ではなく、受入試験の成功はそのoracleで検査した条件についての観測です。
 
 条件のtruthを推測して要求を解除しません。`contract_ledger_rendered`はledger実現の観測であり、任意回答の意味的正確性ではありません。standalone completion、host send、sink deliveryは別状態です。
 
@@ -74,7 +74,7 @@ SDK coordinatorは最大4回の試行とwall/delta予算を扱い、NoProgress�
 
 - 旧Completed checkpointも、新しいTest receipt・独立binding・Cargo観測を省略できない。
 - crash後のtargetが予定candidateと異なればHold/診断になる。
-- joint rollbackやhead期限切れを回避する自動repairは行わない。
+- joint rollbackを回避する自動repairや、期限切れの権限・完了状態の復元は行わない。EPR候補のhistorical head経路は、真正な期限切れ履歴の確認と現在の実行許可を分離する。
 - journal rootはcallerが準備する保管契約であり、host全体のpersist権限を生成しない。
 
 ### Journal・head・配信の状態
@@ -103,6 +103,18 @@ schema追加はadditiveです。新consumerはverified constructor/receipt polic
 portable default testはモデル不足時の失敗経路を検査します。実日英workerのpositiveは`EPISTESYS_TEST_CONFIGURED_NLP=1`による別観測です。source functional closureは、宣言profileの実装・実行・接続・断線・修復・schemaを検査する意味で用います。
 
 独立gold、一般意味精度、ハルシネーション抑制、長期session、performance、実host callback/即時revocation、OS filesystem/network sandbox、opaque build scripts/proc macros、全外部依存build world、Assurance未対応は[残存条件](known-limitations.md)です。ResearchEvaluation=`PendingNoCorpus`、host実観測=`PendingHostObservation`を保持します。
+
+### EPR候補の境界強化と残存条件
+
+本節はEPR変更候補の実装契約であり、上記alpha.2の履歴的検証記録や全release gateの成功を更新するものではありません。
+
+- `HostSeedEnvelope`は元の検証済みreceiptを内部に保持し、`VerifiedAuthorityEvent`と`ExecutionPermit`はsource・span・artifact/turn・scope・parent・issuer・現在時刻への対応を検査する。public fieldの変更から別sourceの権限を再発行しない。current receiptの有効区間は`[issued, expires)`であり、期限一致時と零長期間は無効。contextなしの`decide_verified_authority`はadvisoryで、現在の判断には`VerifiedAuthorityContext`を要する。
+- Hostのplain-prose eligibilityはpin済みCommonMark offset eventでcode・quote・HTML・link等を除外し、解析予算を持つ。構文上の適格性はGrantでも完全な意図理解でもない。
+- `DirectoryAnchor`／`AnchoredFile`はhandle基準で経路と対象identityを検査し、symlink／reparse、hardlink alias、root外、特殊名を拒否する。Windowsは祖先の置換を抑止するhandleと排他的file handle、Linuxはanchored `openat`と同一directory内のatomic replacementを使う。Linuxの更新profileは同一ownerかつ既存access ACLなしに限定し、新stage／private backupの継承ACLを除いてからmodeを復元する。他のUnix更新profileはUnsupported。Windowsの更新失敗は`MayHaveApplied`を保持し、全OSのatomicity・durabilityや特権主体に対するsandboxは主張しない。
+- `load_checkpoint_head_historical`／`inspect_resume_with_historical_anchor`の`HistoricalHeadMatched`は元の署名・同一chain/source/scopeの履歴観測に限る。production resumeはfreshなTest権限、独立binding、現在の全validationを通した後に限り、同一request/root/headの明示renewalを保存する。source書込みを再実行せず、期限切れ権限・旧Completedを復元しない。strict current-head APIは引き続き期限切れを拒否する。
+- Cargo snapshotは上限付きのRust/Cargo入力列挙であり、opaque script、非Rust include、外部依存、環境全体のhermetic closureではない。最大16,384訪問entry／4,096入力fileの上限超過や不足は成功へ変換しない。
+- 共通process監督の`memory_limit_kind`は適用範囲を報告する。Windowsのconfigured Job-wide committed-memory制限と、他profileで未観測のmemory制限を区別する。Mediaのsource snapshot、streaming入力、temp quota、kind/family/methodの対応は、source-root全体の意味正確性やmethod-level semantic validationを保証しない。
+- `CliFailure`では作用、検証、永続化、配信とlogical journal参照を分離する。error時に作用を`NotApplied`へ一律変換せず、未知や`MayHaveApplied`を保持する。
 
 ## English
 
@@ -141,19 +153,19 @@ Source signatures, `--execute`, low loss, tool hashes, and slot presence do not 
 `lc631-dgcl-package-finalize`:
 
 1. Validate external Authority, registered tools, independent intent, and validation plans.
-2. Separately observe Cargo check, library runtime tests, production API→executor invocation, and explicit acceptance tests.
+2. Separately observe Cargo check, library runtime tests, registered direct-driver public-API calls with pinned assertions, and explicit acceptance tests.
 3. Reevaluate same-source requirements/gaps against current receipts/lifecycles.
 4. Construct an exact candidate only under specified conditions.
 
 | Evidence kind | Material required in the specified profile |
 | --- | --- |
 | `ImplementationBinding` | External intent binding to the requirement, implementation target, and source snapshot |
-| `ProductionConnection` | Observed invocation from the API to the executor specified in the registered plan |
+| `ProductionConnection` | Observation that a registered direct driver calls the specified public API and runs its pinned assertion |
 | `StaticValidation` | Registered current Cargo check observation |
 | `RuntimeValidation` | Library runtime test observation specified in the registered plan |
 | `AcceptanceTest` | Explicit acceptance test and observed acceptance conditions from the registered plan |
 
-Kinds do not automatically substitute for one another. Connection evidence covers the specified run/target/route, not all paths or deployment of a live service. Acceptance success observes the conditions checked by that oracle.
+Kinds do not automatically substitute for one another. The EPR candidate's `DgclConnectionSpec` binds the driver, entrypoint, oracle, and coverage to a registration receipt. It does not establish generic `--lib` success as connection evidence, transitive executor reachability, hermetic builds, all paths, or deployment of a live service. Separate runs do not prove oracle independence; acceptance success observes the conditions checked by that oracle.
 
 Do not discharge requirements by guessing condition truth. `contract_ledger_rendered` observes ledger realization, not arbitrary-answer semantic correctness. Standalone completion, host send, and sink delivery remain separate.
 
@@ -178,7 +190,7 @@ The current CLI supplies only one request with `attempt=1` to the coordinator. I
 
 - Old Completed checkpoints cannot omit new Test receipts, independent bindings, or Cargo observations.
 - Targets differing from planned candidates after crashes produce Hold/diagnostics.
-- No automatic repair bypasses joint rollback or expired heads.
+- No automatic repair bypasses joint rollback or restores expired authority/completion. The EPR candidate's historical-head route separates authentic expired history from current execution permission.
 - Journal roots are caller-provisioned storage contracts, not host-wide persist permissions.
 
 ### Journals, heads, and delivery states
@@ -207,3 +219,15 @@ Schema additions are additive. New consumers use verified constructors/receipt p
 Portable default tests cover missing-model failure paths. Actual JA/EN-worker positives with `EPISTESYS_TEST_CONFIGURED_NLP=1` are separate observations. Source functional closure means declared-profile implementation/execution/connections/cuts/repairs/schema checks.
 
 Independent gold, general semantic accuracy, hallucination containment, long sessions, performance, real-host callbacks/immediate revocation, OS filesystem/network sandboxes, opaque build scripts/proc macros, complete external-dependency build worlds, and unsupported Assurance scope remain [residual conditions](known-limitations.md). Retain ResearchEvaluation=`PendingNoCorpus` and real-host observation=`PendingHostObservation`.
+
+### EPR candidate boundary strengthening and residual conditions
+
+This section specifies implementation contracts of the EPR candidate; it does not update the historical alpha.2 verification record above or assert that all release gates passed.
+
+- `HostSeedEnvelope` retains the original verified receipt internally. `VerifiedAuthorityEvent` and `ExecutionPermit` check source, span, artifact/turn, scope, parent, issuer, and current-time bindings; public-field mutation cannot reissue authority for another source. Current receipts use `[issued, expires)`; exact expiry and zero-duration intervals are invalid. Context-free `decide_verified_authority` is advisory; current decisions require `VerifiedAuthorityContext`.
+- Host plain-prose eligibility uses pinned CommonMark offset events to exclude code, quotes, HTML, links, and related regions under parsing budgets. Syntactic eligibility is neither a Grant nor complete intent interpretation.
+- `DirectoryAnchor`/`AnchoredFile` check paths and object identities through handles, rejecting symlink/reparse traversal, hardlink aliases, root escape, and special names. Windows pins ancestors against replacement and uses an exclusive file handle; Linux uses anchored `openat` and same-directory atomic replacement. Linux updates require the same owner and no existing access ACL; inherited ACLs on new stages/private backups are removed before mode restoration. Other Unix update profiles are Unsupported. Windows write failures retain `MayHaveApplied`; universal atomicity/durability and confinement against privileged principals are not claimed.
+- `HistoricalHeadMatched` from `load_checkpoint_head_historical`/`inspect_resume_with_historical_anchor` observes authentic original signatures and exact chain/source/scope history only. Production resume persists an explicit same-request/root/head renewal only after fresh Test authority, independent binding, and all current validation. It does not repeat source writes or restore expired permission/old Completed state. Strict current-head APIs continue rejecting expired heads.
+- Cargo snapshots enumerate bounded Rust/Cargo inputs, not a hermetic closure over opaque scripts, non-Rust includes, external dependencies, or the complete environment. Exceeding 16,384 visited entries/4,096 input files, or missing inputs, does not become success.
+- Shared process supervision reports the scope through `memory_limit_kind`, distinguishing configured Windows Job-wide committed-memory limits from unobserved memory limits in other profiles. Media source snapshots, streaming inputs, temporary quotas, and kind/family/method correspondence do not establish source-root-wide semantic correctness or method-level semantic validation.
+- `CliFailure` separates effects, validation, persistence, delivery, and logical journal references. Errors do not uniformly become `NotApplied`; unknown states and `MayHaveApplied` remain visible.

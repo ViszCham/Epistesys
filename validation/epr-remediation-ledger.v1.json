@@ -1,0 +1,185 @@
+{
+  "schema_version": "epistesys-epr-remediation-ledger.v1",
+  "date_jst": "2026-10-27",
+  "baseline_commit": "75500ed7a33a009f5e1ce813862dc0a7986372c9",
+  "candidate_version": "6.3.2-alpha.3",
+  "priority_remediation_closed": false,
+  "scope": "Known review findings plus related adversarial counterexamples; targeted observations are not final snapshot/research/host assurance",
+  "findings": [
+    {
+      "id": "E01",
+      "scope": "Japanese reference progress",
+      "slice": "EPR-01",
+      "status": "fixed_targeted_passed",
+      "final_current_snapshot_gate": "pending"
+    },
+    {
+      "id": "E02",
+      "scope": "Japanese coordinate conversion",
+      "slice": "EPR-01",
+      "status": "fixed_targeted_passed",
+      "final_current_snapshot_gate": "pending"
+    },
+    {
+      "id": "E03",
+      "scope": "Secret Debug disclosure",
+      "slice": "EPR-02",
+      "status": "fixed_targeted_passed",
+      "final_current_snapshot_gate": "pending"
+    },
+    {
+      "id": "E04",
+      "scope": "Verified authority source binding",
+      "slice": "EPR-03",
+      "status": "fixed_targeted_passed",
+      "final_current_snapshot_gate": "pending"
+    },
+    {
+      "id": "E05",
+      "scope": "Mutable/stale Media authority",
+      "slice": "EPR-04",
+      "status": "fixed_targeted_passed",
+      "final_current_snapshot_gate": "pending"
+    },
+    {
+      "id": "E06",
+      "scope": "Production connection semantics",
+      "slice": "EPR-08",
+      "status": "fixed_targeted_passed",
+      "final_current_snapshot_gate": "pending"
+    },
+    {
+      "id": "E07",
+      "scope": "Unix process lifetime",
+      "slice": "EPR-07",
+      "status": "fixed_windows_linux_targeted_passed",
+      "final_current_snapshot_gate": "pending"
+    },
+    {
+      "id": "E08",
+      "scope": "Media pipe lifetime",
+      "slice": "EPR-07",
+      "status": "fixed_targeted_passed",
+      "final_current_snapshot_gate": "pending"
+    },
+    {
+      "id": "E09",
+      "scope": "Anchored file repair",
+      "slice": "EPR-10",
+      "status": "fixed_windows_linux_targeted_passed",
+      "final_current_snapshot_gate": "pending"
+    },
+    {
+      "id": "E10",
+      "scope": "Backup permissions and ACL",
+      "slice": "EPR-10",
+      "status": "fixed_windows_linux_targeted_passed",
+      "final_current_snapshot_gate": "pending"
+    },
+    {
+      "id": "E11",
+      "scope": "Committed/approved package inventory",
+      "slice": "EPR-14",
+      "status": "fixed_targeted_passed",
+      "final_current_snapshot_gate": "pending"
+    },
+    {
+      "id": "E12",
+      "scope": "Rejection leaves state unchanged",
+      "slice": "EPR-05",
+      "status": "partially_corrected_reference_and_fixed_targeted_passed",
+      "final_current_snapshot_gate": "pending"
+    },
+    {
+      "id": "E13",
+      "scope": "Cross-runtime manifest canonicalization",
+      "slice": "EPR-12",
+      "status": "fixed_golden_vector_passed",
+      "final_current_snapshot_gate": "pending"
+    },
+    {
+      "id": "E14",
+      "scope": "Media observation kind/method",
+      "slice": "EPR-12",
+      "status": "fixed_targeted_passed",
+      "final_current_snapshot_gate": "pending"
+    },
+    {
+      "id": "E15",
+      "scope": "UTF-8 byte limits",
+      "slice": "EPR-12",
+      "status": "fixed_targeted_passed",
+      "final_current_snapshot_gate": "pending"
+    },
+    {
+      "id": "E16",
+      "scope": "Media resource admission/streaming",
+      "slice": "EPR-07/EPR-12",
+      "status": "fixed_targeted_passed_actual_backend_observed",
+      "final_current_snapshot_gate": "pending"
+    },
+    {
+      "id": "E17",
+      "scope": "Effect-aware CLI errors",
+      "slice": "EPR-09",
+      "status": "fixed_real_post_edit_failure_passed",
+      "final_current_snapshot_gate": "pending"
+    },
+    {
+      "id": "E18",
+      "scope": "CSR/arithmetic/GPU admission",
+      "slice": "EPR-06",
+      "status": "fixed_cpu_and_actual_gpu_targeted_passed",
+      "final_current_snapshot_gate": "pending"
+    },
+    {
+      "id": "E19",
+      "scope": "Token/syntax graph identity",
+      "slice": "EPR-13",
+      "status": "fixed_targeted_passed",
+      "final_current_snapshot_gate": "pending"
+    },
+    {
+      "id": "E20",
+      "scope": "Replay root containment",
+      "slice": "EPR-11",
+      "status": "fixed_targeted_passed",
+      "final_current_snapshot_gate": "pending"
+    },
+    {
+      "id": "E21",
+      "scope": "Continuous Rust CI",
+      "slice": "EPR-00/EPR-16",
+      "status": "configured_remote_execution_pending",
+      "final_current_snapshot_gate": "pending"
+    }
+  ],
+  "additional_counterexamples": {
+    "A1": "Inherited POSIX ACL before mode restoration: fixed with Linux regression",
+    "A2": "usize::MAX read budget overflow: checked admission and regression",
+    "A3": "Media A-to-B-to-A source reuse: authenticated private snapshot, shared temporary budget, observed cleanup",
+    "A4": "Media kind/family/method mismatch: explicit receiver mapping and negative",
+    "A5": "Mutable/expired host seed and direct validation lineage: immutable original and current use checks",
+    "A6": "Expiry boundary inconsistency: half-open issued/expires",
+    "A7": "Unknown CLI effect state: retained Unknown, not NotAttempted",
+    "A8": "False closing Markdown fence: pinned offset parser and code/data eligibility",
+    "A9": "Superscript Windows reserved aliases: pure admission tests, no device opens",
+    "A10": "Cross-seed output stages: transactional lineage continuity",
+    "A11": "Mutable callback/durability flags: agreement with authenticated origin",
+    "B01": "Cargo dependency shadowing std assertion: full metadata rejection and real negative fixture",
+    "B02": "Postprocessing budget after allocation: action guard fixed; shared scope/graph work-meter finalization in progress",
+    "P1": "Pinned NLP byte identities changed by checkout CRLF: explicit LF attributes and physical-byte tests; declared digests unchanged"
+  },
+  "global_gates": {
+    "windows": "pending_final_snapshot",
+    "linux": "pending_final_snapshot",
+    "configured_ja_en": "observed_current_pre_promotion",
+    "actual_gpu": "observed_pre_promotion",
+    "actual_media": "observed_cpu_asr_candidate_pre_promotion",
+    "fresh_package": "pending_current_inventory",
+    "remote_ci": "pending",
+    "audit_a": "scoped_delta_record_available",
+    "audit_b": "in_progress"
+  },
+  "claim_boundary": "No zero-unknown-defect, formal proof, general performance or host activation claim"
+}

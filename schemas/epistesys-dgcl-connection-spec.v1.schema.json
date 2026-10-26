@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "epistesys-dgcl-connection-spec.v1.schema.json",
+  "title": "Registered bounded direct-driver connection plan (not execution evidence)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "integration_target", "test_name", "entrypoint", "implementation_path", "driver_path", "driver_digest", "observer_id", "oracle_id", "oracle_revision", "coverage"],
+  "properties": {
+    "schema_version": { "const": "epistesys-dgcl-connection-spec.v1" },
+    "integration_target": { "type": "string", "pattern": "^[A-Za-z0-9_-]+$" },
+    "test_name": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+    "entrypoint": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*::[A-Za-z_][A-Za-z0-9_]*$" },
+    "implementation_path": { "type": "string", "minLength": 1 },
+    "driver_path": { "type": "string", "pattern": "^tests/[A-Za-z0-9_-]+\\.rs$" },
+    "driver_digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "observer_id": { "const": "cargo-exact-direct-api-driver.v1" },
+    "oracle_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "oracle_revision": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "coverage": { "const": "registered_driver_direct_public_api_and_pinned_assertion" },
+    "registration": { "type": ["object", "null"] }
+  }
+}

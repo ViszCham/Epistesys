@@ -48,10 +48,11 @@ pub use geometry::{
     GeometryProposal, GeometryShadow, GeometrySignature, ProposalAuthority,
 };
 pub use grammar::{
-    ConstraintEdge, ConstraintKind, ConstraintState, DeepGrammarArtifact, GrammarProduction,
-    PackedDerivation, ParseDefect, RegionCandidate, RegionLattice, RelationKind, RelationState,
-    SyntaxNode, SyntaxNodeId, SyntaxNodeKind, SyntaxRelation, Token, TokenKind, TokenLattice,
-    TypedConstraintGraph, UnifiedGrammarIr, UnifiedSyntaxHypergraph,
+    ConstraintBindingError, ConstraintEdge, ConstraintKind, ConstraintState, DeepGrammarArtifact,
+    GrammarProduction, PackedDerivation, ParseDefect, RegionCandidate, RegionLattice, RelationKind,
+    RelationState, SyntaxNode, SyntaxNodeId, SyntaxNodeKind, SyntaxRelation, Token, TokenKind,
+    TokenLattice, TokenSyntaxBinding, TypedConstraintGraph, UnifiedGrammarIr,
+    UnifiedSyntaxHypergraph,
 };
 pub use integration::{
     build_tldg_pipeline, build_tldg_pipeline_with_receipts, build_tldg_release_gate,

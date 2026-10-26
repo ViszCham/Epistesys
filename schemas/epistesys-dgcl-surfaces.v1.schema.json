@@ -851,7 +851,7 @@
       "type": "object",
       "required": ["integrity_state", "latest_sequence", "latest_digest", "latest_delivery", "latest_event_kind", "retry_permitted_by_prior_result", "fresh_revalidation_required", "authority_created", "completion_restored"],
       "properties": {
-        "integrity_state": { "enum": ["unanchored", "trusted_head_matched"] },
+        "integrity_state": { "enum": ["unanchored", "trusted_head_matched", "historical_head_matched"] },
         "latest_sequence": { "type": ["integer", "null"], "minimum": 0 },
         "latest_digest": { "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }] },
         "latest_delivery": { "oneOf": [{ "enum": ["unknown_delivery", "confirmed_failed", "confirmed_success"] }, { "type": "null" }] },
@@ -1036,7 +1036,7 @@
         "schema_version": { "const": "epistesys-dgcl-finalization.v1" },
         "connection": { "$ref": "#/$defs/connection_report" },
         "closure": { "type": "object" },
-        "checkpoint_integrity_state": { "enum": ["unanchored", "trusted_head_matched"] },
+        "checkpoint_integrity_state": { "enum": ["unanchored", "trusted_head_matched", "historical_head_matched"] },
         "rollback_detection": { "const": "unavailable_without_external_trusted_head_anchor" },
         "host_output_bound": { "const": false },
         "delivery_observed": { "const": false },

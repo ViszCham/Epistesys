@@ -1134,7 +1134,9 @@ name = "lc631-host"
 version = "6.3.2-alpha.2"
 dependencies = [
  "lc631-core",
+ "lc631-process-supervisor",
  "lc631-receipt-kernel",
+ "pulldown-cmark",
  "serde",
  "serde_json",
 ]
@@ -1144,6 +1146,7 @@ name = "lc631-media"
 version = "6.3.2-alpha.2"
 dependencies = [
  "lc631-core",
+ "lc631-process-supervisor",
  "lc631-receipt-kernel",
  "lc631-tl",
  "serde",
@@ -1155,6 +1158,8 @@ dependencies = [
 name = "lc631-process-supervisor"
 version = "6.3.2-alpha.2"
 dependencies = [
+ "libc",
+ "sha2",
  "windows-sys",
 ]
 

@@ -45,6 +45,8 @@ pub struct DgclCargoValidationPlan {
     pub repository_root_digest: String,
     pub acceptance_target: Option<String>,
     pub acceptance_test: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub connection: Option<crate::DgclConnectionSpec>,
     pub timeout_ms: u64,
     #[serde(default)]
     pub tool_registration: Option<UntrustedReceipt>,
@@ -112,6 +114,7 @@ pub fn dgcl_validator_revision() -> String {
         &serde_json::to_string(&(
             env!("CARGO_PKG_VERSION"),
             include_str!("validation_producer.rs"),
+            include_str!("production_connection.rs"),
             include_str!("instruction_grammar.rs"),
             include_str!("dgcl_distillation.rs"),
             include_str!("dgcl_projection.rs"),
@@ -157,14 +160,23 @@ pub fn preflight_dgcl_cargo_plan(
                 return Err(Error::InvalidPlan);
             }
         }
-        CodingEvidenceKind::StaticValidation
-        | CodingEvidenceKind::RuntimeValidation
-        | CodingEvidenceKind::ProductionConnection => {
+        CodingEvidenceKind::ProductionConnection => {
+            if plan.acceptance_target.is_some()
+                || plan.acceptance_test.is_some()
+                || plan.connection.is_none()
+            {
+                return Err(Error::InvalidPlan);
+            }
+        }
+        CodingEvidenceKind::StaticValidation | CodingEvidenceKind::RuntimeValidation => {
             if plan.acceptance_target.is_some() || plan.acceptance_test.is_some() {
                 return Err(Error::InvalidPlan);
             }
         }
         _ => return Err(Error::UnsupportedKind),
+    }
+    if plan.kind != CodingEvidenceKind::ProductionConnection && plan.connection.is_some() {
+        return Err(Error::InvalidPlan);
     }
     let absolute_root = std::path::absolute(root).map_err(|_| Error::UnsafePath)?;
     for part in absolute_root.ancestors() {
@@ -193,6 +205,9 @@ pub fn preflight_dgcl_cargo_plan(
         || digest_validation_file(cargo)? != plan.cargo_digest
     {
         return Err(Error::StaleInput);
+    }
+    if let Some(spec) = &plan.connection {
+        crate::production_connection::validate_connection_source(&canonical_root, spec)?;
     }
     Ok(())
 }
@@ -327,6 +342,9 @@ pub enum DgclValidationProducerError {
     IssuerMismatch,
     Receipt,
     UnregisteredTool,
+    InvalidConnectionDriver,
+    ConnectionNotRegistered,
+    ConnectionNotObserved,
 }
 
 /// Fields intentionally private, and no Deserialize implementation. Public
@@ -352,9 +370,7 @@ impl CheckedDgclCargoObservation {
 pub fn check_cargo_test_result(kind: CodingEvidenceKind, stdout: &[u8]) -> bool {
     if !matches!(
         kind,
-        CodingEvidenceKind::ProductionConnection
-            | CodingEvidenceKind::RuntimeValidation
-            | CodingEvidenceKind::AcceptanceTest
+        CodingEvidenceKind::RuntimeValidation | CodingEvidenceKind::AcceptanceTest
     ) {
         return false;
     }
@@ -390,6 +406,7 @@ pub fn observe_dgcl_cargo_validation(
     context: DgclCargoExecutionContext<'_>,
 ) -> Result<CheckedDgclCargoObservation, DgclValidationProducerError> {
     use DgclValidationProducerError as Error;
+    let start = Instant::now();
     let DgclCargoExecutionContext {
         lifecycle,
         permit,
@@ -446,6 +463,17 @@ pub fn observe_dgcl_cargo_validation(
         return Err(Error::UnregisteredTool);
     }
     verify_dgcl_cargo_registration(plan, tool_verifier, authority.now_epoch)?;
+    let connection_expiry = plan
+        .connection
+        .as_ref()
+        .map(|spec| {
+            crate::production_connection::verify_connection_registration(
+                spec,
+                tool_verifier,
+                authority.now_epoch,
+            )
+        })
+        .transpose()?;
     if dgcl_repository_root_digest(root)? != plan.repository_root_digest {
         return Err(Error::UnsafePath);
     }
@@ -470,11 +498,75 @@ pub fn observe_dgcl_cargo_validation(
         return Err(Error::StaleInput);
     }
     let manifest_text = manifest.to_str().ok_or(Error::UnsafePath)?;
+    let metadata_observation = if let Some(spec) = &plan.connection {
+        let metadata_remaining_ms = timeout_ms
+            .checked_sub(start.elapsed().as_millis().min(u128::from(u64::MAX)) as u64)
+            .filter(|remaining| *remaining != 0)
+            .ok_or(Error::ProcessFailed)?;
+        let metadata = run_bounded_tool(BoundedToolRequest {
+            program: cargo.to_str().ok_or(Error::UnsafePath)?,
+            args: &[
+                "metadata",
+                "--format-version",
+                "1",
+                "--manifest-path",
+                manifest_text,
+                "--locked",
+                "--offline",
+            ],
+            stdin: None,
+            timeout_ms: metadata_remaining_ms,
+            stdout_limit: 1_048_576,
+            stderr_limit: 1_048_576,
+        });
+        if metadata.state != ToolRunState::Observed
+            || metadata.exit_code != Some(0)
+            || metadata.timed_out
+            || metadata.stdout_truncated
+            || metadata.stderr_truncated
+            || metadata.executable_sha256.as_deref() != Some(plan.cargo_digest.as_str())
+            || !crate::production_connection::metadata_matches(
+                &metadata.stdout,
+                &root,
+                &manifest,
+                spec,
+            )
+        {
+            return Err(Error::ConnectionNotObserved);
+        }
+        Some(metadata)
+    } else {
+        None
+    };
+    let elapsed_ms = start.elapsed().as_millis().min(u128::from(u64::MAX)) as u64;
+    let remaining_ms = timeout_ms
+        .checked_sub(elapsed_ms)
+        .filter(|remaining| *remaining != 0)
+        .ok_or(Error::ProcessFailed)?;
+    let current_authority = ExecutionPermitContext {
+        now_epoch: authority
+            .now_epoch
+            .checked_add(start.elapsed().as_secs())
+            .ok_or(Error::InvalidPlan)?,
+        ..*authority
+    };
+    if permit.validate(&current_authority) != PermitValidation::ValidGrant {
+        return Err(Error::Unauthorized);
+    }
     let mut args = match plan.kind {
         CodingEvidenceKind::StaticValidation => vec!["check", "--all-targets"],
-        CodingEvidenceKind::RuntimeValidation | CodingEvidenceKind::ProductionConnection => {
+        CodingEvidenceKind::RuntimeValidation => {
             vec!["test", "--lib"]
         }
+        CodingEvidenceKind::ProductionConnection => vec![
+            "test",
+            "--test",
+            plan.connection
+                .as_ref()
+                .ok_or(Error::InvalidPlan)?
+                .integration_target
+                .as_str(),
+        ],
         CodingEvidenceKind::AcceptanceTest => vec![
             "test",
             "--test",
@@ -499,18 +591,23 @@ pub fn observe_dgcl_cargo_validation(
                 .ok_or(Error::InvalidPlan)?,
         );
         args.extend(["--", "--exact", "--test-threads=1"]);
-    } else if matches!(
-        plan.kind,
-        CodingEvidenceKind::RuntimeValidation | CodingEvidenceKind::ProductionConnection
-    ) {
+    } else if plan.kind == CodingEvidenceKind::ProductionConnection {
+        args.push(
+            &plan
+                .connection
+                .as_ref()
+                .ok_or(Error::InvalidPlan)?
+                .test_name,
+        );
+        args.extend(["--", "--exact", "--test-threads=1"]);
+    } else if plan.kind == CodingEvidenceKind::RuntimeValidation {
         args.extend(["--", "--test-threads=1"]);
     }
-    let start = Instant::now();
     let process = run_bounded_tool(BoundedToolRequest {
         program: cargo.to_str().ok_or(Error::UnsafePath)?,
         args: &args,
         stdin: None,
-        timeout_ms,
+        timeout_ms: remaining_ms,
         stdout_limit: 1_048_576,
         stderr_limit: 1_048_576,
     });
@@ -522,7 +619,12 @@ pub fn observe_dgcl_cargo_validation(
     {
         return Err(Error::ProcessFailed);
     }
-    if plan.kind != CodingEvidenceKind::StaticValidation
+    if plan.kind == CodingEvidenceKind::ProductionConnection {
+        let spec = plan.connection.as_ref().ok_or(Error::InvalidPlan)?;
+        if !crate::production_connection::connection_test_observed(&process.stdout, spec) {
+            return Err(Error::ConnectionNotObserved);
+        }
+    } else if plan.kind != CodingEvidenceKind::StaticValidation
         && !check_cargo_test_result(plan.kind, &process.stdout)
     {
         return Err(Error::TestsNotObserved);
@@ -549,6 +651,14 @@ pub fn observe_dgcl_cargo_validation(
         return Err(Error::Unauthorized);
     }
     verify_dgcl_cargo_registration(plan, tool_verifier, observed_at_epoch)?;
+    if let Some(spec) = &plan.connection {
+        crate::production_connection::validate_connection_source(&root, spec)?;
+        crate::production_connection::verify_connection_registration(
+            spec,
+            tool_verifier,
+            observed_at_epoch,
+        )?;
+    }
     let unique = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|_| Error::InvalidPlan)?
@@ -565,6 +675,7 @@ pub fn observe_dgcl_cargo_validation(
             &run_digest,
             &plan_digest,
             &process,
+            &metadata_observation,
             &lifecycle.snapshot_digest,
         ))
         .map_err(|_| Error::InvalidPlan)?,
@@ -578,7 +689,15 @@ pub fn observe_dgcl_cargo_validation(
         observation_digest,
         process,
         observed_at_epoch,
-        valid_until_epoch: permit.expires_at_epoch(),
+        valid_until_epoch: permit
+            .expires_at_epoch()
+            .min(connection_expiry.unwrap_or(u64::MAX))
+            .min(
+                plan.tool_registration
+                    .as_ref()
+                    .and_then(|receipt| receipt.claims().expires_at_epoch())
+                    .unwrap_or(0),
+            ),
     })
 }
 
@@ -764,7 +883,7 @@ pub fn issue_dgcl_cargo_evidence(
     Ok(claim)
 }
 
-fn safe_test_name(value: &str) -> bool {
+pub(crate) fn safe_test_name(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 256
         && !value.starts_with('-')
@@ -794,7 +913,7 @@ fn check_real_file(path: &Path) -> Result<(), DgclValidationProducerError> {
     Ok(())
 }
 
-fn checked_validation_path(
+pub(crate) fn checked_validation_path(
     root: &Path,
     relative: &str,
 ) -> Result<std::path::PathBuf, DgclValidationProducerError> {

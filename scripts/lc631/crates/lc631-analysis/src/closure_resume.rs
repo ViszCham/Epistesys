@@ -84,6 +84,7 @@ pub struct CheckpointHeadRequest<'a> {
 pub enum CheckpointIntegrityState {
     Unanchored,
     TrustedHeadMatched,
+    HistoricalHeadMatched,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -241,6 +242,26 @@ pub fn load_checkpoint_head(
     verifier: &ReceiptVerifier,
     now_epoch: u64,
 ) -> Result<CheckpointHeadAnchor, ResumeError> {
+    load_checkpoint_head_inner(ledger, heads, verifier, now_epoch, false)
+}
+
+/// Verify an authentic stored head as history, never as a current lease.
+pub fn load_checkpoint_head_historical(
+    ledger: &Path,
+    heads: &Path,
+    verifier: &ReceiptVerifier,
+    now_epoch: u64,
+) -> Result<CheckpointHeadAnchor, ResumeError> {
+    load_checkpoint_head_inner(ledger, heads, verifier, now_epoch, true)
+}
+
+fn load_checkpoint_head_inner(
+    ledger: &Path,
+    heads: &Path,
+    verifier: &ReceiptVerifier,
+    now_epoch: u64,
+    historical: bool,
+) -> Result<CheckpointHeadAnchor, ResumeError> {
     let heads = distinct_head_root(ledger, heads)?;
     let path = heads.join(".writer.lock");
     let metadata = fs::symlink_metadata(&path).map_err(|_| ResumeError::TrustedHeadMissing)?;
@@ -254,13 +275,20 @@ pub fn load_checkpoint_head(
     lock.try_lock_shared()
         .map_err(|_| ResumeError::ConcurrentWriter)?;
     let anchor = read_latest_head(&heads)?.ok_or(ResumeError::TrustedHeadMissing)?;
+    if historical && now_epoch < anchor.issued_at_epoch {
+        return Err(ResumeError::TrustedHeadExpired);
+    }
     verify_checkpoint_head_anchor(
         &anchor,
         verifier,
         &anchor.source_revision,
         &anchor.plan_digest,
         &anchor.authority_revision,
-        now_epoch,
+        if historical {
+            anchor.issued_at_epoch
+        } else {
+            now_epoch
+        },
     )?;
     Ok(anchor)
 }
@@ -294,10 +322,22 @@ fn read_latest_head(root: &Path) -> Result<Option<CheckpointHeadAnchor>, ResumeE
         let index = anchor
             .sequence
             .map_or(0, |sequence| sequence.saturating_add(1));
-        if path.file_name().and_then(|name| name.to_str())
-            != Some(format!("head-{index:020}.json").as_str())
+        let ordinary_name = format!("head-{index:020}.json");
+        let renewal_name = checkpoint_head_renewal_name(&anchor);
+        let is_renewal =
+            path.file_name().and_then(|name| name.to_str()) == Some(renewal_name.as_str());
+        if (is_renewal
+            && latest.as_ref().is_none_or(|prior| {
+                prior.sequence != anchor.sequence || prior.head_digest != anchor.head_digest
+            }))
+            || (!is_renewal
+                && path.file_name().and_then(|name| name.to_str()) != Some(ordinary_name.as_str()))
             || latest.as_ref().is_some_and(|prior| {
-                prior.sequence >= anchor.sequence
+                prior.sequence > anchor.sequence
+                    || (prior.sequence == anchor.sequence
+                        && (!is_renewal
+                            || prior.head_digest != anchor.head_digest
+                            || prior.issued_at_epoch >= anchor.issued_at_epoch))
                     || prior.source_revision != anchor.source_revision
                     || prior.plan_digest != anchor.plan_digest
                     || prior.authority_revision != anchor.authority_revision
@@ -308,6 +348,62 @@ fn read_latest_head(root: &Path) -> Result<Option<CheckpointHeadAnchor>, ResumeE
         latest = Some(anchor);
     }
     Ok(latest)
+}
+
+fn checkpoint_head_renewal_name(anchor: &CheckpointHeadAnchor) -> String {
+    let index = anchor
+        .sequence
+        .map_or(0, |sequence| sequence.saturating_add(1));
+    format!("head-{index:020}.renew-{:020}.json", anchor.issued_at_epoch)
+}
+
+/// Persist an explicitly renewed lease for the exact existing historical head.
+/// This neither appends an action nor validates a program; production callers
+/// must obtain current operation authority and fresh validation independently.
+pub fn persist_checkpoint_head_renewal(
+    ledger: &Path,
+    heads: &Path,
+    renewed: &CheckpointHeadAnchor,
+    verifier: &ReceiptVerifier,
+    now_epoch: u64,
+) -> Result<(), ResumeError> {
+    let heads = distinct_head_root(ledger, heads)?;
+    let _lock = writer_lock(&heads)?;
+    let previous = read_latest_head(&heads)?.ok_or(ResumeError::TrustedHeadMissing)?;
+    verify_checkpoint_head_anchor(
+        &previous,
+        verifier,
+        &renewed.source_revision,
+        &renewed.plan_digest,
+        &renewed.authority_revision,
+        previous.issued_at_epoch,
+    )?;
+    if previous.sequence != renewed.sequence
+        || previous.head_digest != renewed.head_digest
+        || renewed.issued_at_epoch <= previous.issued_at_epoch
+    {
+        return Err(ResumeError::SequenceMismatch);
+    }
+    inspect_resume_with_anchor(
+        ledger,
+        &renewed.source_revision,
+        &renewed.plan_digest,
+        &renewed.authority_revision,
+        Some(renewed),
+        Some(verifier),
+        now_epoch,
+    )?;
+    let bytes = serde_json::to_vec(renewed).map_err(|_| ResumeError::TrustedHeadInvalid)?;
+    if bytes.len() as u64 > MAX_RECORD_BYTES {
+        return Err(ResumeError::BudgetExceeded);
+    }
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(heads.join(checkpoint_head_renewal_name(renewed)))
+        .map_err(|_| ResumeError::Io)?;
+    file.write_all(&bytes).map_err(|_| ResumeError::Io)?;
+    file.sync_all().map_err(|_| ResumeError::Io)
 }
 
 pub fn issue_checkpoint_head_anchor(
@@ -418,6 +514,39 @@ pub fn inspect_resume_with_anchor(
     Ok(observation)
 }
 
+/// Authenticate the original head and exact ledger chain at the original
+/// issuance time while reporting an explicitly historical, non-authorizing state.
+#[allow(clippy::too_many_arguments)]
+pub fn inspect_resume_with_historical_anchor(
+    root: &Path,
+    source_revision: &str,
+    plan_digest: &str,
+    authority_revision: &str,
+    anchor: Option<&CheckpointHeadAnchor>,
+    verifier: Option<&ReceiptVerifier>,
+    now_epoch: u64,
+) -> Result<ResumeObservation, ResumeError> {
+    let anchor = anchor.ok_or(ResumeError::TrustedHeadMissing)?;
+    if now_epoch < anchor.issued_at_epoch {
+        return Err(ResumeError::TrustedHeadExpired);
+    }
+    let mut observation = inspect_resume_with_anchor(
+        root,
+        source_revision,
+        plan_digest,
+        authority_revision,
+        Some(anchor),
+        verifier,
+        anchor.issued_at_epoch,
+    )?;
+    observation.integrity_state = CheckpointIntegrityState::HistoricalHeadMatched;
+    observation.retry_permitted_by_prior_result = false;
+    observation.fresh_revalidation_required = true;
+    observation.authority_created = false;
+    observation.completion_restored = false;
+    Ok(observation)
+}
+
 fn verify_checkpoint_head_anchor(
     anchor: &CheckpointHeadAnchor,
     verifier: &ReceiptVerifier,
@@ -427,6 +556,8 @@ fn verify_checkpoint_head_anchor(
     now_epoch: u64,
 ) -> Result<(), ResumeError> {
     if anchor.schema_version != "epistesys-dgcl-checkpoint-head.v1"
+        || !valid_digest(&anchor.source_revision)
+        || !valid_digest(&anchor.plan_digest)
         || anchor.source_revision != source_revision
         || anchor.plan_digest != plan_digest
         || anchor.authority_revision != authority_revision
@@ -439,6 +570,8 @@ fn verify_checkpoint_head_anchor(
             .is_some_and(|digest| !valid_digest(digest))
         || anchor.expires_at_epoch <= anchor.issued_at_epoch
         || anchor.expires_at_epoch - anchor.issued_at_epoch > MAX_HEAD_ANCHOR_SECONDS
+        || anchor.attestation.claims().issued_at_epoch() != anchor.issued_at_epoch
+        || anchor.attestation.claims().expires_at_epoch() != Some(anchor.expires_at_epoch)
     {
         return Err(ResumeError::TrustedHeadInvalid);
     }

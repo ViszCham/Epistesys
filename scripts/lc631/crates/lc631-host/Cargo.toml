@@ -5,7 +5,9 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+lc631-process-supervisor = { path = "../lc631-process-supervisor" }
 lc631-core = { path = "../lc631-core" }
 lc631-receipt-kernel = { path = "../lc631-receipt-kernel" }
 serde.workspace = true
 serde_json.workspace = true
+pulldown-cmark.workspace = true

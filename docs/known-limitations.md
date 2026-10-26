@@ -36,6 +36,23 @@
 
 ResearchEvaluation=`PendingNoCorpus`とhost観測=`PendingHostObservation`を維持します。今後はsource/build条件、schema互換性、receipt/replay分離、独立評価をそれぞれ再確認し、Epistesys-7の計画と現alphaの成果を分離します。
 
+### EPR候補でも残る境界
+
+EPRの修正候補は以下の不具合対策と明示的な制限を追加します。局所回帰の成功を全gate成功、研究効果、全host強制制御や欠陥ゼロへ昇格させません。現alphaの履歴的検証記録と候補の検証は別です。
+
+| 対象 | 修正候補の範囲と、なお残る条件 |
+| --- | --- |
+| Authorityとreceipt | 元の検証済みsource/span/parent/issuerを保持し、current receiptを`[issued, expires)`で検査する。caller/clock、key custody、実host origin、失効情報自体の真正性は別契約 |
+| 文書領域 | pin済みCommonMark解析はcode/quote等の権限source化を抑止するeligibility検査。完全な指示意味理解でもGrant発行でもない |
+| ProductionConnection | 登録direct driverの直接public API呼出しとpin済みassertionに限定。generic `--lib`、推移的call graph、全利用経路、独立oracle、hermeticityの証明ではない |
+| Snapshotと資源 | Rust/Cargo入力列挙・source snapshot・streaming/temp/output quotaを持つ。非Rust include、opaque script、環境、全外部依存は完全なbuild closureへ含まれず、上限超過や不足は明示失敗／未知のまま |
+| Filesystem | Windowsの祖先handle固定と排他的file、Linuxの同一owner・access ACLなしprofileとatomic replacement、private backupを扱う。他Unix更新はUnsupported。全ACL/owner変更profile、特権主体へのsandbox、全OS durabilityは未保証 |
+| 期限切れ履歴 | authenticな履歴の`historical_head_matched`とcurrent権限を分離。fresh権限・独立binding・全validation後に明示renewalする。joint rollback対策や期限切れ権限の復元ではない |
+| Memory | `memory_limit_kind`でconfigured Windows Job-wide committed-memory制限と他profileの未観測を区別する。単一processの観測、temp quota、有限出力を任意の集約RSS保証へ変換しない |
+| GraphとGPU | `token_bindings`によるtoken/syntax/span対応とCPU/GPU summary・top-16 parityを検査する。意味同値、全vector同値、occupancy／hardware saturationは別対象 |
+| Media→TL | source/backend/model/method provenanceとkind/family整合性を改善するが、method-level semantic validation、source-rootの意味、同定・感情・意図、完全な文字起こしは未検証 |
+| 旧consumer | JSON field維持は全decoderの互換保証ではない。`historical_head_matched`とrenewal filenameを知らない旧readerは拒否しうる。current authorityへの暗黙変換はしない |
+
 ## English
 
 This document maps unobserved/unproven scope in `6.3.2-alpha.2` to required checks. Implementation presence, declared-profile local verification, research effects, distribution, and real-host observation are distinct states. See [terms/boundaries](system-architecture.md) and [final verification](../validation/epia2-alpha2-release-verification-2026-10-02.md).
@@ -71,3 +88,20 @@ Initial alpha.1 was a v6.3.1 clone. Alpha.2 adds controlled grammar→Program IR
 - Parsing/verification results do not automatically authorize commit/push/tag/plugin install/host reload.
 
 Retain ResearchEvaluation=`PendingNoCorpus` and host observation=`PendingHostObservation`. Recheck source/build conditions, schemas, receipt/replay separation, and independent evaluation separately; distinguish Epistesys-7 plans from current-alpha results.
+
+### Boundaries remaining in the EPR candidate
+
+The EPR candidate adds the following defect mitigations and explicit limits. Passing bounded regressions is not elevated to all-gate success, research effects, host-wide enforcement, or zero defects. Historical current-alpha verification and candidate verification are separate.
+
+| Subject | Candidate scope and remaining conditions |
+| --- | --- |
+| Authority/receipts | Retain original verified source/span/parent/issuer and check current receipts over `[issued, expires)`. Callers/clocks, key custody, real-host origin, and authenticity of revocation information remain separate contracts |
+| Document regions | Pinned CommonMark parsing checks eligibility against code/quote authority-source promotion; it is neither complete instruction interpretation nor Grant issuance |
+| ProductionConnection | Limited to a registered direct driver's direct public-API call and pinned assertion; not proof from generic `--lib`, transitive call graphs, all usage paths, independent oracles, or hermeticity |
+| Snapshots/resources | Bounded Rust/Cargo input enumeration, source snapshots, and streaming/temporary/output quotas exist. Non-Rust includes, opaque scripts, environments, and all external dependencies are not a complete build closure; excess/missing inputs remain explicit failures or unknowns |
+| Filesystem | Windows ancestor-handle pinning/exclusive files, Linux same-owner/no-access-ACL atomic replacement, and private backups have supported profiles. Other Unix updates are Unsupported; arbitrary ACL/owner changes, privileged-principal confinement, and universal durability are unproven |
+| Expired history | Separate authentic `historical_head_matched` history from current authority; explicit renewal follows fresh authority, independent binding, and all validation. This neither defeats joint rollback nor restores expired permission |
+| Memory | `memory_limit_kind` distinguishes configured Windows Job-wide committed-memory limits from unobserved limits in other profiles. Single-process observations, temporary quotas, and finite output are not arbitrary aggregate RSS guarantees |
+| Graph/GPU | Check token/syntax/span correspondence through `token_bindings` and CPU/GPU summary/top-16 parity. Semantic equivalence, full-vector parity, occupancy, and hardware saturation remain separate |
+| Media→TL | Improve source/backend/model/method provenance and kind/family consistency; method-level semantic validation, source-root meaning, identity/emotion/intent, and perfect transcription remain unvalidated |
+| Legacy consumers | Preserving JSON fields does not ensure every decoder's compatibility. Old readers may reject `historical_head_matched` and renewal filenames; no implicit conversion to current authority is allowed |

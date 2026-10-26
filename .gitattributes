@@ -1,5 +1,10 @@
 # Keep the pinned NLP worker bytes stable on Windows checkouts.
 *.py text eol=lf
 
+# Pinned runtime/lock files are byte identities, not checkout-normalized text.
+/validation/dgcl-python-runtime.v1.json text eol=lf
+/validation/dgcl-python-requirements.lock text eol=lf
+/validation/dgcl-nlp-model-pins.v1.json text eol=lf
+
 # Keep the public research bundle byte hashes stable across checkouts.
 /benchmarks/gb-cc75/2026-08-18/* text eol=lf

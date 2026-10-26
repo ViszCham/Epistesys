@@ -25,6 +25,7 @@ mod language_worker;
 mod model;
 mod pipeline;
 mod process;
+mod production_connection;
 mod python;
 mod python_script;
 mod release;
@@ -42,6 +43,11 @@ pub use validation_producer::{
     DgclCargoExecutionContext, DgclCargoValidationPlan, DgclValidationProducerError,
 };
 
+pub use production_connection::{
+    dgcl_connection_registration_payload, dgcl_connection_registration_scope, DgclConnectionSpec,
+    DIRECT_API_COVERAGE, DIRECT_API_OBSERVER,
+};
+
 pub use closure::{
     build_coding_closure, coding_evidence_payload_digest, coding_evidence_scope,
     CodingClosureError, CodingClosureReport, CodingClosureStatus, CodingEvidenceClaim,
@@ -55,10 +61,12 @@ pub use closure_connection::{
     VerifiedConnectionObservation,
 };
 pub use closure_resume::{
-    append_checkpoint, inspect_resume, inspect_resume_with_anchor, issue_checkpoint_head_anchor,
-    load_checkpoint_head, persist_checkpoint_head, CheckpointBody, CheckpointEventKind,
-    CheckpointHeadAnchor, CheckpointHeadRequest, CheckpointIntegrityState, DeliveryState,
-    ResumeError, ResumeObservation, DGCL_CHECKPOINT_V1_SCHEMA, DGCL_CHECKPOINT_V2_SCHEMA,
+    append_checkpoint, inspect_resume, inspect_resume_with_anchor,
+    inspect_resume_with_historical_anchor, issue_checkpoint_head_anchor, load_checkpoint_head,
+    load_checkpoint_head_historical, persist_checkpoint_head, persist_checkpoint_head_renewal,
+    CheckpointBody, CheckpointEventKind, CheckpointHeadAnchor, CheckpointHeadRequest,
+    CheckpointIntegrityState, DeliveryState, ResumeError, ResumeObservation,
+    DGCL_CHECKPOINT_V1_SCHEMA, DGCL_CHECKPOINT_V2_SCHEMA,
 };
 pub use completion_plan::{
     audit_completion_assignments, build_dgcl_completion_plan, verify_dgcl_completion_plan,

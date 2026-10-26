@@ -26,22 +26,83 @@ fn hash(path: &Path) -> String {
     )
 }
 
+fn connection_spec(
+    root: &Path,
+    host: &HostReceiptContext,
+    now: u64,
+) -> lc631_analysis::DgclConnectionSpec {
+    let mut spec = lc631_analysis::DgclConnectionSpec {
+        schema_version: "epistesys-dgcl-connection-spec.v1".into(),
+        integration_target: "connection".into(),
+        test_name: "production_api_connection".into(),
+        entrypoint: "dgcl_producer_fixture::checked_add".into(),
+        implementation_path: "src/lib.rs".into(),
+        driver_path: "tests/connection.rs".into(),
+        driver_digest: hash(&root.join("tests/connection.rs")),
+        observer_id: lc631_analysis::DIRECT_API_OBSERVER.into(),
+        oracle_id: "checked-add-example.v1".into(),
+        oracle_revision: stable_sha256("::std::assert_eq!(observed, Some(10))"),
+        coverage: lc631_analysis::DIRECT_API_COVERAGE.into(),
+        registration: None,
+    };
+    spec.registration = Some(
+        host.issuer()
+            .issue(
+                ReceiptClass::VerifierCapability,
+                SubjectRevision::checked(&spec.driver_digest).unwrap(),
+                ReceiptScope::checked(lc631_analysis::dgcl_connection_registration_scope(&spec))
+                    .unwrap(),
+                lc631_analysis::dgcl_connection_registration_payload(&spec),
+                now,
+                Some(now + 300),
+                None,
+            )
+            .unwrap(),
+    );
+    spec
+}
+
 #[test]
 fn packaged_cli_closes_a_real_package_and_rejects_substituted_ingress_before_execution() {
-    package_cli_case(false, false);
+    package_cli_case(PackageCase::Finalize);
 }
 
 #[test]
 fn production_cli_repairs_an_actual_file_and_revalidates_the_whole_requirement_set() {
-    package_cli_case(true, false);
+    package_cli_case(PackageCase::Repair);
 }
 
 #[test]
 fn interrupted_production_repair_resumes_with_fresh_evidence_and_without_reapplying() {
-    package_cli_case(true, true);
+    package_cli_case(PackageCase::InterruptedRepair);
 }
 
-fn package_cli_case(repair_mode: bool, interrupt: bool) {
+#[test]
+fn epr_11_expired_authentic_history_requires_fresh_validation_before_production_resume() {
+    package_cli_case(PackageCase::InterruptedExpiredHistory);
+}
+
+#[test]
+fn epr_09_real_post_edit_head_failure_never_reports_no_source_effect() {
+    package_cli_case(PackageCase::PostEditHeadFailure);
+}
+
+enum PackageCase {
+    Finalize,
+    Repair,
+    InterruptedRepair,
+    InterruptedExpiredHistory,
+    PostEditHeadFailure,
+}
+
+fn package_cli_case(case: PackageCase) {
+    let repair_mode = !matches!(case, PackageCase::Finalize);
+    let interrupt = matches!(
+        case,
+        PackageCase::InterruptedRepair | PackageCase::InterruptedExpiredHistory
+    );
+    let expired_history = matches!(case, PackageCase::InterruptedExpiredHistory);
+    let post_edit_failure = matches!(case, PackageCase::PostEditHeadFailure);
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
     let base = std::env::temp_dir().join(format!(
         "dgcl CLI package {} {}",
@@ -58,6 +119,7 @@ fn package_cli_case(repair_mode: bool, interrupt: bool) {
         "Cargo.lock",
         "src/lib.rs",
         "tests/acceptance.rs",
+        "tests/connection.rs",
     ] {
         std::fs::copy(fixture.join(path), package.join(path)).unwrap();
     }
@@ -132,6 +194,8 @@ fn package_cli_case(repair_mode: bool, interrupt: bool) {
                 .then(|| "acceptance".into()),
             acceptance_test: (task.evidence_kind == CodingEvidenceKind::AcceptanceTest)
                 .then(|| "required_checked_arithmetic_contract".into()),
+            connection: (task.evidence_kind == CodingEvidenceKind::ProductionConnection)
+                .then(|| connection_spec(&package, &host, now.as_secs())),
         })
         .collect::<Vec<_>>();
     let time = now.as_secs();
@@ -331,7 +395,8 @@ fn package_cli_case(repair_mode: bool, interrupt: bool) {
     std::fs::create_dir_all(&journal_root).unwrap();
     std::fs::create_dir_all(&head_root).unwrap();
     let invoke = |path: &Path| {
-        Command::new(env!("CARGO_BIN_EXE_lc631"))
+        let mut command = Command::new(env!("CARGO_BIN_EXE_lc631"));
+        command
             .current_dir(&base)
             .arg(if repair_mode {
                 "lc631-dgcl-package-repair"
@@ -352,9 +417,49 @@ fn package_cli_case(repair_mode: bool, interrupt: bool) {
             .arg("--ledger-root")
             .arg(&journal_root)
             .arg("--head-root")
-            .arg(&head_root)
-            .output()
-            .unwrap()
+            .arg(&head_root);
+        if !post_edit_failure || path != bundle_path {
+            return command.output().unwrap();
+        }
+        let mut child = command
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+        loop {
+            if let Some(status) = child.try_wait().unwrap() {
+                let output = child.wait_with_output().unwrap();
+                panic!(
+                    "repair ended before observed edit ({status}): {}",
+                    String::from_utf8_lossy(&output.stderr)
+                );
+            }
+            if std::time::Instant::now() >= deadline {
+                child.kill().unwrap();
+                child.wait().unwrap();
+                panic!("owned repair did not reach the edit boundary within its test deadline");
+            }
+            if std::fs::read_to_string(package.join("src/lib.rs"))
+                .ok()
+                .as_deref()
+                == Some(correct.as_str())
+            {
+                // Real filesystem failure after the real edit. Occupy only the
+                // next append-only head slot in this disposable, owned fixture.
+                let mut fault = std::fs::OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(head_root.join("head-00000000000000000002.json"))
+                    .unwrap();
+                std::io::Write::write_all(&mut fault, b"occupied by post-edit journal fault test")
+                    .unwrap();
+                fault.sync_all().unwrap();
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        child.wait_with_output().unwrap()
     };
     if interrupt {
         std::fs::write(&bundle_path, serde_json::to_vec(&bundle).unwrap()).unwrap();
@@ -403,6 +508,41 @@ fn package_cli_case(repair_mode: bool, interrupt: bool) {
         )
         .unwrap();
         assert_eq!(checkpoint["body"]["event_kind"], "action_started");
+        if expired_history {
+            // Controlled fixture clock: replace only the test-owned head with
+            // an authentic expired attestation of the exact same stored action.
+            let path = head_root.join("head-00000000000000000001.json");
+            let original: lc631_analysis::CheckpointHeadAnchor =
+                serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+            let expired = lc631_analysis::issue_checkpoint_head_anchor(
+                host.issuer(),
+                lc631_analysis::CheckpointHeadRequest {
+                    source_revision: &original.source_revision,
+                    plan_digest: &original.plan_digest,
+                    authority_revision: &original.authority_revision,
+                    sequence: original.sequence,
+                    head_digest: original.head_digest.as_deref(),
+                    now_epoch: time.saturating_sub(7200),
+                    lease_seconds: 1,
+                },
+            )
+            .unwrap();
+            std::fs::write(&path, serde_json::to_vec(&expired).unwrap()).unwrap();
+            assert!(lc631_analysis::load_checkpoint_head(
+                &journal_root,
+                &head_root,
+                host.verifier(),
+                time
+            )
+            .is_err());
+            assert!(lc631_analysis::load_checkpoint_head_historical(
+                &journal_root,
+                &head_root,
+                host.verifier(),
+                time
+            )
+            .is_ok());
+        }
     }
     let mut invalid = bundle.clone();
     let validation_key = if repair_mode { "/validation" } else { "" };
@@ -441,17 +581,14 @@ fn package_cli_case(repair_mode: bool, interrupt: bool) {
         "forged ingress must be rejected before Cargo creates artifacts"
     );
     std::fs::write(&bundle_path, serde_json::to_vec(&bundle).unwrap()).unwrap();
-    let observed = if interrupt {
-        // An existing journal rejects a second mutating invocation.
-        let rejected = invoke(&bundle_path);
-        assert!(!rejected.status.success());
+    let resume = |path: &Path| {
         Command::new(env!("CARGO_BIN_EXE_lc631"))
             .current_dir(&base)
             .args(["lc631-dgcl-package-resume", "--execute", "--prompt", source])
             .arg("--repo")
             .arg(&package)
             .arg("--evidence-file")
-            .arg(&bundle_path)
+            .arg(path)
             .arg("--receipt-root")
             .arg(&host_root)
             .arg("--author-receipt-root")
@@ -462,9 +599,50 @@ fn package_cli_case(repair_mode: bool, interrupt: bool) {
             .arg(&head_root)
             .output()
             .unwrap()
+    };
+    let observed = if interrupt {
+        // An existing journal rejects a second mutating invocation.
+        let rejected = invoke(&bundle_path);
+        assert!(!rejected.status.success());
+        if expired_history {
+            assert!(
+                !resume(&no_authority_path).status.success(),
+                "history must not replace fresh Test authority"
+            );
+            let unrenewed = lc631_analysis::load_checkpoint_head_historical(
+                &journal_root,
+                &head_root,
+                host.verifier(),
+                time,
+            )
+            .unwrap();
+            assert!(
+                unrenewed.expires_at_epoch < time,
+                "failed validation renewed historical lease"
+            );
+        }
+        resume(&bundle_path)
     } else {
         invoke(&bundle_path)
     };
+    if post_edit_failure {
+        assert!(
+            !observed.status.success(),
+            "journal failure must not be success"
+        );
+        assert_eq!(
+            std::fs::read_to_string(package.join("src/lib.rs")).unwrap(),
+            correct
+        );
+        let failure: Value = serde_json::from_slice(&observed.stderr).unwrap();
+        let effect = failure["effect_state"]["source_effect"].as_str().unwrap();
+        assert!(
+            matches!(effect, "applied_observed" | "may_have_applied"),
+            "{failure}"
+        );
+        assert!(!String::from_utf8_lossy(&observed.stderr).contains("no mutation"));
+        return;
+    }
     assert!(
         observed.status.success(),
         "{}",

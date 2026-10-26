@@ -18,6 +18,11 @@ pub const MAX_SUMMARY_ROWS: usize = 2_048;
 pub const MAX_FINALIST_ROWS: usize = 16;
 pub const NUMERIC_SUMMARY_SCHEMA: &str = "lc631-numeric-summary.v1";
 pub const NUMERIC_SUMMARY_WORDS: usize = 8;
+/// Shared CPU/GPU admission bounds, checked before allocation or submission.
+pub const MAX_NUMERIC_ROWS: usize = 65_536;
+pub const MAX_NUMERIC_EDGES: usize = 262_144;
+pub const MAX_JACOBI_ROUNDS: usize = 1_024;
+pub const MAX_JACOBI_WORK: usize = 268_435_456;
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -136,6 +141,9 @@ pub struct NumericEpochInput {
 impl NumericEpochInput {
     pub fn validate(&self) -> Result<(), AcceleratorError> {
         let rows = self.axes_x100.len();
+        if rows > MAX_NUMERIC_ROWS {
+            return Err(AcceleratorError::BudgetExceeded("projection_rows"));
+        }
         if rows == 0 || self.masks.len() != rows {
             return Err(AcceleratorError::ShapeMismatch("projection"));
         }
@@ -149,14 +157,16 @@ impl NumericEpochInput {
         {
             return Err(AcceleratorError::ShapeMismatch("row_identity"));
         }
-        if self.relation_offsets.len() != rows + 1
-            || self.relation_left.len() != self.relation_right.len()
-            || self.relation_offsets.last().copied().unwrap_or_default() as usize
-                != self.relation_left.len()
-            || self
-                .relation_offsets
-                .windows(2)
-                .any(|window| window[0] > window[1])
+        if self.relation_left.len() > MAX_NUMERIC_EDGES {
+            return Err(AcceleratorError::BudgetExceeded("relation_pairs"));
+        }
+        validate_csr(
+            &self.relation_offsets,
+            rows,
+            self.relation_left.len(),
+            "relations",
+        )?;
+        if self.relation_left.len() != self.relation_right.len()
             || self
                 .relation_left
                 .iter()
@@ -173,17 +183,40 @@ impl NumericEpochInput {
             return Err(AcceleratorError::ShapeMismatch("relations"));
         }
         let jacobi = &self.jacobi;
+        if jacobi.initial_x100.len() > MAX_NUMERIC_ROWS
+            || jacobi.indices.len() > MAX_NUMERIC_EDGES
+            || jacobi.rounds > MAX_JACOBI_ROUNDS
+        {
+            return Err(AcceleratorError::BudgetExceeded("jacobi"));
+        }
+        let jacobi_work = jacobi
+            .initial_x100
+            .len()
+            .checked_add(jacobi.indices.len())
+            .and_then(|per_round| per_round.checked_mul(jacobi.rounds));
+        if jacobi_work.is_none_or(|work| work > MAX_JACOBI_WORK) {
+            return Err(AcceleratorError::BudgetExceeded("jacobi_work"));
+        }
+        validate_csr(
+            &jacobi.offsets,
+            jacobi.initial_x100.len(),
+            jacobi.indices.len(),
+            "jacobi",
+        )?;
         if jacobi.initial_x100.is_empty()
             || jacobi.masks.len() != jacobi.initial_x100.len()
-            || jacobi.offsets.len() != jacobi.initial_x100.len() + 1
             || jacobi.indices.len() != jacobi.weights_x100.len()
-            || jacobi.offsets.last().copied().unwrap_or_default() as usize != jacobi.indices.len()
             || jacobi
                 .indices
                 .iter()
                 .any(|index| *index as usize >= jacobi.initial_x100.len())
         {
             return Err(AcceleratorError::ShapeMismatch("jacobi"));
+        }
+        if self.qubo.linear.len() > MAX_NUMERIC_ROWS
+            || self.qubo.interactions.len() > MAX_NUMERIC_EDGES
+        {
+            return Err(AcceleratorError::BudgetExceeded("qubo"));
         }
         if self.qubo.linear.is_empty()
             || self.qubo.linear.len() != self.qubo.selected.len()
@@ -193,12 +226,92 @@ impl NumericEpochInput {
         {
             return Err(AcceleratorError::ShapeMismatch("qubo"));
         }
+        validate_arithmetic(jacobi, &self.qubo)?;
         Ok(())
     }
 
     pub fn rows(&self) -> usize {
         self.axes_x100.len()
     }
+}
+
+fn validate_csr(
+    offsets: &[u32],
+    rows: usize,
+    nonzeroes: usize,
+    label: &'static str,
+) -> Result<(), AcceleratorError> {
+    if rows.checked_add(1) != Some(offsets.len())
+        || offsets.first().copied() != Some(0)
+        || offsets.last().copied().map(|offset| offset as usize) != Some(nonzeroes)
+        || offsets.iter().any(|offset| *offset as usize > nonzeroes)
+        || offsets.windows(2).any(|pair| pair[0] > pair[1])
+    {
+        return Err(AcceleratorError::ShapeMismatch(label));
+    }
+    Ok(())
+}
+
+/// Check conservative arithmetic bounds for the existing i32 GPU ABI before
+/// submission, independently of evaluation order.
+/// CPU kernels retain checked operations as a second line of defense.
+fn validate_arithmetic(jacobi: &JacobiInput, qubo: &QuboInput) -> Result<(), AcceleratorError> {
+    let limit = i64::from(i32::MAX);
+    if jacobi.rounds != 0 {
+        let old_bound = jacobi
+            .initial_x100
+            .iter()
+            .zip(&jacobi.masks)
+            .filter(|(_, mask)| **mask == NumericMask::Known)
+            .map(|(value, _)| i64::from(*value).abs())
+            .max()
+            .unwrap_or(0)
+            .max(100);
+        for node in 0..jacobi.initial_x100.len() {
+            if jacobi.masks[node] != NumericMask::Known {
+                continue;
+            }
+            let start = jacobi.offsets[node] as usize;
+            let end = jacobi.offsets[node + 1] as usize;
+            let mut bound = old_bound;
+            for position in start..end {
+                if jacobi.masks[jacobi.indices[position] as usize] == NumericMask::Known {
+                    let product = old_bound * i64::from(jacobi.weights_x100[position]).abs();
+                    if product > limit {
+                        return Err(AcceleratorError::ArithmeticOverflow("jacobi_product"));
+                    }
+                    bound += product / 100;
+                    if bound > limit {
+                        return Err(AcceleratorError::ArithmeticOverflow("jacobi_sum"));
+                    }
+                }
+            }
+        }
+    }
+    let mut bounds = qubo
+        .linear
+        .iter()
+        .map(|value| i64::from(*value).abs())
+        .collect::<Vec<_>>();
+    if bounds.iter().any(|bound| *bound > limit) {
+        return Err(AcceleratorError::ArithmeticOverflow("qubo_linear"));
+    }
+    for term in &qubo.interactions {
+        let coefficient = i64::from(term.coefficient).abs();
+        if term.left == term.right || qubo.selected[term.right] {
+            bounds[term.left] += coefficient;
+            if bounds[term.left] > limit {
+                return Err(AcceleratorError::ArithmeticOverflow("qubo_sum"));
+            }
+        }
+        if term.right != term.left && qubo.selected[term.left] {
+            bounds[term.right] += coefficient;
+            if bounds[term.right] > limit {
+                return Err(AcceleratorError::ArithmeticOverflow("qubo_sum"));
+            }
+        }
+    }
+    Ok(())
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
@@ -691,7 +804,7 @@ fn cpu_relations(input: &NumericEpochInput) -> Vec<u32> {
 }
 
 fn cpu_jacobi(input: &JacobiInput) -> Result<Vec<i32>, AcceleratorError> {
-    if input.rounds > 1_024 {
+    if input.rounds > MAX_JACOBI_ROUNDS {
         return Err(AcceleratorError::BudgetExceeded("jacobi_rounds"));
     }
     let mut old = input
@@ -712,12 +825,17 @@ fn cpu_jacobi(input: &JacobiInput) -> Result<Vec<i32>, AcceleratorError> {
                 .filter(|position| {
                     input.masks[input.indices[*position] as usize] == NumericMask::Known
                 })
-                .map(|position| {
-                    old[input.indices[position] as usize] * i32::from(input.weights_x100[position])
-                        / 100
-                })
-                .sum::<i32>();
-            next[node] = (old[node] + contribution).clamp(-100, 100);
+                .try_fold(0_i32, |sum, position| {
+                    let product = old[input.indices[position] as usize]
+                        .checked_mul(i32::from(input.weights_x100[position]))
+                        .ok_or(AcceleratorError::ArithmeticOverflow("jacobi_product"))?;
+                    sum.checked_add(product / 100)
+                        .ok_or(AcceleratorError::ArithmeticOverflow("jacobi_sum"))
+                })?;
+            next[node] = old[node]
+                .checked_add(contribution)
+                .ok_or(AcceleratorError::ArithmeticOverflow("jacobi_sum"))?
+                .clamp(-100, 100);
         }
         std::mem::swap(&mut old, &mut next);
     }
@@ -725,28 +843,26 @@ fn cpu_jacobi(input: &JacobiInput) -> Result<Vec<i32>, AcceleratorError> {
 }
 
 fn cpu_qubo(input: &QuboInput) -> Result<Vec<i32>, AcceleratorError> {
-    let mut output = Vec::with_capacity(input.linear.len());
-    for variable in 0..input.linear.len() {
-        let mut local = input.linear[variable];
-        for term in &input.interactions {
-            let other = if term.left == variable {
-                Some(term.right)
-            } else if term.right == variable {
-                Some(term.left)
-            } else {
-                None
-            };
-            if other.is_some_and(|other| input.selected[other]) {
-                local = local
-                    .checked_add(term.coefficient)
-                    .ok_or(AcceleratorError::ArithmeticOverflow("qubo"))?;
-            }
+    let mut output = input.linear.clone();
+    for term in &input.interactions {
+        // For binary variables x²=x, so diagonal coefficients always affect a flip.
+        if term.left == term.right || input.selected[term.right] {
+            output[term.left] = output[term.left]
+                .checked_add(term.coefficient)
+                .ok_or(AcceleratorError::ArithmeticOverflow("qubo"))?;
         }
-        output.push(if input.selected[variable] {
-            -local
-        } else {
-            local
-        });
+        if term.right != term.left && input.selected[term.left] {
+            output[term.right] = output[term.right]
+                .checked_add(term.coefficient)
+                .ok_or(AcceleratorError::ArithmeticOverflow("qubo"))?;
+        }
+    }
+    for (delta, selected) in output.iter_mut().zip(&input.selected) {
+        if *selected {
+            *delta = delta
+                .checked_neg()
+                .ok_or(AcceleratorError::ArithmeticOverflow("qubo_negation"))?;
+        }
     }
     Ok(output)
 }
@@ -1556,5 +1672,68 @@ mod tests {
             broker.execute_epoch(EpochId(1), &binding(), &fixture_input(16)),
             Err(AcceleratorError::BackendIdentityMismatch)
         );
+    }
+}
+
+#[cfg(test)]
+mod epr_arithmetic_tests {
+    use super::*;
+
+    fn energy(input: &QuboInput, state: &[bool]) -> i64 {
+        let linear = input
+            .linear
+            .iter()
+            .zip(state)
+            .filter(|(_, selected)| **selected)
+            .map(|(value, _)| i64::from(*value))
+            .sum::<i64>();
+        linear
+            + input
+                .interactions
+                .iter()
+                .filter(|term| state[term.left] && state[term.right])
+                .map(|term| i64::from(term.coefficient))
+                .sum::<i64>()
+    }
+
+    #[test]
+    fn epr_06_qubo_delta_matches_independent_binary_energy_with_diagonal_terms() {
+        for bits in 0_u8..8 {
+            let input = QuboInput {
+                linear: vec![3, -2, 1],
+                interactions: vec![
+                    QuboInteraction {
+                        left: 0,
+                        right: 0,
+                        coefficient: 5,
+                    },
+                    QuboInteraction {
+                        left: 0,
+                        right: 1,
+                        coefficient: -4,
+                    },
+                    QuboInteraction {
+                        left: 0,
+                        right: 1,
+                        coefficient: 2,
+                    },
+                    QuboInteraction {
+                        left: 1,
+                        right: 2,
+                        coefficient: 7,
+                    },
+                ],
+                selected: (0..3).map(|index| bits & (1 << index) != 0).collect(),
+            };
+            let delta = cpu_qubo(&input).unwrap();
+            for variable in 0..3 {
+                let mut flipped = input.selected.clone();
+                flipped[variable] = !flipped[variable];
+                assert_eq!(
+                    i64::from(delta[variable]),
+                    energy(&input, &flipped) - energy(&input, &input.selected)
+                );
+            }
+        }
     }
 }

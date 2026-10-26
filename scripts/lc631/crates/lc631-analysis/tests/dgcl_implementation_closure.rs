@@ -136,6 +136,45 @@ fn lifecycle_snapshot_for(
 }
 
 #[test]
+fn epr_15_positive_evidence_weakening_cannot_create_completion() {
+    // Keep source, obligations, policy, time and negative evidence fixed. These
+    // are development receipts testing the gate, not compiler observations or
+    // independent semantic gold. Deny/conflict removal is a different law.
+    let source = "Please test the package.";
+    let pipeline = report(source);
+    let issuer = ReceiptIssuer::from_key_bytes("epr-subset-fixture", &[103; 32]).unwrap();
+    let verifier = ReceiptVerifier::from_key_bytes("epr-subset-fixture", &[103; 32]).unwrap();
+    let snapshot = lifecycle_snapshot(source, &pipeline.completion_plan);
+    let claims = claims_for(&pipeline.completion_plan, &issuer, 100, &snapshot);
+    assert_eq!(claims.len(), 5);
+    for subset in 0usize..(1 << claims.len()) {
+        let retained = claims
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| subset & (1 << index) != 0)
+            .map(|(_, claim)| claim.clone())
+            .collect::<Vec<_>>();
+        let observed = run_closure(
+            source,
+            &pipeline,
+            &pipeline.completion_plan,
+            &retained,
+            Some(&snapshot),
+            Some(&verifier),
+            100,
+        )
+        .unwrap();
+        assert_eq!(
+            observed.status == DgclImplementationStatus::ImplementationClosed,
+            retained.len() == claims.len(),
+            "subset={subset}"
+        );
+        assert!(!observed.output_commit_allowed);
+        assert!(!observed.authority_created);
+    }
+}
+
+#[test]
 fn exact_per_task_receipts_create_only_an_implementation_closed_candidate() {
     let source = "Please test the package.";
     let report = report(source);

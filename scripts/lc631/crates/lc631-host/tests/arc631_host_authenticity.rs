@@ -174,3 +174,64 @@ fn arc631_05_attested_output_replays_only_once_per_verification_context() {
     fs::remove_file(ledger).unwrap();
     fs::remove_dir(root).unwrap();
 }
+
+#[test]
+fn epr_15_public_observation_flags_cannot_amplify_an_external_precommit_receipt() {
+    let (issuer, verifier) = root();
+    let seed = verified_seed(&issuer, &verifier, &mut ReplayGuard::default());
+    let candidate = HostOutputCandidate {
+        artifact_id: ArtifactId(7),
+        turn_id: TurnId(9),
+        candidate_digest: stable_sha256("output"),
+        output_text: "output".into(),
+    };
+    let wire = issuer
+        .issue(
+            ReceiptClass::HostOutput,
+            SubjectRevision::checked(stable_sha256(&format!(
+                "7:9:{}",
+                candidate.candidate_digest
+            )))
+            .unwrap(),
+            ReceiptScope::checked("host/output/7/9").unwrap(),
+            host_output_payload_digest(&seed, &candidate, "callback").unwrap(),
+            1,
+            None,
+            None,
+        )
+        .unwrap();
+    let receipt = bind_host_output_attested(
+        &seed,
+        &candidate,
+        "callback",
+        Some(wire),
+        &verifier,
+        &mut ReplayGuard::default(),
+        1,
+    )
+    .unwrap();
+    for index in 0..4 {
+        let mut changed = receipt.clone();
+        match index {
+            0 => changed.automatic_host_callback_observed = true,
+            1 => changed.persistent_supervision_observed = true,
+            2 => changed.durable_replay_observed = true,
+            _ => changed.schema_version = "substituted-schema",
+        }
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let owned = std::env::temp_dir().join(format!("epr-output-flags-{index}-{unique}"));
+        assert!(append_durable_replay_verified(
+            &owned,
+            &owned.join("replay.jsonl"),
+            &changed,
+            &verifier,
+            &mut ReplayGuard::default(),
+            1
+        )
+        .is_err());
+        assert!(!owned.exists(), "invalid observed flag caused persistence");
+    }
+}

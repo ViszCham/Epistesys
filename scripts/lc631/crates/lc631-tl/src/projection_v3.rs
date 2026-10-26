@@ -245,10 +245,15 @@ impl ProjectionDefectGraphV3 {
     }
 
     pub fn add_target_claim(&mut self, claim: TargetClaim) -> Result<(), ProjectionV3Error> {
-        if self.target_claims.insert(claim.id, claim).is_some() {
-            return Err(ProjectionV3Error::DuplicateTargetClaim);
+        match self.target_claims.entry(claim.id) {
+            std::collections::btree_map::Entry::Occupied(_) => {
+                Err(ProjectionV3Error::DuplicateTargetClaim)
+            }
+            std::collections::btree_map::Entry::Vacant(entry) => {
+                entry.insert(claim);
+                Ok(())
+            }
         }
-        Ok(())
     }
 
     pub fn register_capability(
