@@ -42,6 +42,7 @@ function Test-PackageMember {
             'scripts/media_backend.py', 'scripts/install-media-backend.ps1', 'scripts/test_media_resources.py',
             'scripts/new-alpha2-source-package.ps1', 'scripts/test-epr-source-package.ps1',
             'scripts/test-epr-real-media.ps1',
+            'scripts/test_epr_schema.py',
             'docs/dgcl-operating-profile-and-closure.md', 'docs/dgcl-wire-compatibility.md')
 }
 

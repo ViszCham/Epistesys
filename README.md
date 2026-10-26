@@ -12,7 +12,7 @@ Epistesys（エピステシス）は、AIシステムの**要求管理、実行�
 | --- | --- |
 | バージョン | `6.3.2-alpha.2` |
 | 実装の由来 | Labyrinth-Codex v6.3.1の選択source snapshotに、DGCLの構文解析・検証・修復経路を追加 |
-| ソース検証 | 宣言された実行条件に対する`SourceReleaseReady`。条件と記録は[最終検証](validation/epia2-alpha2-release-verification-2026-10-02.md)に記載 |
+| ソース検証 | alpha.2の[履歴的な最終検証](validation/epia2-alpha2-release-verification-2026-10-02.md)と、[EPR修正候補の検証](validation/epr-release-verification-2026-10-27.md)を区別。現在の候補は最終gate確認中 |
 | 配布 | source-only。モデルweight、秘密鍵、個人設定、未監査の配布binaryを同梱しない |
 | ホスト接続 | adapter・receipt・replayの実装を含む。実ホストのcallback／delivery観測は`PendingHostObservation` |
 | 研究評価 | Epistesys固有の効果と独立評価は未実施。独立gold corpusは`PendingNoCorpus` |
@@ -124,7 +124,7 @@ The failure model includes commitment of unsupported generation, omitted constra
 | --- | --- |
 | Version | `6.3.2-alpha.2` |
 | Implementation provenance | Selected Labyrinth-Codex v6.3.1 source snapshot with added DGCL parsing, validation, and repair paths |
-| Source verification | `SourceReleaseReady` for declared operating conditions; conditions and records are in the [final verification](validation/epia2-alpha2-release-verification-2026-10-02.md) |
+| Source verification | Separate [historical alpha.2 verification](validation/epia2-alpha2-release-verification-2026-10-02.md) from [EPR-candidate verification](validation/epr-release-verification-2026-10-27.md); final candidate gates remain pending |
 | Distribution | Source-only; excludes model weights, private keys, personal settings, and unaudited distribution binaries |
 | Host integration | Includes adapter/receipt/replay implementations; real-host callback/delivery observations remain `PendingHostObservation` |
 | Research evaluation | Epistesys-specific effects and independent evaluation are pending; independent gold corpus remains `PendingNoCorpus` |

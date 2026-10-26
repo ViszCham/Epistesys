@@ -191,5 +191,29 @@
       }
     ]
   },
+  "clock_followup_review": {
+  "source_commit": "4ec1f3f2b41bc3d775f11cc3e84e580d80fa8610",
+    "scope": "Complete file-repair unit only; coordinator and repository remain outside this bounded surface",
+    "observations": [
+      {
+        "path": "scripts/lc631/crates/lc631-analysis/src/file_repair.rs",
+        "bytes": 13817,
+        "sha256": "aa1defd76f3d4b5cf1462e92a349fdaf7a084e679c5a413f5d0d6837d0d861b7",
+        "result": {
+          "command": "compile",
+          "fields": {
+            "diagnostics": 2,
+            "evidence": "missing_or_unknown",
+            "graph_digest": "dc4a1dea62c8c4071bd8d516c1afe595a24eef480e37670d9cc639d527fb651e",
+            "input_digest": "bf3f9c777322d6667c34fc71203e37f24ec15d9bf9810575360c3adb757c8469",
+            "nodes": 15,
+            "status": "blocked_with_diagnostics"
+          },
+          "replay_reference": "ASSURANCE-REPLAY-REF-V2\ninput=bf3f9c777322d6667c34fc71203e37f24ec15d9bf9810575360c3adb757c8469\ngraph=dc4a1dea62c8c4071bd8d516c1afe595a24eef480e37670d9cc639d527fb651e\nstate=312109c9eef45e08a4d12af748870d71ab66e279985163fb214c04d532f9c51e\nplan=8ce33415b58d5239aa7463caad6a5675500b202971ff65e4ef53135fc4c5598c\nomission=545b0583eae3fac225e3c1a96d9ca05fe8203960f4d13deb2549218e4d43c09f\npolicy=df28b0a0ed912e9b341053f9c0be5c6f453e771ae233e613de4da2e0e492b5c6\nrendered=576544f6d25adf6e8602d6a8104175f17eef63f42982a69ac8231531dabd7fd6\nsurface=e0642d27b5d806423bf8036ad1ffdf140118037fe0aab7ef9930f9f50d78d69d\n",
+          "semantic_digest": "c703235175a17029d3b414374265fc3e2a0af7041cdf610d494c1a476601c834"
+        }
+      }
+    ]
+  },
   "claim_boundary": "Preserve blocked/needs_evidence/unknown; these are advisory parser/review surfaces, not proof, merge approval or execution authority"
 }

@@ -46,6 +46,7 @@ enum RepairFixture {
     RevalidationTimeout,
     DelayedApply,
     FutureLease,
+    BackdatedClock,
 }
 
 struct MemoryRepairDriver {
@@ -62,6 +63,10 @@ struct MemoryRepairDriver {
 }
 
 impl DgclRepairDriver for MemoryRepairDriver {
+    fn observation_epoch(&self) -> Option<u64> {
+        matches!(self.fixture, RepairFixture::BackdatedClock).then_some(self.now_epoch)
+    }
+
     fn apply(
         &mut self,
         request: &DgclRepairRequest,
@@ -156,7 +161,10 @@ impl DgclRepairDriver for MemoryRepairDriver {
             return Err(DgclRepairDriverError::TimedOut);
         }
         let (outcome, remaining_gap_ids, closure_digest) = match self.fixture {
-            RepairFixture::Route | RepairFixture::DelayedApply | RepairFixture::FutureLease => {
+            RepairFixture::Route
+            | RepairFixture::DelayedApply
+            | RepairFixture::FutureLease
+            | RepairFixture::BackdatedClock => {
                 let connected = route_is_connected(&self.current_target);
                 if connected {
                     (
@@ -375,7 +383,16 @@ fn input_parts(
         }],
     )
     .unwrap();
-    let lease = issue_dgcl_evidence_lease(&snapshot, 100, 180).unwrap();
+    let lease = issue_dgcl_evidence_lease(
+        &snapshot,
+        100,
+        if matches!(fixture, RepairFixture::BackdatedClock) {
+            300
+        } else {
+            180
+        },
+    )
+    .unwrap();
     let selected_task_kind = match fixture {
         RepairFixture::ConditionProjection => lc631_analysis::CodingEvidenceKind::StaticValidation,
         _ => lc631_analysis::CodingEvidenceKind::ProductionConnection,
@@ -539,7 +556,11 @@ fn execute_fixture(
                 permit: &permit,
                 authority_revision: AuthorityRevision(7),
                 trusted_host_fingerprint: &fingerprint,
-                now_epoch: 110,
+                now_epoch: if matches!(fixture, RepairFixture::BackdatedClock) {
+                    301
+                } else {
+                    110
+                },
                 revocation_revision: 1,
                 revoked_permit_digests: &[],
             },
@@ -701,6 +722,30 @@ fn epr_18_file_driver_exposes_its_logical_clock_without_an_external_epoch_source
         driver.observation_epoch().is_some_and(|now| now >= 110),
         "the driver issues leases on a logical clock, so the coordinator must observe that clock"
     );
+}
+
+#[test]
+fn epr_18_backdated_driver_clock_cannot_revive_a_permit_expired_at_the_input_epoch() {
+    let report = execute_fixture(
+        "src/router.rs",
+        DISCONNECTED_ROUTER,
+        &[CONNECTED_ROUTER],
+        RepairFixture::BackdatedClock,
+        None,
+        MAX_DGCL_REPAIR_ATTEMPTS,
+        false,
+    )
+    .unwrap();
+    assert_eq!(report.status, DgclRepairStatus::Unauthorized, "{report:?}");
+    assert_eq!(
+        report.attempts[0].reason,
+        "edit_permit_missing_expired_denied_or_scope_mismatched"
+    );
+    assert_eq!(
+        report.attempts[0].effect_state,
+        lc631_analysis::RepairEffectState::NotAttempted
+    );
+    assert_eq!(report.initial_snapshot_digest, report.final_snapshot_digest);
 }
 
 #[test]

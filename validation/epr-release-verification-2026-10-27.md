@@ -42,7 +42,7 @@
 
 ### 補助監査と再現
 
-[Assurance記録](epr-assurance-observations-2026-10-27.json)はdoctor一回と、16KiB以下の完全な選択Rust単位を保持する。current reviewの4単位は`blocked_with_diagnostics`、1単位は`needs_evidence`、すべてevidenceは`missing_or_unknown`。既存の中間hashも履歴として保持する。診断ゼロを証明やmerge approvalにしない。
+[Assurance記録](epr-assurance-observations-2026-10-27.json)はdoctor一回と、16KiB以下の完全な選択Rust単位を保持する。基本5単位のうち4単位は`blocked_with_diagnostics`、1単位は`needs_evidence`。C3後の完全なfile-repair単位も追加検査し、`blocked_with_diagnostics`、diagnostics=2。すべてevidenceは`missing_or_unknown`で、大きなcoordinatorは未監査のまま。既存の中間hashも履歴として保持する。診断ゼロを証明やmerge approvalにしない。
 
 [監査A](epr-adversarial-audit-a-2026-10-27.md)と[監査B](epr-adversarial-audit-b-2026-10-27.md)はチーム内の別担当レビューであり、独立第三者評価ではない。反例修正を担当した後の確認は自己検証も含み、全体統合gateとは別である。
 
@@ -90,7 +90,7 @@ Do not mix ignored device/model tests into portable-test success. Execute requir
 
 ### Advisory review and reproduction
 
-The [Assurance record](epr-assurance-observations-2026-10-27.json) retains one doctor observation and complete selected Rust units no larger than 16 KiB. Four current units are `blocked_with_diagnostics`, one is `needs_evidence`, and every evidence field remains `missing_or_unknown`. Preserve intermediate hashes as history. Zero diagnostics are neither proof nor merge approval.
+The [Assurance record](epr-assurance-observations-2026-10-27.json) retains one doctor observation and complete selected Rust units no larger than 16 KiB. Four of the initial five current units are `blocked_with_diagnostics`, one is `needs_evidence`. A complete post-C3 file-repair unit was additionally reviewed: `blocked_with_diagnostics`, diagnostics=2. Every evidence field remains `missing_or_unknown`; the larger coordinator remains unreviewed. Preserve intermediate hashes as history. Zero diagnostics are neither proof nor merge approval.
 
 [Audit A](epr-adversarial-audit-a-2026-10-27.md) and [audit B](epr-adversarial-audit-b-2026-10-27.md) are different-contributor team reviews, not independent third-party evaluation. Follow-up after implementing a correction includes self-verification and cannot replace integration gates.
 

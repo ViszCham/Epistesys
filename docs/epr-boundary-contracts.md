@@ -35,6 +35,8 @@ Mediaの表示DTOと認証済み入力bindingを分離し、使用直前と完�
 
 既存JSON fieldは削除せず、connection spec、token binding、historical head状態、作用・memory metadataを追加します。未知enumを拒否する旧consumerがあるため、全旧decoderの透過互換は保証しません。既存の制限付きviewと現在のverified constructorを用い、古いreportから新しいpermissionを復元しません。
 
+配布helperが作るものは、固定commit／承認inventoryから選んだ**CLIのsource検証用package**です。skillsやhooksをすべて含むplugin install archiveではありません。source packageのbuild／実CLI成功、repositoryのplugin配置、実install／host pickupは別の確認対象です。
+
 独立gold、一般意味精度、実hostのpickup/配信、外部revocationと鍵保管、全build world、OS-wide isolationは別の未観測・未実証条件です。研究仮説の実証や形式証明を、これらの修正から自動的に主張しません。
 
 ## English
@@ -71,5 +73,7 @@ Validate CSR, four-state masks, intermediate arithmetic, and work budgets before
 ### Compatibility and residual conditions
 
 Retain existing JSON fields while adding connection specs, token bindings, historical-head states, and effect/memory metadata. Some legacy consumers reject unknown enums, so transparent compatibility with every old decoder is unproven. Use limited views/current verified constructors; old reports do not restore permissions.
+
+The packaging helper produces a **CLI-source verification package** selected from a fixed commit/approved inventory, not a complete plugin-install archive containing every skill/hook. Source-package builds/real CLI tests, repository plugin layout, actual installation, and host pickup require separate checks.
 
 Independent gold, general semantic accuracy, real-host pickup/delivery, external revocation/key custody, complete build worlds, and OS-wide isolation remain separate unknowns. These fixes do not establish research hypotheses or formal proof.

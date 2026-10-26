@@ -18,6 +18,8 @@
 
 4単位は`blocked_with_diagnostics`、1単位は`needs_evidence`である。diagnosticsが0でも、証明・意味的正しさ・接続完成・承認にはならない。各単位のSHA-256、input/graph digest、replay reference、未充足のevidence状態はJSON記録に保持している。doctorはadapter facadeのhealth観測として一度実行されたもので、sourceや実行の正しさを保証しない。
 
+C3の時刻修正後には、`lc631-analysis/src/file_repair.rs`の完全な13,817-byte単位も追加で検査した。`clock_followup_review`はcommit `4ec1f3f2b41bc3d775f11cc3e84e580d80fa8610`、SHA-256 `aa1defd76f3d4b5cf1462e92a349fdaf7a084e679c5a413f5d0d6837d0d861b7`へ束縛され、結果は`blocked_with_diagnostics`、diagnostics=2、evidence=`missing_or_unknown`である。大きな`repair_loop.rs`を断片化して監査済みとはしていない。Windows／Linuxの実修復・時刻試験は別の実行証拠であり、補助監査の欠落を消さない。
+
 上の結果は**記録されたsource bytesにのみ**対応する。その後の修正、version metadata更新、配布物、別のcommitへ自動的に移転しない。最終snapshotではsource hashの一致を再確認し、変わった単位を過去の結果で監査済みと扱わない。source変更後の最終release判定、Cargo実行、OS別観測、remote CI、packageとhostの確認は別の証拠である。現在の観測を、それらの完了へ先回りして昇格させない。
 
 ### EPI-05の履歴：6.3.2-alpha.1
@@ -50,6 +52,8 @@ Each selected complete Rust source unit is at most 16 KiB. Selecting a complete 
 | `lc631-cli/src/effect_error.rs` | 5,567 | `blocked_with_diagnostics` | 8 | `missing_or_unknown` |
 
 Four units are `blocked_with_diagnostics`; one is `needs_evidence`. Zero diagnostics do not establish proof, semantic correctness, connection completion, or approval. The JSON record retains each unit's SHA-256, input/graph digests, replay reference, and unresolved evidence state. Doctor ran once as an adapter-facade health observation; it does not guarantee source or execution correctness.
+
+After the C3 clock correction, the complete 13,817-byte `lc631-analysis/src/file_repair.rs` unit was also reviewed. `clock_followup_review` binds commit `4ec1f3f2b41bc3d775f11cc3e84e580d80fa8610` and SHA-256 `aa1defd76f3d4b5cf1462e92a349fdaf7a084e679c5a413f5d0d6837d0d861b7`; its status is `blocked_with_diagnostics`, diagnostics=2, evidence=`missing_or_unknown`. The larger `repair_loop.rs` was not fragmented into a purported complete review. Actual Windows/Linux repair/clock tests are separate execution evidence and do not erase advisory-review gaps.
 
 These results apply **only to the recorded source bytes**. They do not transfer automatically to later fixes, version-metadata changes, distribution artifacts, or another commit. Recheck source hashes at the final snapshot, and do not treat changed units as reviewed using earlier results. Final post-change release decisions, Cargo execution, OS-specific observations, remote CI, package checks, and host observations require separate evidence. Do not preemptively promote the recorded observations into their completion.
 

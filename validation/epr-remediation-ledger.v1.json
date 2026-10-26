@@ -169,8 +169,13 @@
     "B01": "Cargo dependency shadowing std assertion: full metadata rejection and real negative fixture",
     "B02": "Postprocessing budget after allocation: shared action/scope/reference/condition/graph work meter and downstream BudgetRejected/Clarify tests passed",
     "P1": "Pinned NLP byte identities changed by checkout CRLF: explicit LF attributes and physical-byte tests; declared digests unchanged",
-    "C1": "Windows short-path/canonical-root identity divergence: remote producer failures under investigation; not discharged by local success",
-    "C2": "FaceDetection additive family left a stale 16-family catalog assertion: corrected to exact 17-family coverage plus family/method uniqueness; targeted unit suite passed"
+    "C1": "Windows short-path/canonical-root identity divergence: fail-first reproduced, canonical existing-directory identity fixed; alias-targeted pass, final CI pending",
+    "C2": "FaceDetection additive family left a stale 16-family catalog assertion: corrected to exact 17-family coverage plus family/method uniqueness; targeted unit suite passed",
+    "C3": "Post-apply clock was reused before a newly issued lease: two fail-firsts observed, shared logical clock/fresh coordinator sample fixed, five repair-loop tests passed on Windows/Linux; genuine future leases still rejected",
+    "C4": "Concurrent runtime tests exhausted the two-run admission limit before process start: reproduced as process_not_started, test-only serialization plus explicit admission/recovery negative added; final stress/clippy pending after OS112",
+    "C5": "Lossy UTF-8 and Unix backslash normalization collided in root/input keys: three fail-firsts observed, strict path keys and vacant-entry insertion fixed; four Linux regressions passed",
+    "C6": "Additive connection/history fields missing from strict public schemas: real production captures failed first, typed optional fields/closed connection definition added; five schema tests and sixteen surface/consumer checks passed, six amplification mutations rejected",
+    "C7": "README API-to-executor runtime-trace claim exceeded registered direct-driver observation: paired Japanese/English wording corrected and separately reviewed"
   },
   "global_gates": {
     "windows": "pending_final_snapshot",

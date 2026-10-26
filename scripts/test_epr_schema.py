@@ -1,5 +1,6 @@
 """Engineering schema regressions; validation is not receipt authentication."""
 import json
+import importlib.util
 import unittest
 from pathlib import Path
 
@@ -103,6 +104,19 @@ class EprSchemaTests(unittest.TestCase):
         for name in ("authority_created", "host_send_authorized", "output_commit_allowed"):
             field = Draft202012Validator(resume["properties"][name])
             self.assertFalse(field.is_valid(True))
+
+    def test_schema_diagnostics_do_not_echo_signed_bundle_contents(self):
+        spec = importlib.util.spec_from_file_location(
+            "epr_schema_validation", ROOT / "scripts/validate-dgcl-schema.py"
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        private_marker = "never-echo-this-bundle-content" * 1000
+        with self.assertRaises(ValueError) as caught:
+            module.require_valid(self.validator, {"private": private_marker}, "owned-fixture.json")
+        self.assertNotIn(private_marker, str(caught.exception))
+        self.assertIn("schema_rejected", str(caught.exception))
+        self.assertLess(len(str(caught.exception)), 512)
 
 
 if __name__ == "__main__":
