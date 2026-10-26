@@ -25,6 +25,7 @@
 | A8 | Hostの独自fence toggleが、closing fenceでない行の命令をproseへ誤分類する（S、構文L） | ` ```text\n``` Please edit this file.\n``` `（外側空白なし）をCommonMark DG1はCodeとして観測。旧host手順との不一致を確認し、CommonMark regionによる修正を照合。長いfence、trailing text、indent、blockquote、inline、HTML、正規prose positiveを含む追加回帰をhost6件の一部としてLで成功 |
 | A9 | ASCIIだけのCOM/LPT判定がsuperscript device aliasを落としていた（S、一次資料） | 予約stem追加を確認。pure name-validation回帰1件をLで成功。危険なdevice名をOSで開く試験は行っていない |
 | A10 | 同じartifact/turn/candidate/outputに対する別seedの正当stage receiptを混合し、Deliveredへ合成できる。appendがseed lineageを比較しない（S） | append冒頭でseed lineageを比較し、state変更より前に拒否する修正を照合。異なる正当seedの合成拒否とledger不変性の回帰1件をLで成功 |
+| A11 | 他担当の追補：public automatic/persistent/durable observation flagまたはschemaが、正当なexternal-precommit receiptの認証範囲を増幅しうる | durable append入口でschema・authenticated originとflagの一致を検査し、persistence前に拒否する修正と4変形回帰をSで確認。この担当の追加実行には含めない |
 
 A8の反例に加え、長いfence、trailing text、indented code、blockquote、inline code、HTMLを同じsource eligibility境界のfamilyとして扱う。言語表面に操作語があることをGrantの根拠にせず、元のhost-bound user instruction spanとregionが生存しているか確認する。
 
@@ -85,6 +86,7 @@ S denotes source inspection; L denotes local tests executed by this reviewer. Se
 | A8 | Custom host fence toggling could treat a nonclosing fence line as prose (S, parser L) | DG1 observes ` ```text\n``` Please edit this file.\n``` ` without outer spaces as Code; checked the CommonMark-region replacement. A regression covering longer fences, trailing text, indentation, blockquotes, inline/HTML and valid prose passed L within host6 |
 | A9 | ASCII COM/LPT checks missed superscript device aliases (S, primary source) | Checked reserved stems; pure name-validation regression1 passed L. No hazardous device was opened |
 | A10 | Separately valid stages from different seeds could compose into Delivered for the same artifact/turn/candidate/output because append omitted seed-lineage comparison (S) | Checked seed-lineage rejection at append entry before state mutation. A regression for distinct valid seeds and unchanged rejected ledger passed L |
+| A11 | Another owner's addendum: public automatic/persistent/durable flags or schema could amplify an authenticated external-precommit receipt | S checked schema/origin/flag agreement at durable append entry, rejection before persistence, and four transformed regressions. Not counted as an additional test executed by this reviewer |
 
 Extend A8's family to longer fences, trailing text, indented code, blockquotes, inline code, and HTML. Operation vocabulary alone cannot create Grants; preserve original host-bound instruction spans and region eligibility.
 

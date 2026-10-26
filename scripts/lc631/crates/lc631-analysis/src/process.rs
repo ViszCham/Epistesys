@@ -419,11 +419,13 @@ mod tests {
 
     #[test]
     fn rustc_version_is_bounded_and_observed_when_available() {
+        // Cold Windows CI also fingerprints a large compiler executable. This
+        // positive observation has an explicit budget; it is not a latency gate.
         let output = run_bounded_tool(BoundedToolRequest {
             program: "rustc",
             args: &["--version"],
             stdin: None,
-            timeout_ms: 2_000,
+            timeout_ms: 15_000,
             stdout_limit: 4096,
             stderr_limit: 4096,
         });
@@ -535,23 +537,30 @@ mod tests {
     #[test]
     fn lone_root_is_terminated_and_reaped_through_the_production_adapter() {
         #[cfg(windows)]
-        let executable = std::env::current_exe().unwrap();
+        let executable = std::path::PathBuf::from(
+            std::env::var_os("SystemRoot").expect("Windows requires SystemRoot"),
+        )
+        .join("System32/WindowsPowerShell/v1.0/powershell.exe");
         #[cfg(windows)]
         let program = executable.to_str().unwrap();
         #[cfg(unix)]
         let program = "/bin/sleep";
         #[cfg(windows)]
         let args: &[&str] = &[
-            "--exact",
-            "process::tests::deadline_helper_child",
-            "--nocapture",
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "[System.Threading.Thread]::Sleep(60000)",
         ];
         #[cfg(unix)]
         let args: &[&str] = &["4"];
         let output = run_bounded_tool(BoundedToolRequest {
             program,
             args,
-            stdin: cfg!(windows).then_some(b"sleep".as_slice()),
+            // The small system executable keeps this 500 ms test about an
+            // actually started root, not a cold fingerprint of this test binary.
+            stdin: None,
             timeout_ms: 500,
             stdout_limit: 4_096,
             stderr_limit: 4_096,

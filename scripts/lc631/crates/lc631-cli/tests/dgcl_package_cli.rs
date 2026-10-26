@@ -62,6 +62,297 @@ fn connection_spec(
     spec
 }
 
+fn epoch_now() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+}
+
+fn renew_test_receipt(
+    issuer: &lc631_receipt_kernel::ReceiptIssuer,
+    original: &lc631_receipt_kernel::UntrustedReceipt,
+    now: u64,
+    parent: Option<String>,
+) -> lc631_receipt_kernel::UntrustedReceipt {
+    let claims = original.claims();
+    issuer
+        .issue(
+            claims.class(),
+            claims.subject_revision().clone(),
+            claims.scope().clone(),
+            claims.payload_digest(),
+            now,
+            Some(now.checked_add(300).unwrap()),
+            parent,
+        )
+        .unwrap()
+}
+
+// Test-host reauthorization, never a production expiry bypass. Each new CLI
+// operation receives fresh finite receipts; changing a plan's registrations
+// changes its scope, so the user-span and parent-linked Grant are reissued too.
+fn fresh_test_bundle(
+    original: &Value,
+    source: &str,
+    host: &HostReceiptContext,
+    author: &HostReceiptContext,
+    now: u64,
+) -> Value {
+    let mut bundle = original.clone();
+    let validation = if bundle.get("validation").is_some() {
+        &mut bundle["validation"]
+    } else {
+        &mut bundle
+    };
+    let mut plans: Vec<DgclCargoValidationPlan> =
+        serde_json::from_value(validation["plans"].clone()).unwrap();
+    let mut seeds = validation["seeds"].as_array().unwrap().clone();
+    for (plan, seed) in plans.iter_mut().zip(&mut seeds) {
+        plan.tool_registration = Some(renew_test_receipt(
+            host.issuer(),
+            plan.tool_registration.as_ref().unwrap(),
+            now,
+            None,
+        ));
+        if let Some(connection) = &mut plan.connection {
+            connection.registration = Some(renew_test_receipt(
+                host.issuer(),
+                connection.registration.as_ref().unwrap(),
+                now,
+                None,
+            ));
+        }
+        let scope = dgcl_cargo_validation_scope(plan);
+        renew_test_seed(seed, source, &scope, Action::Test, host, now);
+    }
+    validation["plans"] = serde_json::to_value(plans).unwrap();
+    validation["seeds"] = json!(seeds);
+    let binding = serde_json::from_value(validation["binding_receipt"].clone()).unwrap();
+    validation["binding_receipt"] =
+        serde_json::to_value(renew_test_receipt(author.issuer(), &binding, now, None)).unwrap();
+    for binding in validation["binding_receipts"].as_array_mut().unwrap() {
+        let old = serde_json::from_value(binding.clone()).unwrap();
+        *binding =
+            serde_json::to_value(renew_test_receipt(author.issuer(), &old, now, None)).unwrap();
+    }
+    if bundle.get("edit_seed").is_some() {
+        let scope = bundle["request"]["authorization_scope"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        renew_test_seed(
+            &mut bundle["edit_seed"],
+            source,
+            &scope,
+            Action::Edit,
+            host,
+            now,
+        );
+    }
+    bundle
+}
+
+fn renew_test_seed(
+    seed: &mut Value,
+    source: &str,
+    scope: &str,
+    action: Action,
+    host: &HostReceiptContext,
+    now: u64,
+) {
+    let artifact = ArtifactId(seed["artifact_id"].as_u64().unwrap());
+    let turn = TurnId(seed["turn_id"].as_u64().unwrap());
+    let span = SourceSpan {
+        start: seed["user_start"].as_u64().unwrap() as usize,
+        end: seed["user_end"].as_u64().unwrap() as usize,
+    };
+    let receipt = host
+        .issuer()
+        .issue(
+            ReceiptClass::HostSeed,
+            SubjectRevision::checked(stable_sha256(source)).unwrap(),
+            ReceiptScope::checked(format!(
+                "host/user-span/{}/{}/{}",
+                artifact.0,
+                turn.0,
+                stable_sha256(scope)
+            ))
+            .unwrap(),
+            host_seed_scoped_payload_digest(artifact, turn, source, span, scope),
+            now,
+            Some(now + 300),
+            None,
+        )
+        .unwrap();
+    let event = lc631_core::AuthorityEvent {
+        action,
+        source: lc631_core::AuthoritySourceKind::VerifiedHostUserSpan,
+        polarity: lc631_core::DeonticPolarity::Grant,
+        span,
+        scope: scope.into(),
+    };
+    let authority = host
+        .issuer()
+        .issue(
+            ReceiptClass::Authority,
+            SubjectRevision::checked(stable_sha256(source)).unwrap(),
+            ReceiptScope::checked(format!(
+                "authority/{}/{}",
+                match action {
+                    Action::Edit => "edit",
+                    Action::Test => "test",
+                    _ => panic!("unsupported test action"),
+                },
+                scope,
+            ))
+            .unwrap(),
+            lc631_core::authority_event_payload_digest(&event),
+            now,
+            Some(now + 300),
+            Some(receipt.receipt_digest()),
+        )
+        .unwrap();
+    seed["receipt"] = serde_json::to_value(receipt).unwrap();
+    seed["authority_receipt"] = serde_json::to_value(authority).unwrap();
+}
+
+#[test]
+fn epr_11_test_host_renews_operation_receipts_without_extending_original_leases() {
+    use lc631_host::HostExecutionPermitAdmission;
+    use lc631_receipt_kernel::{ReceiptPolicy, UntrustedReceipt};
+    let root = std::env::temp_dir().join(format!(
+        "dgcl-current-operation-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos(),
+    ));
+    let host = HostReceiptContext::load_or_create(&root.join("host")).unwrap();
+    let author = HostReceiptContext::load_or_create(&root.join("author")).unwrap();
+    let source = "Please test the package.";
+    let issued = 1_000;
+    let next_operation = issued + 300;
+    let tool = host
+        .issuer()
+        .issue(
+            ReceiptClass::ToolExecution,
+            SubjectRevision::checked(stable_sha256("cargo")).unwrap(),
+            ReceiptScope::checked("test-only-cargo-registration").unwrap(),
+            stable_sha256("registered-cargo"),
+            issued,
+            Some(issued + 300),
+            None,
+        )
+        .unwrap();
+    let plan = DgclCargoValidationPlan {
+        schema_version: "epistesys-dgcl-cargo-validation-plan.v1".into(),
+        source_revision: stable_sha256(source),
+        completion_plan_digest: stable_sha256("plan"),
+        requirement_id: "requirement".into(),
+        task_id: "task".into(),
+        kind: CodingEvidenceKind::RuntimeValidation,
+        cargo_path: "test-only-cargo".into(),
+        cargo_digest: stable_sha256("cargo"),
+        manifest_path: "Cargo.toml".into(),
+        manifest_digest: stable_sha256("manifest"),
+        repository_root_digest: stable_sha256("root"),
+        timeout_ms: 60_000,
+        acceptance_target: None,
+        acceptance_test: None,
+        connection: None,
+        tool_registration: Some(tool),
+    };
+    let old_scope = dgcl_cargo_validation_scope(&plan);
+    let mut seed = json!({"artifact_id":900,"turn_id":1,"user_start":0,"user_end":source.len()});
+    renew_test_seed(&mut seed, source, &old_scope, Action::Test, &host, issued);
+    let binding = author
+        .issuer()
+        .issue(
+            ReceiptClass::Closure,
+            SubjectRevision::checked(stable_sha256(source)).unwrap(),
+            ReceiptScope::checked("test-only-binding").unwrap(),
+            stable_sha256("intent"),
+            issued,
+            Some(issued + 300),
+            None,
+        )
+        .unwrap();
+    let old =
+        json!({"plans":[plan],"seeds":[seed],"binding_receipt":binding,"binding_receipts":[]});
+    let original_bytes = serde_json::to_vec(&old).unwrap();
+    let renewed = fresh_test_bundle(&old, source, &host, &author, next_operation);
+    assert_eq!(serde_json::to_vec(&old).unwrap(), original_bytes);
+    let new_plan: DgclCargoValidationPlan =
+        serde_json::from_value(renewed["plans"][0].clone()).unwrap();
+    let new_scope = dgcl_cargo_validation_scope(&new_plan);
+    assert_ne!(
+        old_scope, new_scope,
+        "renewing registrations must bind a new command scope"
+    );
+    let previous: UntrustedReceipt =
+        serde_json::from_value(old["seeds"][0]["receipt"].clone()).unwrap();
+    let current: UntrustedReceipt =
+        serde_json::from_value(renewed["seeds"][0]["receipt"].clone()).unwrap();
+    assert_eq!(previous.claims().expires_at_epoch(), Some(next_operation));
+    assert_eq!(
+        current.claims().expires_at_epoch(),
+        Some(next_operation + 300)
+    );
+    assert!(
+        host.verifier()
+            .verify(
+                previous.clone(),
+                &ReceiptPolicy::exact(
+                    ReceiptClass::HostSeed,
+                    previous.claims().subject_revision().clone(),
+                    previous.claims().scope().clone(),
+                    previous.claims().payload_digest(),
+                    next_operation,
+                ),
+                &mut ReplayGuard::default()
+            )
+            .is_err(),
+        "the old exact-expiry receipt must stay rejected"
+    );
+    let envelope = HostSeedEnvelope::verify_attested_scoped(
+        ArtifactId(900),
+        TurnId(1),
+        source.into(),
+        SourceSpan {
+            start: 0,
+            end: source.len(),
+        },
+        new_scope.clone(),
+        current.clone(),
+        host.verifier(),
+        &mut ReplayGuard::default(),
+        next_operation,
+    )
+    .unwrap();
+    let authority: UntrustedReceipt =
+        serde_json::from_value(renewed["seeds"][0]["authority_receipt"].clone()).unwrap();
+    assert_eq!(
+        authority.claims().parent_receipt_digest(),
+        Some(current.receipt_digest().as_str())
+    );
+    host.admit_execution_permit(
+        &envelope,
+        HostExecutionPermitAdmission {
+            action: Action::Test,
+            scope: new_scope,
+            span: envelope.user_span,
+            authority_revision: AuthorityRevision(1),
+            revocation_revision: 0,
+            now_epoch: next_operation,
+            attestation: authority,
+        },
+        &mut ReplayGuard::default(),
+    )
+    .unwrap();
+}
+
 #[test]
 fn packaged_cli_closes_a_real_package_and_rejects_substituted_ingress_before_execution() {
     package_cli_case(PackageCase::Finalize);
@@ -462,7 +753,8 @@ fn package_cli_case(case: PackageCase) {
         child.wait_with_output().unwrap()
     };
     if interrupt {
-        std::fs::write(&bundle_path, serde_json::to_vec(&bundle).unwrap()).unwrap();
+        let current = fresh_test_bundle(&bundle, source, &host, &author, epoch_now());
+        std::fs::write(&bundle_path, serde_json::to_vec(&current).unwrap()).unwrap();
         let mut child = Command::new(env!("CARGO_BIN_EXE_lc631"))
             .current_dir(&base)
             .args(["lc631-dgcl-package-repair", "--execute", "--prompt", source])
@@ -580,6 +872,7 @@ fn package_cli_case(case: PackageCase) {
         interrupt || !package.join("target").exists(),
         "forged ingress must be rejected before Cargo creates artifacts"
     );
+    let bundle = fresh_test_bundle(&bundle, source, &host, &author, epoch_now());
     std::fs::write(&bundle_path, serde_json::to_vec(&bundle).unwrap()).unwrap();
     let resume = |path: &Path| {
         Command::new(env!("CARGO_BIN_EXE_lc631"))
@@ -682,6 +975,8 @@ fn package_cli_case(case: PackageCase) {
             report["payload"]["journal"]["integrity_state"],
             "trusted_head_matched"
         );
+        let current = fresh_test_bundle(&bundle, source, &host, &author, epoch_now());
+        std::fs::write(&bundle_path, serde_json::to_vec(&current).unwrap()).unwrap();
         let resumed = Command::new(env!("CARGO_BIN_EXE_lc631"))
             .current_dir(&base)
             .args(["lc631-dgcl-package-resume", "--execute", "--prompt", source])

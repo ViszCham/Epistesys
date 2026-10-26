@@ -63,29 +63,29 @@
     },
     {
       "path": "scripts/lc631/crates/lc631-host/src/lib.rs",
-      "bytes": 67227,
-      "sha256": "a8568e92e892f013156651e9fe7398298040b3274726edd43094366e04438830",
+      "bytes": 67838,
+      "sha256": "54a75a32b022e56b706b9a10cf1ae6b413302981f9b03fb35cad58929a09ae85",
       "initial_sha256": "935a8bf539c2c73fb6548c30f31d01c9bfd61ba9ea91a4b10ad58f40ef50b85c",
       "authored_during_audit": false
     },
     {
       "path": "scripts/lc631/crates/lc631-media/src/lib.rs",
-      "bytes": 61747,
-      "sha256": "90a1a120e2c6be0be4a070d68132a08d89b64e1e4cdc3ecf020dce0700857149",
+      "bytes": 62017,
+      "sha256": "56d7e1a6e8eaa5e8141c3ff1c7cd77af8610844241f796b03f22c51e084b95a3",
       "initial_sha256": "337bdf8eb6126a155113c0c95309835834ecd0c1490d0dc040320b88a4b575d8",
       "authored_during_audit": false
     },
     {
       "path": "scripts/lc631/crates/lc631-cli/src/effect_error.rs",
-      "bytes": 5474,
-      "sha256": "455ac3ee0f35a6a8b3ff4933edb7bb208273886aff9e0cd1e2d61fe1e8f148aa",
+      "bytes": 5567,
+      "sha256": "8383e1738208aeda351fc6508f1eab776cc108694da9f710156826d8db92d2e6",
       "initial_sha256": "449d90de9471d6e4f54b37a010e606bca9e6ae7f23c4598b165f7d1b28ac7b3a",
       "authored_during_audit": false
     },
     {
       "path": "scripts/lc631/crates/lc631-cli/src/dgcl_repair.rs",
-      "bytes": 14441,
-      "sha256": "f8b7b619042c4ef5f702c7ea11a9a8036fc713188ca634b3b709b9cf9ae6c4bd",
+      "bytes": 14430,
+      "sha256": "5c7e672dd11df9d54076e232239726754461ba1953c144e47c2ae44789d9e78c",
       "initial_sha256": "6376d8cb096d9f62d6190e872f6cfacbfd3a0b0cabc648e9918db598f76006fd",
       "authored_during_audit": false
     },
@@ -136,7 +136,7 @@
         "replay_reference": "ASSURANCE-REPLAY-REF-V2\ninput=c3e301105bfd856db5e8975f905af808baccaf8567448f36bc598d9b6f1db69e\ngraph=76334e627bda7e7ad24e86ef0afce4815d179235deee542032a65bab97c3a243\nstate=4c2d9474359db0d7472fc7f52c778b5482639d8d187309d61e4cd9d57e9d9a6c\nplan=4a30cd646ab6622e04cd77d1d7c48ff3bc6f1922bccb48032be7c12dc5261ae6\nomission=ed2aad290311ec11b6ba2de6e7f9804b57cfabc7d4c12f5ae037764f086983ac\npolicy=df28b0a0ed912e9b341053f9c0be5c6f453e771ae233e613de4da2e0e492b5c6\nrendered=b2cc664293facdc04534522dbce5512ea3140cf3822fccb298b50e68fbd80ba9\nsurface=4d42254fc4a05d928fe7f1e46f12b2b4c86edb673e968a3b469e6d7b1e1bc31f\n",
         "semantic_digest": "c79b6acfdabaaf41c406b720279e43dc8c3826da0f326ce020a314c8ea2f93d6"
       },
-      "current_source_sha256": "455ac3ee0f35a6a8b3ff4933edb7bb208273886aff9e0cd1e2d61fe1e8f148aa",
+      "current_source_sha256": "8383e1738208aeda351fc6508f1eab776cc108694da9f710156826d8db92d2e6",
       "input_currentness": "stale_input_preserved_not_current_evidence"
     },
     {
