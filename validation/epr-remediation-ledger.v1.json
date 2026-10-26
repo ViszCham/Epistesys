@@ -167,19 +167,21 @@
     "A10": "Cross-seed output stages: transactional lineage continuity",
     "A11": "Mutable callback/durability flags: agreement with authenticated origin",
     "B01": "Cargo dependency shadowing std assertion: full metadata rejection and real negative fixture",
-    "B02": "Postprocessing budget after allocation: action guard fixed; shared scope/graph work-meter finalization in progress",
-    "P1": "Pinned NLP byte identities changed by checkout CRLF: explicit LF attributes and physical-byte tests; declared digests unchanged"
+    "B02": "Postprocessing budget after allocation: shared action/scope/reference/condition/graph work meter and downstream BudgetRejected/Clarify tests passed",
+    "P1": "Pinned NLP byte identities changed by checkout CRLF: explicit LF attributes and physical-byte tests; declared digests unchanged",
+    "C1": "Windows short-path/canonical-root identity divergence: remote producer failures under investigation; not discharged by local success",
+    "C2": "FaceDetection additive family left a stale 16-family catalog assertion: corrected to exact 17-family coverage plus family/method uniqueness; targeted unit suite passed"
   },
   "global_gates": {
     "windows": "pending_final_snapshot",
     "linux": "pending_final_snapshot",
     "configured_ja_en": "observed_current_pre_promotion",
     "actual_gpu": "observed_pre_promotion",
-    "actual_media": "observed_cpu_asr_candidate_pre_promotion",
-    "fresh_package": "pending_current_inventory",
-    "remote_ci": "pending",
+    "actual_media": "observed_current_private_snapshot_cpu_asr_candidate_39_24s_pre_promotion",
+    "fresh_package": "fixed_commit_cfe29f8_build_and_5_real_cli_tests_passed_final_inventory_pending",
+    "remote_ci": "rust_only_negative_both_os_failed_as_intended_positive_windows_producers_unresolved",
     "audit_a": "scoped_delta_record_available",
-    "audit_b": "in_progress"
+    "audit_b": "scoped_counterexamples_fixed_record_available_final_integration_pending"
   },
   "claim_boundary": "No zero-unknown-defect, formal proof, general performance or host activation claim"
 }

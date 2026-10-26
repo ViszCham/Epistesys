@@ -12,6 +12,50 @@ use lc631_receipt_kernel::{
 };
 use sha2::{Digest, Sha256};
 
+#[cfg(windows)]
+#[test]
+fn epr_18_repository_identity_matches_its_existing_windows_path_alias() {
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let root = std::env::temp_dir().join(format!("epr-root-alias-{}-{unique}", std::process::id()));
+    std::fs::create_dir_all(&root).unwrap();
+    let alias = std::path::PathBuf::from(root.to_string_lossy().to_ascii_uppercase());
+    assert_ne!(
+        root, alias,
+        "fixture must actually exercise a lexical alias"
+    );
+    assert_eq!(root.canonicalize().unwrap(), alias.canonicalize().unwrap());
+    assert_eq!(
+        dgcl_repository_root_digest(&root).unwrap(),
+        dgcl_repository_root_digest(&alias).unwrap()
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn epr_18_non_utf8_repository_names_cannot_collapse_to_one_lossy_identity() {
+    use std::os::unix::ffi::OsStringExt;
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let base = std::env::temp_dir().join(format!("epr-root-bytes-{}-{unique}", std::process::id()));
+    let first = base.join(std::ffi::OsString::from_vec(vec![b'r', 0x80]));
+    let second = base.join(std::ffi::OsString::from_vec(vec![b'r', 0x81]));
+    std::fs::create_dir_all(&first).unwrap();
+    std::fs::create_dir_all(&second).unwrap();
+    assert_ne!(first, second);
+    assert_eq!(first.to_string_lossy(), second.to_string_lossy());
+    for root in [&first, &second] {
+        assert_eq!(
+            dgcl_repository_root_digest(root),
+            Err(DgclValidationProducerError::UnsafePath)
+        );
+    }
+}
+
 #[test]
 fn epr_08_an_unrelated_library_summary_is_not_connection_evidence() {
     assert!(!check_cargo_test_result(
@@ -41,6 +85,8 @@ fn epr_17_std_shadow_can_pass_plain_cargo_but_never_mints_connection_evidence() 
         std::fs::create_dir_all(target.parent().unwrap()).unwrap();
         std::fs::copy(fixture.join(relative), target).unwrap();
     }
+    #[cfg(windows)]
+    let root = std::path::PathBuf::from(root.to_string_lossy().to_ascii_uppercase());
     let cargo_output = std::process::Command::new("rustup")
         .args(["which", "cargo"])
         .output()
@@ -146,11 +192,9 @@ fn epr_17_std_shadow_can_pass_plain_cargo_but_never_mints_connection_evidence() 
             max_duration: std::time::Duration::from_secs(60),
         },
     );
-    assert!(
-        matches!(
-            observed,
-            Err(DgclValidationProducerError::ConnectionNotObserved)
-        ),
+    assert_eq!(
+        observed.err(),
+        Some(DgclValidationProducerError::ConnectionNotObserved),
         "renamed std forged the pinned assertion but must not produce a checked observation"
     );
 }
@@ -511,6 +555,10 @@ fn fixture_package() -> std::path::PathBuf {
     ] {
         std::fs::copy(fixture.join(relative), root.join(relative)).unwrap();
     }
+    // Exercise the same canonical/lexical alias boundary as Windows runner
+    // TEMP paths containing an 8.3 user component, even on machines without it.
+    #[cfg(windows)]
+    let root = std::path::PathBuf::from(root.to_string_lossy().to_ascii_uppercase());
     root
 }
 

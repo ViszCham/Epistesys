@@ -60,7 +60,21 @@ pub fn dgcl_repository_root_digest(root: &Path) -> Result<String, DgclValidation
     {
         return Err(DgclValidationProducerError::UnsafePath);
     }
-    let text = absolute.to_string_lossy().replace('\\', "/");
+    // Plans, snapshots and the observer must identify the same existing root.
+    // Windows case/8.3 aliases otherwise hash differently before the observer
+    // canonicalizes the path, spuriously invalidating unchanged input bytes.
+    // This is identity normalization, not path admission: no-follow/reparse
+    // and containment checks remain mandatory at their execution boundaries.
+    let canonical = absolute
+        .canonicalize()
+        .map_err(|_| DgclValidationProducerError::UnsafePath)?;
+    if !canonical.is_dir() {
+        return Err(DgclValidationProducerError::UnsafePath);
+    }
+    let text = canonical
+        .to_str()
+        .ok_or(DgclValidationProducerError::UnsafePath)?
+        .replace('\\', "/");
     Ok(stable_sha256(text.strip_prefix("//?/").unwrap_or(&text)))
 }
 

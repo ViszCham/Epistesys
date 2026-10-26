@@ -1696,7 +1696,16 @@ mod tests {
             .iter()
             .map(|item| item.family)
             .collect::<BTreeSet<_>>();
-        assert_eq!(families.len(), 16);
+        // Face detection is distinct from object detection; no family may be
+        // silently omitted or duplicated by the public method catalog.
+        assert_eq!(families.len(), 17);
+        assert_eq!(families, BTreeSet::from(BackendFamily::all()));
+        assert_eq!(catalog.len(), families.len());
+        let method_ids = catalog
+            .iter()
+            .map(|item| item.method_id)
+            .collect::<BTreeSet<_>>();
+        assert_eq!(method_ids.len(), catalog.len());
         assert!(catalog
             .iter()
             .all(|item| item.backend_required && !item.bundled));

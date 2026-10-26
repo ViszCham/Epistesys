@@ -19,6 +19,8 @@
 
 これは、協調的な登録Cargo/build profileの限定した直接接続観測です。任意の推移的到達性、悪意あるbuild scripts/proc macros/global constructors、ambient Cargo configurationを含むhermetic認証、仕様全体の意味的正しさは証明しません。source-only snapshotの入力閉包を越える再利用は正当化しません。[計画schema](../schemas/epistesys-dgcl-connection-spec.v1.schema.json)は構造検査であり、証拠の真正性を発行しません。
 
+repository rootのscope identityは、存在するdirectoryのcanonical pathへ統一します。Windowsのcase／短縮名が同じdirectoryを指す場合は同じidentityとし、計画・snapshot・observerの表記差による偽の失効を避けます。存在しないrootとUTF-8で表せないrootは拒否し、lossy変換で異なるpathを統合しません。この正規化はpathの入場許可ではなく、nofollow／reparse／containment検査を省略しません。旧lexical digestと新digestが異なる場合はfreshなscope binding／receiptが必要で、旧Grantを翻訳して拡大しません。
+
 ### Media・資源・数値
 
 Mediaの表示DTOと認証済み入力bindingを分離し、使用直前と完了時に元receipt・現在時刻・issuerを検査します。backendは原文pathの再読ではなく、同じbyteを確認したprivate snapshotを読みます。snapshotとdecoderが別々にtemp上限を使い切らないよう、同じ予算から差し引きます。
@@ -53,6 +55,8 @@ This document defines the contracts covered by EPR remediation. Implementation p
 Check pinned driver source/digest, one direct API invocation, standard assertion, observed Cargo targets, exact named runtime test, and current registration receipts. This profile rejects replacement of `std` by a dependency/library. Generic success summaries without driver/oracle correspondence are not connection evidence.
 
 This is bounded direct-driver observation under a cooperative registered Cargo/build profile, not arbitrary transitive reachability, malicious-build-script/proc-macro/global-constructor resistance, hermetic ambient configuration, or complete semantic correctness. It does not justify reuse outside the source-only input closure. The [plan schema](../schemas/epistesys-dgcl-connection-spec.v1.schema.json) checks structure and does not issue authentic evidence.
+
+Repository-root scope identity uses the canonical path of an existing directory. Windows case/short-name aliases for that directory share one identity, preventing spurious invalidation between plan/snapshot/observer spellings. Missing or non-UTF-8 roots are rejected rather than merged through lossy conversion. Identity normalization does not authorize paths or bypass nofollow/reparse/containment checks. When an old lexical digest differs, require fresh scope bindings/receipts; never translate an old Grant into wider authority.
 
 ### Media, resources, and numerics
 
