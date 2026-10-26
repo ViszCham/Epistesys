@@ -1,5 +1,6 @@
 use lc631_analysis::{
-    parse_controlled_instruction, ConditionEvidenceState, InstructionGrammarError,
+    build_dgcl_pipeline, parse_controlled_instruction, ConditionEvidenceState, DgclBackendSet,
+    DgclImplementationStatus, DgclInstructionParseState, InstructionGrammarError,
     InstructionParseBudget,
 };
 
@@ -58,4 +59,27 @@ fn ordinary_three_clause_input_preserves_exact_action_spans() {
     for action in selected.actions {
         assert_eq!(source.get(action.source_span), Some(action.text.as_str()));
     }
+}
+
+#[test]
+fn budget_rejection_stays_visible_through_program_ir_and_completion() {
+    let source = format!("対象 {}確認してください", "file x ".repeat(8000));
+    let pipeline = build_dgcl_pipeline(
+        &source,
+        DgclBackendSet {
+            english: None,
+            japanese: None,
+        },
+    )
+    .unwrap();
+    assert!(pipeline
+        .instruction_parses
+        .iter()
+        .any(|parse| parse.state == DgclInstructionParseState::BudgetRejected));
+    assert!(!pipeline.completion_plan.blockers.is_empty());
+    assert_eq!(
+        pipeline.implementation_closure.status,
+        DgclImplementationStatus::Clarify
+    );
+    assert!(!pipeline.authority_created);
 }
