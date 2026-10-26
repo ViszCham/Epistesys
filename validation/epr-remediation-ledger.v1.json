@@ -175,7 +175,8 @@
     "C4": "Concurrent runtime tests exhausted the two-run admission limit before process start: reproduced as process_not_started, test-only serialization plus explicit admission/recovery negative added; final stress/clippy pending after OS112",
     "C5": "Lossy UTF-8 and Unix backslash normalization collided in root/input keys: three fail-firsts observed, strict path keys and vacant-entry insertion fixed; four Linux regressions passed",
     "C6": "Additive connection/history fields missing from strict public schemas: real production captures failed first, typed optional fields/closed connection definition added; five schema tests and sixteen surface/consumer checks passed, six amplification mutations rejected",
-    "C7": "README API-to-executor runtime-trace claim exceeded registered direct-driver observation: paired Japanese/English wording corrected and separately reviewed"
+    "C7": "README API-to-executor runtime-trace claim exceeded registered direct-driver observation: paired Japanese/English wording corrected and separately reviewed",
+    "C8": "Repeated cryptographic executable checks exhausted local unoptimized debug budgets: optimize only sha2 code generation in dev/test, without caching/skipping freshness checks or extending deadlines; standard vectors and all six real producer cases passed serially"
   },
   "global_gates": {
     "windows": "pending_final_snapshot",

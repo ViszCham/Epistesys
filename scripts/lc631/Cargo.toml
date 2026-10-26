@@ -32,3 +32,11 @@ wgpu = { version = "=29.0.4", default-features = false }
 pulldown-cmark = { version = "=0.13.4", default-features = false }
 tree-sitter = "=0.27.0"
 tree-sitter-rust = "=0.24.2"
+
+# Keep exact executable/source hashing affordable in bounded debug validation.
+# This changes code generation, not the algorithm, freshness checks or budgets.
+[profile.dev.package.sha2]
+opt-level = 3
+
+[profile.test.package.sha2]
+opt-level = 3

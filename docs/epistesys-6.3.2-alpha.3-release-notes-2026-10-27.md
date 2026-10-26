@@ -13,6 +13,7 @@
 - Media：元入力のmutable pathではなくbyte-authenticated private snapshotを処理し、snapshotとdecoderでtemp予算を共有します。frame/PCM/outputをstreaming制限し、UTF-8上限、人物／顔kind、報告methodと観測kind、manifest v3を一致させます。実decoder／OpenCV／CPU ASR候補は独立精度検証とは区別します。
 - 数値・graph：CSR、四値mask、中間算術、QUBO対角項、empty-edge GPU処理を修正。token ordinalとsyntax nodeを同一視せず、明示的なsource/span付きbindingを下流でも再検査します。
 - 配布・CI：固定commitまたは明示承認inventoryのみをpackage化し、未追跡key/env等を黙って含めません。Rust-only変更を捕捉するWindows/Linux CIと、実際に失敗する負例を追加しました。pin対象のLF byteをcheckoutで変えないよう固定します。
+- 開発・テストprofileではSHA-256 backendだけを最適化し、実行fileの暗号学的再検査のコストを抑えます。検査の省略、digestのcache化、期限延長は行いません。標準ベクトルと変更inputの負例を確認し、実修復・接続6件を直列で再観測しました。一般latency保証や性能benchmarkではありません。
 
 ### 互換性・主張の境界
 
@@ -35,6 +36,7 @@ Status: **candidate; promotion gates in progress**. Creating these notes does no
 - Media: process byte-authenticated private snapshots instead of mutable original paths; share temp quotas between snapshots/decoders. Stream-bound frames/PCM/output and align UTF-8 limits, person/face kinds, reported methods, and manifest v3. Actual decoder/OpenCV/CPU-ASR candidates are separate from accuracy evaluation.
 - Numerics/graphs: correct CSR/masks/intermediate arithmetic/diagonal QUBO/empty GPU edges. Replace token-ordinal aliasing with explicit source/span bindings checked downstream.
 - Distribution/CI: package fixed commits or approved inventories only, never silently include untracked key/env files. Add Windows/Linux Rust-change CI and an actual failing negative control; stabilize physical LF bytes for pinned inputs.
+- Dev/test profiles optimize only the SHA-256 backend to reduce repeated cryptographic executable-check cost. Do not skip checks, cache digests, or extend deadlines. Standard vectors/input-mutation negatives and six serial real repair/connection cases were observed; this is neither a general latency guarantee nor a performance benchmark.
 
 ### Compatibility and claim boundaries
 
