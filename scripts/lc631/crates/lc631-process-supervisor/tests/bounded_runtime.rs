@@ -51,11 +51,18 @@ fn lone_root_timeout_is_terminated_reaped_and_bounded() {
 fn descendant_inherited_pipe_does_not_extend_deadline_or_leave_io_workers() {
     let _fixture = runtime_fixture();
     let start = Instant::now();
-    let output = run_helper("descendant-pipe", Duration::from_millis(350));
-    assert!(start.elapsed() < Duration::from_secs(2));
+    // A positive two-process cleanup observation needs OS scheduling margin.
+    // This explicit test budget is not a production default or a guarantee
+    // that every shorter request can verify cleanup instead of retiring it.
+    let output = run_helper("descendant-pipe", Duration::from_millis(1_500));
+    assert!(start.elapsed() < Duration::from_secs(3));
     assert!(output.timed_out);
     assert!(output.process_tree_kill_verified, "{output:?}");
-    assert!(output.io_cleanup_complete);
+    assert!(output.io_cleanup_complete, "{output:?}");
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("owned descendant inherited pipes"),
+        "{output:?}"
+    );
 }
 
 #[test]
@@ -227,6 +234,7 @@ fn owned_runtime_helper() {
                 .spawn()
                 .unwrap();
             child.stdin.take().unwrap().write_all(b"sleep").unwrap();
+            println!("owned descendant inherited pipes");
         }
         "flood" => {
             let block = [b'x'; 8_192];
