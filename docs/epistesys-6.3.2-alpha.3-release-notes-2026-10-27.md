@@ -1,8 +1,8 @@
-# Epistesys 6.3.2-alpha.3 — release candidate notes
+# Epistesys 6.3.2-alpha.3 — release notes
 
 ## 日本語
 
-状態：**alpha.3 identityのrelease candidate。最終gate確認中**。昇格前functional gate成功後にversionを更新しましたが、最終source release readinessは昇格後gateで別に確認します。元の実装はLabyrinth-Codex v6.3.1由来で、今回の変更は既存経路の境界・接続・回復の修正です。Epistesys-7やモデルweightの更新ではありません。
+状態：**宣言standalone profileのfunctional gate完了**。昇格前とalpha.3 identityでの再検証を分離して記録し、文書監査を含むsource release readinessは[検証記録](../validation/epr-release-verification-2026-10-27.md)で別に判定します。元の実装はLabyrinth-Codex v6.3.1由来で、今回の変更は既存経路の境界・接続・回復の修正です。Epistesys-7やモデルweightの更新ではありません。
 
 ### 実装上の変更
 
@@ -21,11 +21,11 @@
 
 GPUのnative completionとsummary/mask/finalist/decision parityは、全vector等値、occupancy、speedupの証明ではありません。CPU ASRの非空出力は文字起こし精度やlicense監査の代わりではありません。source、package、plugin install、host pickup、研究評価を分離します。独立gold・一般性能・実host強制・未知欠陥ゼロ・形式証明は未成立です。
 
-最終的なgate状態は[修正台帳](../validation/epr-remediation-ledger.v1.json)と[境界契約](epr-boundary-contracts.md)を参照してください。候補が未検証の間は、成功を推論しないでください。
+個別gateと最終判定は[修正台帳](../validation/epr-remediation-ledger.v1.json)と[検証記録](../validation/epr-release-verification-2026-10-27.md)、適用範囲は[境界契約](epr-boundary-contracts.md)を参照してください。宣言profileの成功から、未観測のhost動作や研究効果を推論しないでください。
 
 ## English
 
-Status: **alpha.3-identity release candidate; final gates in progress**. The version was updated after pre-promotion functional gates passed; final source readiness requires separate post-promotion checks. The inherited implementation derives from Labyrinth-Codex v6.3.1; this update fixes boundaries, connections, and recovery in existing paths. It is not Epistesys-7 or model-weight training.
+Status: **declared standalone functional gates complete**. Pre-promotion checks and alpha.3-identity revalidation are recorded separately; source readiness, including documentation audit, is assessed separately in the [verification record](../validation/epr-release-verification-2026-10-27.md). The inherited implementation derives from Labyrinth-Codex v6.3.1; this update fixes boundaries, connections, and recovery in existing paths. It is not Epistesys-7 or model-weight training.
 
 ### Implementation changes
 
@@ -44,4 +44,4 @@ Retain existing JSON fields; connection specs, token bindings, and memory/effect
 
 GPU native completion and summary/mask/finalist/decision parity do not prove full-vector equality, occupancy, or speedup. Nonempty CPU ASR output is not accuracy or license review. Separate source, packages, plugin install, host pickup, and research evaluation. Independent gold, general performance, absolute host enforcement, zero unknown defects, and formal proof are not established.
 
-See the [remediation ledger](../validation/epr-remediation-ledger.v1.json) and [boundary contracts](epr-boundary-contracts.md) for final gate state. Do not infer success while the candidate remains unverified.
+See the [remediation ledger](../validation/epr-remediation-ledger.v1.json) and [verification record](../validation/epr-release-verification-2026-10-27.md) for individual gates/final judgment, and the [boundary contracts](epr-boundary-contracts.md) for coverage. Declared-profile success does not establish unobserved host behavior or research effects.

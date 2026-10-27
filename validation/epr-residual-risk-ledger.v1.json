@@ -3,6 +3,10 @@
   "date_jst": "2026-10-27",
   "source_release_scope": "Declared standalone source/build profiles",
   "known_priority_findings_are_not_discharged_by_this_ledger": true,
+  "operational_history": {
+    "initial_fixed_package_validation": "ProcessFailed/Hold observed at 1e3de5c under an earlier local fixture environment; root cause not established. Same-package retries and later normal full 91009e6/alpha.3 helpers passed. Preserve these distinct observations, not a claim of guaranteed completion under arbitrary load.",
+    "short_cleanup_budget": "Windows can confirm owned-tree termination without confirming pipe cleanup within a short budget. Unknown/retired ownership remains explicit; the positive fixture correction does not change production timeouts or guarantee cleanup in every run."
+  },
   "unobserved_or_outside_profile": [
     {
       "scope": "Independent semantic evaluation",
