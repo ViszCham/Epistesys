@@ -5,8 +5,122 @@
   "source_version": "6.3.2-alpha.3",
   "profile": "Declared standalone source/build/CLI profiles; actual Windows GPU/NLP/Media observations and Windows/Ubuntu portable CI.",
   "functional_gates_complete": true,
-  "source_release_ready": false,
-  "repository_audit": "Pending final fixed-export RepoSeiri session; record updates are not silently part of the earlier audited source.",
+  "source_release_ready": true,
+  "repository_audit": {
+    "tool": "RepoSeiri 1.1.0+codex.20260823031336",
+    "audited_commit": "323c0b1b266c13156dd2cd1a4ba2a56c6b6b9142",
+    "profile": "common",
+    "scope": "subtree",
+    "summary_source_session_digest": "sha256:821f4049acd66186f1afc363cb5b8051bd1828ba22d11a470644ad610c8f9cca",
+    "input_binding": "Immutable fixed Git export and identical canonical summaries before/after the queries. Linter/governance/pr-body do not expose native session-digest fields; no native cross-query digest equality or attestation is claimed.",
+    "queries_executed": [
+      "summary",
+      "linter",
+      "governance",
+      "pr-body"
+    ],
+    "all_queries_exit_zero": true,
+    "entries": 397,
+    "documents_selected": 67,
+    "document_candidates": 67,
+    "document_bytes": 962100,
+    "document_events": 8579,
+    "document_diagnostics": 0,
+    "markdown_coverage": "Complete",
+    "conflict_coverage": "Complete",
+    "limit_exceeded": 0,
+    "repository_observations": {
+      "present": 52,
+      "absent": 25,
+      "unknown": 1,
+      "conflict": 0
+    },
+    "summary": {
+      "underclaim_opportunities": 1,
+      "overclaim_risks": 8,
+      "baseline_unknown": 8,
+      "findings": 4,
+      "patch_operations": 2,
+      "holds": 7,
+      "writes_files": false
+    },
+    "linter": {
+      "files": 41,
+      "surfaces": 3,
+      "findings": 4,
+      "suppressed_boundary_exceptions": 15,
+      "manual_context": "Four matches describe negated guarantee boundaries or quote earlier audit findings; retain all four machine findings, not zero."
+    },
+    "governance": {
+      "obligations": 8,
+      "relations": 884,
+      "ordinary_conflicts": 0,
+      "candidate_proposition_conflicts": 458,
+      "candidate_kind": "version",
+      "candidate_boundary": "Candidate-only records include historical versions, short names, other tool versions and metric-like tokens; not all adjudicated and not rewritten as zero.",
+      "readme_translation_alignments": 0,
+      "alignment_unknown": "unsupported_syntax",
+      "program_unknown": "unsupported_syntax",
+      "local_targets_present": 20,
+      "local_targets_missing": 0,
+      "nonlocal_or_unknown_targets": 1,
+      "lifecycle": "unsafe_to_invent",
+      "temporal_activity": "NotRequested"
+    },
+    "closure_boundary": "Bounded audit observations recorded, not certification of publication readiness, general safety, native translation alignment, or permission. The subsequent audit/readiness records are outside the audited snapshot; README and source remain unchanged.",
+    "byte_exact_export": {
+      "regular_files": 320,
+      "raw_git_blob_ids_matched": 320,
+      "missing": 0,
+      "extra": 0,
+      "archive_process_config": "core.autocrlf=false; core.eol=lf",
+      "manifest_sha256": "271542e925fbde31bd7c574b8baaffa7bbb28df60ee7a6865935641c9052612a",
+      "archive_sha256": "6e0a63e92a5519ef19db79fb74563c23b17fa70b65466764c3ba03ada84f2962"
+    },
+    "prior_materialized_export": {
+      "summary_digest": "sha256:85eb89465dbf903cf0982cde2a666325aa9d197352e473c19769602450da993f",
+      "document_bytes": 971166,
+      "boundary": "Intermediate fixed-commit-derived CRLF materialization; not raw Git-blob bytes. Retained as history, not substituted for the final byte-exact export."
+    },
+    "query_output_encoding": "Captured native JSON lines joined with LF; UTF-8 without BOM or trailing LF, not raw stdio bytes or native session digests.",
+    "query_observations": [
+      {
+        "query": "summary_before",
+        "exit_code": 0,
+        "elapsed_ms": 833,
+        "output_text_sha256": "cf61b0e1a8a75b02590cc9a8ca1504640e7aaee7502d2166924f2266a787ac11",
+        "native_session_digest_exposed": true
+      },
+      {
+        "query": "linter",
+        "exit_code": 0,
+        "elapsed_ms": 752,
+        "output_text_sha256": "69643ce8d878c8f74da76aa68055b59c7530b19e44e425f71edca5b58c213cf0",
+        "native_session_digest_exposed": false
+      },
+      {
+        "query": "governance",
+        "exit_code": 0,
+        "elapsed_ms": 1349,
+        "output_text_sha256": "85c7c1ba268ce0b0511e5655df38949bfb9dfc1d2d1a5a5d895675d4a059b1a2",
+        "native_session_digest_exposed": false
+      },
+      {
+        "query": "pr-body",
+        "exit_code": 0,
+        "elapsed_ms": 748,
+        "output_text_sha256": "e8bb2e2c40aaa1ef2f419e13d926d3fa82bd8b26cd4e1da3ed4ef7fbbb215e6e",
+        "native_session_digest_exposed": false
+      },
+      {
+        "query": "summary_after",
+        "exit_code": 0,
+        "elapsed_ms": 718,
+        "output_text_sha256": "cf61b0e1a8a75b02590cc9a8ca1504640e7aaee7502d2166924f2266a787ac11",
+        "native_session_digest_exposed": true
+      }
+    ]
+  },
   "source_input_inventory": {
     "path": "epr-alpha3-source-input-inventory-2026-10-27.json",
     "entries": 231,
@@ -396,5 +510,6 @@
     "boundary": "Source alpha.3 verification does not reinstall or activate the host; the existing mandatory installed routing remains separate."
   },
   "research_status": "PendingNoCorpus / independent evaluation pending",
-  "claim_boundary": "Known-priority engineering remediation under declared profiles only; no zero-unknown-defect, general semantic/performance improvement, formal proof, whole-build-world safety, or host-wide enforcement claim."
+  "claim_boundary": "Known-priority engineering remediation under declared profiles only; no zero-unknown-defect, general semantic/performance improvement, formal proof, whole-build-world safety, or host-wide enforcement claim.",
+  "publication_gate": "Engineering source release ready under the declared profile; final commit/push/CI/merge are separately authorized workflow steps, not authority generated by this record."
 }

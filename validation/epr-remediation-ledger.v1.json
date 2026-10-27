@@ -191,7 +191,7 @@
     "audit_b": "team_scoped_review_retained_reported_counterexamples_fixed",
     "final_delta": "integrator_delta_review_current_selected_source_pins_not_third_party_assurance",
     "schema": "alpha3_6_units_18_captures_27_checks_passed_12_mutation_executions_rejected",
-    "reposeiri": "pending_final_fixed_export_session"
+    "reposeiri": "executed_byte_exact_323c0b1_export_320_blob_ids_matched_summary_bracket_digest_821f4049_native_other_query_digests_unexposed_findings_holds_unknowns_retained"
   },
   "claim_boundary": "No zero-unknown-defect, formal proof, general performance or host activation claim",
   "closed_scope": "Known E01-E21 and related counterexamples under declared standalone source profiles at alpha.3 source commit 20084b4; repository publication audit and unobserved research/host conditions are separate."

@@ -4,7 +4,7 @@
 
 ### 状態と対象
 
-**宣言standalone profileのfunctional gateは完了。最終source release readinessはRepoSeiriの固定export監査を確認中。** source候補は `20084b43fd66d5b619047afee4da2fdca07397b2`、identityは `6.3.2-alpha.3`。基線は `75500ed7a33a009f5e1ce813862dc0a7986372c9`、作業branchは `codex/epr-alpha3-20261027`。
+**宣言standalone profileのfunctional gateと最終文書監査を完了し、alpha.3 source release ready。** 実行検証したsourceは `20084b43fd66d5b619047afee4da2fdca07397b2`、identityは `6.3.2-alpha.3`。RepoSeiriの固定文書監査は `323c0b1b266c13156dd2cd1a4ba2a56c6b6b9142`。基線は `75500ed7a33a009f5e1ce813862dc0a7986372c9`、作業branchは `codex/epr-alpha3-20261027`。readyは宣言profileの工学的判定であり、未検証の研究／host／一般安全性の認証ではない。
 
 [機械可読な最終記録](epr-alpha3-release-readiness-2026-10-27.json)、[231 source入力のinventory](epr-alpha3-source-input-inventory-2026-10-27.json)、[個別欠陥台帳](epr-remediation-ledger.v1.json)を分離する。source／設定／fixture入力は検証後にも231/231のbyte一致を確認した。これは選択したWindows working-tree入力のcurrentnessであり、Git blob／他OSの改行形式、完全な外部依存・build worldの同一性ではない。
 
@@ -25,7 +25,7 @@
 | package inventory | 216 filesをbuild後に全SHA-256再照合。members digest `sha256:984a03af1e5c070c47e9dc1c2fd7788b89f31db540286d1f74c6abeee08168b1` |
 | identity／source launcher | workspace13 crate・plugin source manifest・source skill3件を整合。checkout／fresh packageの実CLIと、別cwdからの通常source launcherがalpha.3を返すことを確認 |
 | 補助監査 | Assurance選択6単位の現在byte一致。5件 `blocked_with_diagnostics`、1件 `needs_evidence`、全件 `missing_or_unknown` |
-| RepoSeiri／文書 | 日英・リンク検査済み。最終fixed exportの同session query／linter／governanceは確認中 |
+| RepoSeiri／文書 | 323c0b1のfixed exportでsummary／linter／governance／draft PR bodyを実行。67/67文書、coverage Complete、limit0。4文言finding、7hold、458 proposition-conflict候補とunsupported状態を保持 |
 
 summary groupを足した数であり、独立課題数や意味正答率ではない。ignoredなdevice／model testをportable CI成功へ混ぜず、GPU／Stanza／Mediaを明示的に別実行した。GPUは全vector一致・occupancy・saturation・speedupを、ASRは精度・license監査・全vision familyのpositiveを実証しない。
 
@@ -42,6 +42,8 @@ packageは**CLI-source検証用のsource-only package**で、全skill／hookを�
 
 ### 監査と主張の境界
 
+[RepoSeiri記録](../docs/reposeiri-audit.md)のsummary前後のdigestは `sha256:821f4049acd66186f1afc363cb5b8051bd1828ba22d11a470644ad610c8f9cca` で一致する。ほかのquery wireにはnative session-digest fieldがないため、固定exportによる外部入力bindingとnative attestationを混同しない。自動日英alignmentはunsupportedであり、手動のclaim照合と構文・metric-token検査とは別である。全320 regular fileのraw Git blob ID一致、missing／extra=0を確認した。中間のCRLF materializationは履歴として分離し、最終観測へ流用しない。本記録と監査記録の後続追記は、その固定監査snapshotの外にある。
+
 [監査A](epr-adversarial-audit-a-2026-10-27.md)／[B](epr-adversarial-audit-b-2026-10-27.md)は別担当のチーム内レビュー、[最終差分点検](epr-final-delta-review-2026-10-27.md)は統合担当の自己検証を含む。独立第三者監査ではない。[Assurance記録](epr-assurance-observations-2026-10-27.json)はdoctor一回と16KiB以下の完全単位に限定し、大きいprocess／coordinatorを分割して監査済みとしない。
 
 既知priority findingの修正と宣言profileの接続・回復検証は、未知欠陥ゼロ、形式証明、一般Coding／意味性能、hallucination削減、長期保持、OS-wide sandbox、完全build world、実host送信の実証ではない。[残存条件](epr-residual-risk-ledger.v1.json)を保持する。研究評価は `PendingNoCorpus`、実hostは `PendingHostObservation`。本作業はplugin再インストール・host activationを行わず、既存の必須installed facadeはalpha.2のまま。source alpha.3と混同しない。
@@ -50,7 +52,7 @@ packageは**CLI-source検証用のsource-only package**で、全skill／hookを�
 
 ### Status and scope
 
-**Functional gates for the declared standalone profile are complete; final source-release readiness awaits the fixed-export RepoSeiri audit.** Source candidate: `20084b43fd66d5b619047afee4da2fdca07397b2`, identity `6.3.2-alpha.3`. Baseline: `75500ed7a33a009f5e1ce813862dc0a7986372c9`; branch: `codex/epr-alpha3-20261027`.
+**Declared-profile functional gates and the final document audit are complete: alpha.3 source release ready.** Executed source: `20084b43fd66d5b619047afee4da2fdca07397b2`, identity `6.3.2-alpha.3`. RepoSeiri audited the fixed documentation snapshot `323c0b1b266c13156dd2cd1a4ba2a56c6b6b9142`. Baseline: `75500ed7a33a009f5e1ce813862dc0a7986372c9`; branch: `codex/epr-alpha3-20261027`. Ready is a declared-profile engineering decision, not certification of untested research/hosts/general safety.
 
 Separate the [machine-readable final record](epr-alpha3-release-readiness-2026-10-27.json), [231-input source inventory](epr-alpha3-source-input-inventory-2026-10-27.json), and [individual-finding ledger](epr-remediation-ledger.v1.json). All 231 source/configuration/fixture byte identities were rechecked after validation. This establishes currentness for selected Windows working-tree inputs, not Git-blob/cross-OS newline equality or complete external-dependency/build-world identity.
 
@@ -71,7 +73,7 @@ Separate the [machine-readable final record](epr-alpha3-release-readiness-2026-1
 | Package inventory | All 216 file SHA-256 values rechecked after build; members digest `sha256:984a03af1e5c070c47e9dc1c2fd7788b89f31db540286d1f74c6abeee08168b1` |
 | Identity/source launcher | Thirteen workspace crates, source plugin manifest and three source skills aligned; checkout/package CLIs and the normal launcher from another cwd returned alpha.3 |
 | Advisory review | Six current Assurance input hashes match; five `blocked_with_diagnostics`, one `needs_evidence`, all `missing_or_unknown` |
-| RepoSeiri/documents | Bilingual/link checks passed; final same-session fixed-export query/linter/governance pending |
+| RepoSeiri/documents | Summary/linter/governance/draft PR body executed on fixed323c0b1 export; 67/67 documents, Complete coverage, limit0. Retain four wording findings, seven holds, 458 candidate proposition conflicts, and unsupported states |
 
 Counts aggregate test-summary groups, not independent tasks or semantic accuracy. Ignored device/model tests were not folded into portable-CI success; GPU/Stanza/Media were executed separately. GPU observations do not establish full-vector equality, occupancy, saturation, or speedup; ASR establishes neither accuracy/license review nor positive coverage of every vision family.
 
@@ -87,6 +89,8 @@ Promote to alpha.3 identity only after `91009e6` passed all 13 prepromotion comm
 - Initial fixed-package `ProcessFailed`/`Hold` causes remain unresolved. Separate them from same-package retries and later passing normal `91009e6`/alpha.3 full helpers; do not infer MAX_PATH or another proven cause. The policy fixture's explicit Git `Filename too long` was a different observation; record process-local `core.longpaths=true` retries, leaving global configuration unchanged.
 
 ### Reviews and claim boundaries
+
+Canonical summary digests before/after the [RepoSeiri queries](../docs/reposeiri-audit.md) match `sha256:821f4049acd66186f1afc363cb5b8051bd1828ba22d11a470644ad610c8f9cca`. Other query wires expose no native session-digest field; do not equate external fixed-export input binding with native attestation. Automatic bilingual alignment remains unsupported, separate from manual claim-level review and syntax/metric-token checks. All 320 regular-file raw Git blob IDs matched, with no missing/extra entries. Separate the intermediate CRLF materialization as history, not final evidence. Subsequent updates to this record and the audit record lie outside that fixed audit snapshot.
 
 [Audits A](epr-adversarial-audit-a-2026-10-27.md)/[B](epr-adversarial-audit-b-2026-10-27.md) are different-contributor team reviews; the [final delta review](epr-final-delta-review-2026-10-27.md) includes integrator self-verification. They are not independent third-party assurance. The [Assurance record](epr-assurance-observations-2026-10-27.json) retains one doctor observation and complete units no larger than16KiB; larger process/coordinator units are not fragmented into claimed coverage.
 
