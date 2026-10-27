@@ -1,9 +1,9 @@
 use lc631_core::stable_sha256;
 use serde::Serialize;
-use std::collections::{BTreeSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::ops::Range;
 
-pub const INSTRUCTION_GRAMMAR_REVISION: &str = "controlled-ja-en-instruction-earley.v2";
+pub const INSTRUCTION_GRAMMAR_REVISION: &str = "controlled-ja-en-instruction-earley.v3";
 const INSTRUCTION_SCHEMA: &str = "epistesys-instruction-parse.v1";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
@@ -372,6 +372,7 @@ pub enum InstructionGrammarError {
     ChartItemBudgetExceeded,
     ForestBudgetExceeded,
     DerivationDepthExceeded,
+    PostprocessBudgetExceeded,
     SourceSpanInvalid,
 }
 
@@ -490,6 +491,7 @@ pub fn parse_controlled_instruction(
     let mut alternatives = Vec::new();
     let mut forest = PackedInstructionForest::default();
     let mut total_chart_items = 0usize;
+    let mut postprocess = PostprocessBudget::new(budget.max_chart_items);
     for route in routes {
         let mut route_budget = budget;
         route_budget.max_chart_items = budget.max_chart_items.saturating_sub(total_chart_items);
@@ -506,22 +508,47 @@ pub fn parse_controlled_instruction(
             .checked_add(chart_item_count)
             .ok_or(InstructionGrammarError::ChartItemBudgetExceeded)?;
         if root_productions.contains(&route.root_production_id) {
+            postprocess.charge(1)?;
             let body = source
                 .get(route.body_span.clone())
                 .ok_or(InstructionGrammarError::SourceSpanInvalid)?
                 .to_string();
-            let (mut actions, coordination, coordination_state) =
-                build_action_candidates(source, &route)?;
+            let (mut actions, coordination, coordination_state) = build_action_candidates(
+                source,
+                &route,
+                budget.max_tokens.min(budget.max_chart_items),
+                &mut postprocess,
+            )?;
+            if actions.len() > budget.max_tokens {
+                return Err(InstructionGrammarError::PostprocessBudgetExceeded);
+            }
+            postprocess.charge(1)?;
             let polarity_scopes = build_polarity_scopes(&route, &mut actions);
-            let conditions = build_conditions(source, &route, &actions)?;
+            let conditions = build_conditions(source, &route, &actions, &mut postprocess)?;
             let shared_argument_state = if actions.len() > 1 {
                 SharedArgumentState::UnresolvedCandidate
             } else {
                 SharedArgumentState::NotApplicable
             };
-            let scopes = build_scope_candidates(source, &actions, &conditions);
-            let references = build_reference_candidates(route.language, source, &actions);
-            let constraint_graph = build_constraint_graph(&actions, &coordination, &conditions);
+            let scopes = build_scope_candidates(source, &actions, &conditions, &mut postprocess)?;
+            let references = build_reference_candidates(
+                route.language,
+                source,
+                &actions,
+                budget,
+                &mut postprocess,
+            )?;
+            let constraint_graph =
+                build_constraint_graph(&actions, &coordination, &conditions, &mut postprocess)?;
+            let materialized = actions
+                .len()
+                .checked_add(scopes.len())
+                .and_then(|count| count.checked_add(references.len()))
+                .and_then(|count| count.checked_add(constraint_graph.edges.len()))
+                .ok_or(InstructionGrammarError::PostprocessBudgetExceeded)?;
+            if materialized > budget.max_chart_items {
+                return Err(InstructionGrammarError::PostprocessBudgetExceeded);
+            }
             alternatives.push(InstructionAst {
                 production_id: route.root_production_id,
                 language: route.language,
@@ -607,6 +634,26 @@ fn missing_explicit_scope_operand(source: &str, ast: &InstructionAst) -> bool {
                         )
                     }))
     })
+}
+
+// One counter bounds materialized records and explicit loop steps across the
+// whole postprocessing path. Lexical byte scans remain source-budget bounded.
+struct PostprocessBudget {
+    remaining: usize,
+}
+
+impl PostprocessBudget {
+    fn new(limit: usize) -> Self {
+        Self { remaining: limit }
+    }
+
+    fn charge(&mut self, count: usize) -> Result<(), InstructionGrammarError> {
+        self.remaining = self
+            .remaining
+            .checked_sub(count)
+            .ok_or(InstructionGrammarError::PostprocessBudgetExceeded)?;
+        Ok(())
+    }
 }
 
 fn validate_budget(budget: InstructionParseBudget) -> Result<(), InstructionGrammarError> {
@@ -1120,6 +1167,8 @@ fn marker_semantics(marker: InstructionMarker) -> (InstructionModality, Instruct
 fn build_action_candidates(
     source: &str,
     route: &ControlledRoute,
+    max_actions: usize,
+    work: &mut PostprocessBudget,
 ) -> Result<
     (
         Vec<InstructionAction>,
@@ -1128,13 +1177,19 @@ fn build_action_candidates(
     ),
     InstructionGrammarError,
 > {
+    let max_actions = max_actions.min(work.remaining);
     let (segments, connector_spans, split_unresolved) = match route.language {
-        InstructionLanguage::English => split_english_actions(source, &route.body_span),
-        InstructionLanguage::Japanese => split_japanese_actions(source, &route.body_span),
-    };
+        InstructionLanguage::English => {
+            split_english_actions(source, &route.body_span, max_actions)
+        }
+        InstructionLanguage::Japanese => {
+            split_japanese_actions(source, &route.body_span, max_actions)
+        }
+    }?;
     let mut actions = Vec::new();
     let mut invalid_segment = false;
     for (segment_index, segment) in segments.iter().enumerate() {
+        work.charge(1)?;
         let default_marker = if route.language == InstructionLanguage::Japanese
             && route.marker == InstructionMarker::JapaneseForbidden
             && segment_index + 1 < segments.len()
@@ -1172,6 +1227,7 @@ fn build_action_candidates(
         if let Some(action) = actions.get_mut(index + 1) {
             action.connector_before = Some(kind);
         }
+        work.charge(1)?;
         coordination.push(InstructionCoordination {
             left_action_index: index as u32,
             right_action_index: index as u32 + 1,
@@ -1228,9 +1284,13 @@ fn build_polarity_scopes(
         .collect()
 }
 
-fn split_english_actions(source: &str, body_span: &Range<usize>) -> ActionSplit {
+fn split_english_actions(
+    source: &str,
+    body_span: &Range<usize>,
+    max_actions: usize,
+) -> Result<ActionSplit, InstructionGrammarError> {
     let Some(body) = source.get(body_span.clone()) else {
-        return (Vec::new(), Vec::new(), true);
+        return Err(InstructionGrammarError::SourceSpanInvalid);
     };
     let words = whitespace_words(body);
     let mut segments = Vec::new();
@@ -1259,6 +1319,9 @@ fn split_english_actions(source: &str, body_span: &Range<usize>) -> ActionSplit 
                 continue;
             }
             if let Some(segment) = trim_source_whitespace(source, cursor..absolute.start) {
+                if segments.len() >= max_actions {
+                    return Err(InstructionGrammarError::PostprocessBudgetExceeded);
+                }
                 segments.push(segment);
                 connectors.push((kind, absolute.clone()));
             } else {
@@ -1268,40 +1331,47 @@ fn split_english_actions(source: &str, body_span: &Range<usize>) -> ActionSplit 
         }
     }
     if let Some(segment) = trim_source_whitespace(source, cursor..body_span.end) {
+        if segments.len() >= max_actions {
+            return Err(InstructionGrammarError::PostprocessBudgetExceeded);
+        }
         segments.push(segment);
     } else if !connectors.is_empty() {
         unresolved = true;
     }
-    (segments, connectors, unresolved)
+    Ok((segments, connectors, unresolved))
 }
 
-fn split_japanese_actions(source: &str, body_span: &Range<usize>) -> ActionSplit {
+fn split_japanese_actions(
+    source: &str,
+    body_span: &Range<usize>,
+    max_actions: usize,
+) -> Result<ActionSplit, InstructionGrammarError> {
     let mut segments = Vec::new();
     let mut connectors = Vec::new();
     let mut cursor = body_span.start;
     let mut unresolved = false;
+    let quotes = quoted_spans(source, body_span);
     let condition_end = find_japanese_condition_surface(source, body_span)
         .map(|condition| condition.source_span.end)
         .unwrap_or(body_span.start);
     while cursor < body_span.end {
+        if segments.len() >= max_actions {
+            return Err(InstructionGrammarError::PostprocessBudgetExceeded);
+        }
         let Some(_remaining) = source.get(cursor..body_span.end) else {
-            return (Vec::new(), Vec::new(), true);
+            return Err(InstructionGrammarError::SourceSpanInvalid);
         };
         let search_span = cursor..body_span.end;
-        let te = find_unquoted_substring(source, &search_span, "し、").map(|start| {
-            (
-                start - cursor,
-                "し、".len(),
-                InstructionConjunction::JapaneseTe,
-            )
-        });
-        let comma = find_unquoted_substring(source, &search_span, "、").map(|start| {
-            (
-                start - cursor,
-                '、'.len_utf8(),
-                InstructionConjunction::JapaneseComma,
-            )
-        });
+        let te = find_unquoted_substring_with_quotes(source, &search_span, "し、", &quotes)
+            .map(|start| (start, "し、".len(), InstructionConjunction::JapaneseTe));
+        let comma =
+            find_unquoted_substring_with_quotes(source, &search_span, "、", &quotes).map(|start| {
+                (
+                    start,
+                    '、'.len_utf8(),
+                    InstructionConjunction::JapaneseComma,
+                )
+            });
         let next = match (te, comma) {
             (Some(te), Some(comma)) if te.0 <= comma.0 => Some(te),
             (Some(_), Some(comma)) => Some(comma),
@@ -1317,8 +1387,14 @@ fn split_japanese_actions(source: &str, body_span: &Range<usize>) -> ActionSplit
             }
             break;
         };
-        let separator_start = cursor + relative_start;
-        let separator_end = separator_start + byte_len;
+        let Some(separator_start) = relative_start.absolute(source, &search_span) else {
+            return Err(InstructionGrammarError::SourceSpanInvalid);
+        };
+        let Some(separator_span) = separator_start.span(source, byte_len, body_span.end) else {
+            return Err(InstructionGrammarError::SourceSpanInvalid);
+        };
+        let separator_start = separator_span.start;
+        let separator_end = separator_span.end;
         if separator_start < condition_end {
             cursor = condition_end;
             continue;
@@ -1331,7 +1407,7 @@ fn split_japanese_actions(source: &str, body_span: &Range<usize>) -> ActionSplit
         }
         cursor = separator_end;
     }
-    (segments, connectors, unresolved)
+    Ok((segments, connectors, unresolved))
 }
 
 fn build_action(
@@ -1452,24 +1528,70 @@ fn quoted_spans(source: &str, span: &Range<usize>) -> Vec<Range<usize>> {
         ranges.push(start..span.end);
     }
     ranges.sort_by_key(|range| (range.start, range.end));
-    ranges
+    let mut merged = Vec::<Range<usize>>::new();
+    for range in ranges {
+        if let Some(last) = merged.last_mut().filter(|last| range.start <= last.end) {
+            last.end = last.end.max(range.end);
+        } else {
+            merged.push(range);
+        }
+    }
+    merged
 }
 
 fn overlaps_quote(span: &Range<usize>, quotes: &[Range<usize>]) -> bool {
+    let index = quotes.partition_point(|quote| quote.end <= span.start);
     quotes
-        .iter()
-        .any(|quote| span.start < quote.end && quote.start < span.end)
+        .get(index)
+        .is_some_and(|quote| span.start < quote.end && quote.start < span.end)
 }
 
-fn find_unquoted_substring(source: &str, span: &Range<usize>, needle: &str) -> Option<usize> {
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct RelativeByteOffset(usize);
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct SourceByteOffset(usize);
+
+impl RelativeByteOffset {
+    fn absolute(self, source: &str, span: &Range<usize>) -> Option<SourceByteOffset> {
+        let offset = span.start.checked_add(self.0)?;
+        (offset <= span.end && source.is_char_boundary(offset)).then_some(SourceByteOffset(offset))
+    }
+}
+
+impl SourceByteOffset {
+    fn span(self, source: &str, bytes: usize, end_limit: usize) -> Option<Range<usize>> {
+        let end = self.0.checked_add(bytes)?;
+        (end <= end_limit && source.get(self.0..end).is_some()).then_some(self.0..end)
+    }
+}
+
+// The result is relative to `span`, never a source coordinate. Empty needles are
+// rejected so every successful search consumes at least one UTF-8 byte.
+fn find_unquoted_substring(
+    source: &str,
+    span: &Range<usize>,
+    needle: &str,
+) -> Option<RelativeByteOffset> {
+    find_unquoted_substring_with_quotes(source, span, needle, &quoted_spans(source, span))
+}
+
+fn find_unquoted_substring_with_quotes(
+    source: &str,
+    span: &Range<usize>,
+    needle: &str,
+    quotes: &[Range<usize>],
+) -> Option<RelativeByteOffset> {
+    if needle.is_empty() {
+        return None;
+    }
     let text = source.get(span.clone())?;
-    let quotes = quoted_spans(source, span);
     let mut offset = 0usize;
     while let Some(position) = text[offset..].find(needle) {
         let start = offset + position;
         let absolute = span.start + start..span.start + start + needle.len();
-        if !overlaps_quote(&absolute, &quotes) {
-            return Some(start);
+        if !overlaps_quote(&absolute, quotes) {
+            return Some(RelativeByteOffset(start));
         }
         offset = start + needle.len();
         if offset >= text.len() {
@@ -1483,6 +1605,7 @@ fn build_conditions(
     source: &str,
     route: &ControlledRoute,
     actions: &[InstructionAction],
+    work: &mut PostprocessBudget,
 ) -> Result<Vec<InstructionCondition>, InstructionGrammarError> {
     let mut conditions = Vec::new();
     if let Some(context_span) = &route.context_span {
@@ -1497,6 +1620,7 @@ fn build_conditions(
                 } else {
                     ConditionScopeState::Unresolved
                 },
+                work,
             )?);
         }
     }
@@ -1520,6 +1644,7 @@ fn build_conditions(
                     surface,
                     action_indices,
                     scope_state,
+                    work,
                 )?);
             }
         }
@@ -1551,6 +1676,7 @@ fn build_conditions(
                     surface,
                     action_indices,
                     scope_state,
+                    work,
                 )?);
             }
         }
@@ -1558,28 +1684,46 @@ fn build_conditions(
     Ok(conditions)
 }
 
+fn source_words(source: &str) -> impl Iterator<Item = (Range<usize>, &str)> {
+    let mut cursor = 0;
+    std::iter::from_fn(move || {
+        let start = cursor
+            + source
+                .get(cursor..)?
+                .find(|character: char| !character.is_whitespace())?;
+        let end = source[start..]
+            .find(char::is_whitespace)
+            .map_or(source.len(), |offset| start + offset);
+        cursor = end;
+        Some((start..end, &source[start..end]))
+    })
+}
+
 fn build_scope_candidates(
     source: &str,
     actions: &[InstructionAction],
     conditions: &[InstructionCondition],
-) -> Vec<InstructionScopeCandidate> {
+    work: &mut PostprocessBudget,
+) -> Result<Vec<InstructionScopeCandidate>, InstructionGrammarError> {
     let mut scopes = Vec::new();
     for (action_index, action) in actions.iter().enumerate() {
+        work.charge(1)?;
         let Some(action_text) = source.get(action.source_span.clone()) else {
             continue;
         };
-        let words = whitespace_words(action_text);
-        for (index, (span, word)) in words.iter().enumerate() {
+        let mut words = source_words(action_text).peekable();
+        let mut previous = None::<String>;
+        while let Some((span, word)) = words.next() {
+            work.charge(1)?;
             let normalized = normalize_marker_word(word);
             if matches!(
                 normalized.as_str(),
                 "staging" | "production" | "development" | "test"
-            ) && index > 0
-                && matches!(
-                    normalize_marker_word(&words[index - 1].1).as_str(),
-                    "to" | "in" | "into" | "on" | "at"
-                )
+            ) && previous
+                .as_deref()
+                .is_some_and(|value| matches!(value, "to" | "in" | "into" | "on" | "at"))
             {
+                work.charge(1)?;
                 scopes.push(InstructionScopeCandidate {
                     kind: InstructionScopeKind::Environment,
                     value: normalized.clone(),
@@ -1590,29 +1734,31 @@ fn build_scope_candidates(
                 });
             }
             if matches!(normalized.as_str(), "branch" | "file" | "path" | "resource") {
-                let Some((value_span, value)) = words.get(index + 1) else {
-                    continue;
-                };
-                if !value.chars().any(char::is_alphanumeric) {
-                    continue;
+                if let Some((value_span, value)) = words.peek() {
+                    if value.chars().any(char::is_alphanumeric) {
+                        work.charge(1)?;
+                        scopes.push(InstructionScopeCandidate {
+                            kind: if normalized == "branch" {
+                                InstructionScopeKind::Branch
+                            } else {
+                                InstructionScopeKind::Resource
+                            },
+                            value: normalize_scope_value(value),
+                            source_span: action.source_span.start + value_span.start
+                                ..action.source_span.start + value_span.end,
+                            action_indices: action_index..action_index + 1,
+                            state: InstructionScopeState::Candidate,
+                        });
+                    }
                 }
-                let kind = match normalized.as_str() {
-                    "branch" => InstructionScopeKind::Branch,
-                    _ => InstructionScopeKind::Resource,
-                };
-                scopes.push(InstructionScopeCandidate {
-                    kind,
-                    value: normalize_scope_value(value),
-                    source_span: action.source_span.start + value_span.start
-                        ..action.source_span.start + value_span.end,
-                    action_indices: action_index..action_index + 1,
-                    state: InstructionScopeState::Candidate,
-                });
             }
+            previous = Some(normalized);
         }
         if action_text.contains("環境") {
             for environment in ["staging", "production", "development"] {
+                work.charge(1)?;
                 if let Some(position) = action_text.find(environment) {
+                    work.charge(1)?;
                     scopes.push(InstructionScopeCandidate {
                         kind: InstructionScopeKind::Environment,
                         value: environment.into(),
@@ -1626,16 +1772,30 @@ fn build_scope_candidates(
         }
     }
     for condition in conditions {
+        work.charge(1)?;
         if condition.temporal_relation.is_some()
             || condition.relation == ConditionRelation::Temporal
         {
-            let value = condition
-                .expression
-                .predicates()
-                .into_iter()
-                .map(|predicate| predicate.text.as_str())
-                .collect::<Vec<_>>()
-                .join(" ");
+            let mut pending = vec![&condition.expression];
+            let mut value = String::new();
+            while let Some(expression) = pending.pop() {
+                work.charge(1)?;
+                match expression {
+                    ConditionExpression::Predicate(predicate)
+                    | ConditionExpression::Unresolved(predicate) => {
+                        if !value.is_empty() {
+                            value.push(' ');
+                        }
+                        value.push_str(&predicate.text);
+                    }
+                    ConditionExpression::Not(child) => pending.push(child),
+                    ConditionExpression::All(children) | ConditionExpression::Any(children) => {
+                        work.charge(children.len())?;
+                        pending.extend(children.iter().rev());
+                    }
+                }
+            }
+            work.charge(1)?;
             scopes.push(InstructionScopeCandidate {
                 kind: InstructionScopeKind::Time,
                 value,
@@ -1649,27 +1809,31 @@ fn build_scope_candidates(
             });
         }
     }
-    for action_index in 0..actions.len() {
-        for kind in [
-            InstructionScopeKind::Resource,
-            InstructionScopeKind::Branch,
-            InstructionScopeKind::Environment,
-            InstructionScopeKind::Time,
-        ] {
-            let distinct = scopes
-                .iter()
-                .filter(|scope| {
-                    scope.kind == kind && scope.action_indices == (action_index..action_index + 1)
-                })
-                .map(|scope| scope.value.as_str())
-                .collect::<BTreeSet<_>>();
-            if distinct.len() > 1 {
-                for scope in scopes.iter_mut().filter(|scope| {
-                    scope.kind == kind && scope.action_indices == (action_index..action_index + 1)
-                }) {
-                    scope.state = InstructionScopeState::Ambiguous;
-                }
-            }
+    let mut groups = BTreeMap::<(usize, usize, u8), BTreeSet<String>>::new();
+    for scope in &scopes {
+        work.charge(1)?;
+        if scope.action_indices.end == scope.action_indices.start + 1 {
+            groups
+                .entry((
+                    scope.action_indices.start,
+                    scope.action_indices.end,
+                    scope.kind as u8,
+                ))
+                .or_default()
+                .insert(scope.value.clone());
+        }
+    }
+    for scope in &mut scopes {
+        work.charge(1)?;
+        if groups
+            .get(&(
+                scope.action_indices.start,
+                scope.action_indices.end,
+                scope.kind as u8,
+            ))
+            .is_some_and(|values| values.len() > 1)
+        {
+            scope.state = InstructionScopeState::Ambiguous;
         }
     }
     scopes.sort_by_key(|scope| {
@@ -1679,7 +1843,7 @@ fn build_scope_candidates(
             scope.kind as u8,
         )
     });
-    scopes
+    Ok(scopes)
 }
 
 fn normalize_scope_value(value: &str) -> String {
@@ -1692,17 +1856,40 @@ fn build_reference_candidates(
     language: InstructionLanguage,
     source: &str,
     actions: &[InstructionAction],
-) -> Vec<InstructionReferenceCandidate> {
+    budget: InstructionParseBudget,
+    work: &mut PostprocessBudget,
+) -> Result<Vec<InstructionReferenceCandidate>, InstructionGrammarError> {
     let mut references = Vec::new();
     for (action_index, action) in actions.iter().enumerate() {
-        let candidates = (0..action_index).collect::<Vec<_>>();
+        work.charge(1)?;
+        let text = source
+            .get(action.source_span.clone())
+            .ok_or(InstructionGrammarError::SourceSpanInvalid)?;
+        let quotes = quoted_spans(source, &action.source_span);
+        let mut add = |text: String,
+                       source_span: Range<usize>,
+                       work: &mut PostprocessBudget|
+         -> Result<(), InstructionGrammarError> {
+            if references.len() >= budget.max_tokens {
+                return Err(InstructionGrammarError::PostprocessBudgetExceeded);
+            }
+            work.charge(
+                action_index
+                    .checked_add(1)
+                    .ok_or(InstructionGrammarError::PostprocessBudgetExceeded)?,
+            )?;
+            references.push(InstructionReferenceCandidate {
+                text,
+                source_span,
+                candidate_action_indices: (0..action_index).collect(),
+                state: reference_state(action_index),
+            });
+            Ok(())
+        };
         if language == InstructionLanguage::English {
-            let Some(action_text) = source.get(action.source_span.clone()) else {
-                continue;
-            };
-            let quotes = quoted_spans(source, &action.source_span);
-            for (span, word) in whitespace_words(action_text) {
-                let normalized = normalize_marker_word(&word);
+            for (span, word) in source_words(text) {
+                work.charge(1)?;
+                let normalized = normalize_marker_word(word);
                 if !matches!(
                     normalized.as_str(),
                     "it" | "that" | "this" | "them" | "these" | "those" | "former" | "latter"
@@ -1711,39 +1898,27 @@ fn build_reference_candidates(
                 }
                 let source_span =
                     action.source_span.start + span.start..action.source_span.start + span.end;
-                if overlaps_quote(&source_span, &quotes) {
-                    continue;
+                if !overlaps_quote(&source_span, &quotes) {
+                    add(word.into(), source_span, work)?;
                 }
-                references.push(InstructionReferenceCandidate {
-                    text: word,
-                    source_span,
-                    candidate_action_indices: candidates.clone(),
-                    state: reference_state(candidates.len()),
-                });
             }
         } else {
             for marker in ["それ", "これ", "あれ", "同じ"] {
-                let mut search_start = action.source_span.start;
-                while let Some(start) =
-                    find_unquoted_substring(source, &(search_start..action.source_span.end), marker)
-                {
-                    let source_span = start..start + marker.len();
-                    references.push(InstructionReferenceCandidate {
-                        text: marker.into(),
-                        source_span: source_span.clone(),
-                        candidate_action_indices: candidates.clone(),
-                        state: reference_state(candidates.len()),
-                    });
-                    search_start = source_span.end;
-                    if search_start >= action.source_span.end {
-                        break;
+                work.charge(1)?;
+                for (relative, _) in text.match_indices(marker) {
+                    let source_span = RelativeByteOffset(relative)
+                        .absolute(source, &action.source_span)
+                        .and_then(|start| start.span(source, marker.len(), action.source_span.end))
+                        .ok_or(InstructionGrammarError::SourceSpanInvalid)?;
+                    if !overlaps_quote(&source_span, &quotes) {
+                        add(marker.into(), source_span, work)?;
                     }
                 }
             }
         }
     }
     references.sort_by_key(|reference| (reference.source_span.start, reference.source_span.end));
-    references
+    Ok(references)
 }
 
 fn reference_state(candidate_count: usize) -> InstructionReferenceState {
@@ -1758,19 +1933,22 @@ fn build_constraint_graph(
     actions: &[InstructionAction],
     coordination: &[InstructionCoordination],
     conditions: &[InstructionCondition],
-) -> InstructionConstraintGraph {
-    let nodes = actions
-        .iter()
-        .enumerate()
-        .map(|(action_index, action)| InstructionConstraintNode {
+    work: &mut PostprocessBudget,
+) -> Result<InstructionConstraintGraph, InstructionGrammarError> {
+    let mut nodes = Vec::new();
+    for (action_index, action) in actions.iter().enumerate() {
+        work.charge(1)?;
+        nodes.push(InstructionConstraintNode {
             action_index,
             source_span: action.source_span.clone(),
             surface: action.text.clone(),
-        })
-        .collect::<Vec<_>>();
+        });
+    }
     let mut edges = Vec::new();
     for link in coordination {
+        work.charge(1)?;
         if link.kind == InstructionConjunction::Then {
+            work.charge(1)?;
             edges.push(InstructionConstraintEdge {
                 from_action_indices: link.left_action_index as usize
                     ..link.left_action_index as usize + 1,
@@ -1786,6 +1964,7 @@ fn build_constraint_graph(
         }
     }
     for condition in conditions {
+        work.charge(1)?;
         let kind = match condition.relation {
             ConditionRelation::Necessary => InstructionConstraintKind::Requires,
             ConditionRelation::Sufficient => InstructionConstraintKind::Conditional,
@@ -1812,39 +1991,59 @@ fn build_constraint_graph(
             },
         });
     }
-    for left in 0..actions.len() {
-        for right in left + 1..actions.len() {
-            if normalize_action_surface(&actions[left].text)
-                == normalize_action_surface(&actions[right].text)
-                && actions[left].polarity != actions[right].polarity
-                && matches!(
-                    (actions[left].polarity, actions[right].polarity),
-                    (
-                        InstructionPolarity::Positive,
-                        InstructionPolarity::Forbidden
-                    ) | (
-                        InstructionPolarity::Forbidden,
-                        InstructionPolarity::Positive
-                    )
-                )
-            {
-                edges.push(InstructionConstraintEdge {
-                    from_action_indices: left..left + 1,
-                    to_action_indices: right..right + 1,
-                    kind: InstructionConstraintKind::Conflicts,
-                    source_span: actions[left].source_span.start..actions[right].source_span.end,
-                    target_span: Some(actions[right].source_span.clone()),
-                    state: InstructionEdgeState::Conflict,
-                });
+    let normalized = actions
+        .iter()
+        .map(|action| {
+            work.charge(1)?;
+            Ok(normalize_action_surface(&action.text))
+        })
+        .collect::<Result<Vec<_>, InstructionGrammarError>>()?;
+    let mut groups = BTreeMap::<&str, (Vec<usize>, Vec<usize>)>::new();
+    for (index, action) in actions.iter().enumerate() {
+        work.charge(1)?;
+        match action.polarity {
+            InstructionPolarity::Positive => {
+                groups.entry(&normalized[index]).or_default().0.push(index)
+            }
+            InstructionPolarity::Forbidden => {
+                groups.entry(&normalized[index]).or_default().1.push(index)
+            }
+            InstructionPolarity::Unknown | InstructionPolarity::Conflict => {}
+        }
+    }
+    let mut conflicts = BTreeSet::new();
+    for (positive, forbidden) in groups.values() {
+        for left in positive {
+            for right in forbidden {
+                work.charge(1)?;
+                conflicts.insert(((*left).min(*right), (*left).max(*right)));
             }
         }
     }
+    // Match the original source-index order without repeatedly normalizing all pairs.
+    for (left, right) in conflicts {
+        work.charge(1)?;
+        edges.push(InstructionConstraintEdge {
+            from_action_indices: left..left + 1,
+            to_action_indices: right..right + 1,
+            kind: InstructionConstraintKind::Conflicts,
+            source_span: actions[left].source_span.start..actions[right].source_span.end,
+            target_span: Some(actions[right].source_span.clone()),
+            state: InstructionEdgeState::Conflict,
+        });
+    }
+    work.charge(
+        actions
+            .len()
+            .checked_add(edges.len())
+            .ok_or(InstructionGrammarError::PostprocessBudgetExceeded)?,
+    )?;
     let cycles = detect_dependency_cycles(actions.len(), &edges);
-    InstructionConstraintGraph {
+    Ok(InstructionConstraintGraph {
         nodes,
         edges,
         cycles,
-    }
+    })
 }
 
 fn condition_expression_span(expression: &ConditionExpression) -> Option<Range<usize>> {
@@ -1965,9 +2164,12 @@ fn condition_from_surface(
     surface: ConditionSurface,
     action_indices: Range<usize>,
     scope_state: ConditionScopeState,
+    work: &mut PostprocessBudget,
 ) -> Result<InstructionCondition, InstructionGrammarError> {
-    let mut expression = build_condition_expression(source, &surface.predicate_span, 0);
+    work.charge(1)?;
+    let mut expression = build_condition_expression(source, &surface.predicate_span, 0, work)?;
     if surface.negate_predicate {
+        work.charge(1)?;
         expression = ConditionExpression::Not(Box::new(expression));
     }
     let empty_predicate = surface.predicate_span.is_empty()
@@ -2068,7 +2270,7 @@ fn find_english_condition_surface(source: &str, span: &Range<usize>) -> Option<C
 fn find_japanese_condition_surface(source: &str, span: &Range<usize>) -> Option<ConditionSurface> {
     source.get(span.clone())?;
     if let Some(position) = find_unquoted_substring(source, span, "場合のみ") {
-        let marker_start = span.start + position;
+        let marker_start = position.absolute(source, span)?.0;
         let marker_end = marker_start + "場合のみ".len();
         let predicate_span = trim_condition_surface(source, span.start..marker_start)
             .unwrap_or(marker_start..marker_start);
@@ -2113,7 +2315,7 @@ fn find_japanese_condition_surface(source: &str, span: &Range<usize>) -> Option<
         ),
     ] {
         if let Some(position) = find_unquoted_substring(source, span, marker) {
-            let marker_start = span.start + position;
+            let marker_start = position.absolute(source, span)?.0;
             let marker_end = marker_start + marker.len();
             let predicate_span = trim_condition_surface(source, span.start..marker_start)
                 .unwrap_or(marker_start..marker_start);
@@ -2129,7 +2331,7 @@ fn find_japanese_condition_surface(source: &str, span: &Range<usize>) -> Option<
         }
     }
     if let Some(position) = find_unquoted_substring(source, span, "ただし") {
-        let marker_start = span.start + position;
+        let marker_start = position.absolute(source, span)?.0;
         let marker_end = marker_start + "ただし".len();
         let predicate_span =
             trim_condition_surface(source, marker_end..span.end).unwrap_or(marker_end..marker_end);
@@ -2151,9 +2353,9 @@ fn find_japanese_condition_surface(source: &str, span: &Range<usize>) -> Option<
                 find_unquoted_substring(source, span, "なら").map(|position| (position, "なら"))
             }),
     ) {
-        let marker_start = span.start + conditional_start;
+        let marker_start = conditional_start.absolute(source, span)?.0;
         let predicate_start = marker_start + "もし".len();
-        let closing_start = span.start + conditional_end;
+        let closing_start = conditional_end.absolute(source, span)?.0;
         let marker_end = closing_start + closing_marker.len();
         let source_end = source
             .get(marker_end..span.end)
@@ -2200,95 +2402,80 @@ fn build_condition_expression(
     source: &str,
     span: &Range<usize>,
     depth: usize,
-) -> ConditionExpression {
+    work: &mut PostprocessBudget,
+) -> Result<ConditionExpression, InstructionGrammarError> {
+    work.charge(1)?;
     let Some(span) = trim_condition_surface(source, span.clone()) else {
-        return ConditionExpression::Unresolved(ConditionPredicate {
+        return Ok(ConditionExpression::Unresolved(ConditionPredicate {
             source_span: span.clone(),
             text: String::new(),
-        });
+        }));
     };
-    let Some(text) = source.get(span.clone()) else {
-        return ConditionExpression::Unresolved(ConditionPredicate {
-            source_span: span,
-            text: String::new(),
-        });
-    };
+    let text = source
+        .get(span.clone())
+        .ok_or(InstructionGrammarError::SourceSpanInvalid)?;
     if depth >= 16
         || !text.chars().any(char::is_alphanumeric)
         || matches!(
             normalize_marker_word(text).as_str(),
             "not" | "and" | "or" | "xor"
         )
+        || !balanced_condition_parentheses(text)
     {
-        return ConditionExpression::Unresolved(ConditionPredicate {
+        return Ok(ConditionExpression::Unresolved(ConditionPredicate {
             source_span: span,
             text: text.to_string(),
-        });
-    }
-    if !balanced_condition_parentheses(text) {
-        return ConditionExpression::Unresolved(ConditionPredicate {
-            source_span: span,
-            text: text.to_string(),
-        });
+        }));
     }
     if let Some(inner) = strip_outer_condition_parentheses(&span, text) {
-        return build_condition_expression(source, &inner, depth + 1);
+        return build_condition_expression(source, &inner, depth + 1, work);
     }
     if text.starts_with("not(") {
-        if let Some(negated_span) = negated_condition_span(source, &span) {
-            return ConditionExpression::Not(Box::new(build_condition_expression(
-                source,
-                &negated_span,
-                depth + 1,
+        if let Some(negated) = negated_condition_span(source, &span) {
+            return Ok(ConditionExpression::Not(Box::new(
+                build_condition_expression(source, &negated, depth + 1, work)?,
             )));
         }
     }
-    let (parts, connector_kinds) = split_condition_boolean(source, &span);
-    if parts.len() == 1 && connector_kinds == [InstructionConjunction::Xor] {
-        return ConditionExpression::Unresolved(ConditionPredicate {
+    let (parts, connectors) = split_condition_boolean(source, &span, work)?;
+    if parts.len() == 1 && connectors == [InstructionConjunction::Xor] {
+        return Ok(ConditionExpression::Unresolved(ConditionPredicate {
             source_span: span,
             text: text.to_string(),
-        });
+        }));
     }
     if parts.len() > 1 {
-        if connector_kinds
+        let all = connectors
             .iter()
-            .all(|kind| *kind == InstructionConjunction::And)
-        {
-            return ConditionExpression::All(
-                parts
-                    .iter()
-                    .map(|part| build_condition_expression(source, part, depth + 1))
-                    .collect(),
-            );
-        }
-        if connector_kinds
+            .all(|kind| *kind == InstructionConjunction::And);
+        let any = connectors
             .iter()
-            .all(|kind| *kind == InstructionConjunction::Or)
-        {
-            return ConditionExpression::Any(
-                parts
-                    .iter()
-                    .map(|part| build_condition_expression(source, part, depth + 1))
-                    .collect(),
-            );
+            .all(|kind| *kind == InstructionConjunction::Or);
+        if all || any {
+            let expressions = parts
+                .iter()
+                .map(|part| build_condition_expression(source, part, depth + 1, work))
+                .collect::<Result<Vec<_>, _>>()?;
+            return Ok(if all {
+                ConditionExpression::All(expressions)
+            } else {
+                ConditionExpression::Any(expressions)
+            });
         }
-        return ConditionExpression::Unresolved(ConditionPredicate {
+        return Ok(ConditionExpression::Unresolved(ConditionPredicate {
             source_span: span,
             text: text.to_string(),
-        });
+        }));
     }
-    if let Some(negated_span) = negated_condition_span(source, &span) {
-        return ConditionExpression::Not(Box::new(build_condition_expression(
-            source,
-            &negated_span,
-            depth + 1,
+    if let Some(negated) = negated_condition_span(source, &span) {
+        return Ok(ConditionExpression::Not(Box::new(
+            build_condition_expression(source, &negated, depth + 1, work)?,
         )));
     }
-    ConditionExpression::Predicate(ConditionPredicate {
+    Ok(ConditionExpression::Predicate(ConditionPredicate {
         source_span: span,
         text: text.to_string(),
-    })
+    }))
 }
 
 fn negated_condition_span(source: &str, span: &Range<usize>) -> Option<Range<usize>> {
@@ -2310,14 +2497,34 @@ fn negated_condition_span(source: &str, span: &Range<usize>) -> Option<Range<usi
 fn split_condition_boolean(
     source: &str,
     span: &Range<usize>,
-) -> (Vec<Range<usize>>, Vec<InstructionConjunction>) {
-    let Some(text) = source.get(span.clone()) else {
-        return (vec![span.clone()], Vec::new());
-    };
-    let words = whitespace_words(text);
+    work: &mut PostprocessBudget,
+) -> Result<(Vec<Range<usize>>, Vec<InstructionConjunction>), InstructionGrammarError> {
+    let text = source
+        .get(span.clone())
+        .ok_or(InstructionGrammarError::SourceSpanInvalid)?;
     let quotes = quoted_spans(source, span);
+    let mut depths = Vec::new();
+    let mut depth = 0_i32;
+    for (offset, character) in text.char_indices() {
+        match character {
+            '(' => depth += 1,
+            ')' => depth -= 1,
+            _ => continue,
+        }
+        work.charge(1)?;
+        depths.push((offset + character.len_utf8(), depth));
+    }
+    let depth_before = |position| {
+        let index = depths.partition_point(|(offset, _)| *offset <= position);
+        if index == 0 {
+            0
+        } else {
+            depths[index - 1].1
+        }
+    };
     let mut splits = Vec::<(Range<usize>, InstructionConjunction)>::new();
-    for (word_span, word) in words {
+    for (word_span, word) in source_words(text) {
+        work.charge(1)?;
         let normalized = word
             .trim_matches(|character: char| matches!(character, '(' | ')' | ',' | '.' | ';'))
             .to_lowercase();
@@ -2328,11 +2535,11 @@ fn split_condition_boolean(
             _ => None,
         };
         if let Some(kind) = kind {
-            let word_span = span.start + word_span.start..span.start + word_span.end;
-            if parenthesis_depth_before(text, word_span.start - span.start) == 0
-                && !overlaps_quote(&word_span, &quotes)
-            {
-                splits.push((word_span, kind));
+            let start = word_span.start;
+            let absolute = span.start + start..span.start + word_span.end;
+            if depth_before(start) == 0 && !overlaps_quote(&absolute, &quotes) {
+                work.charge(1)?;
+                splits.push((absolute, kind));
             }
         }
     }
@@ -2340,45 +2547,44 @@ fn split_condition_boolean(
         ("かつ", InstructionConjunction::And),
         ("または", InstructionConjunction::Or),
     ] {
-        let mut offset = 0;
-        while let Some(position) = text[offset..].find(marker) {
-            let start = offset + position;
-            let end = start + marker.len();
-            let marker_span = span.start + start..span.start + end;
-            if parenthesis_depth_before(text, start) == 0 && !overlaps_quote(&marker_span, &quotes)
-            {
-                splits.push((marker_span, kind));
-            }
-            offset = end;
-            if offset >= text.len() {
-                break;
+        for (start, _) in text.match_indices(marker) {
+            work.charge(1)?;
+            let absolute = span.start + start..span.start + start + marker.len();
+            if depth_before(start) == 0 && !overlaps_quote(&absolute, &quotes) {
+                work.charge(1)?;
+                splits.push((absolute, kind));
             }
         }
     }
-    splits.sort_by_key(|(marker_span, _)| marker_span.start);
+    splits.sort_by_key(|(marker, _)| marker.start);
     if splits.is_empty() {
-        return (vec![span.clone()], Vec::new());
+        work.charge(1)?;
+        return Ok((vec![span.clone()], Vec::new()));
     }
     let mut parts = Vec::new();
     let mut kinds = Vec::new();
     let mut cursor = span.start;
     let mut malformed = false;
-    for (marker_span, kind) in splits {
-        if let Some(part) = trim_condition_surface(source, cursor..marker_span.start) {
+    for (marker, kind) in splits {
+        work.charge(1)?;
+        if let Some(part) = trim_condition_surface(source, cursor..marker.start) {
+            work.charge(2)?;
             parts.push(part);
             kinds.push(kind);
-            cursor = marker_span.end;
+            cursor = marker.end;
         } else {
             malformed = true;
         }
     }
     if let Some(part) = trim_condition_surface(source, cursor..span.end) {
+        work.charge(1)?;
         parts.push(part);
     }
     if malformed || parts.len() != kinds.len() + 1 || parts.iter().any(|part| part.is_empty()) {
-        return (vec![span.clone()], vec![InstructionConjunction::Xor]);
+        work.charge(2)?;
+        return Ok((vec![span.clone()], vec![InstructionConjunction::Xor]));
     }
-    (parts, kinds)
+    Ok((parts, kinds))
 }
 
 fn balanced_condition_parentheses(text: &str) -> bool {
@@ -2396,17 +2602,6 @@ fn balanced_condition_parentheses(text: &str) -> bool {
         }
     }
     depth == 0
-}
-
-fn parenthesis_depth_before(text: &str, byte_offset: usize) -> i32 {
-    text.get(..byte_offset)
-        .unwrap_or_default()
-        .chars()
-        .fold(0_i32, |depth, character| match character {
-            '(' => depth.saturating_add(1),
-            ')' => depth.saturating_sub(1),
-            _ => depth,
-        })
 }
 
 fn strip_outer_condition_parentheses(span: &Range<usize>, text: &str) -> Option<Range<usize>> {

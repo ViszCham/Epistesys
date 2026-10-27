@@ -17,8 +17,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
-use std::thread;
+use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 pub const MEDIA_SCHEMA: &str = "lc631-media-evidence.v1";
@@ -58,6 +57,19 @@ pub struct MediaSourceAuthority {
     pub attestation_receipt_digest: Option<String>,
     eligible_for_attestation: bool,
     source_attestation: Option<UntrustedReceipt>,
+    #[serde(skip)]
+    authenticated_source: Option<AuthenticatedMediaSource>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct AuthenticatedMediaSource {
+    request: MediaSourceRequest,
+    path: PathBuf,
+    snapshot: String,
+    bytes: u64,
+    source_digest: String,
+    payload_digest: String,
+    issuer_fingerprint: String,
 }
 
 impl MediaSourceAuthority {
@@ -65,11 +77,17 @@ impl MediaSourceAuthority {
         self.authorized
             && self.attestation_receipt_digest.is_some()
             && self.source_attestation.is_some()
+            && self.authenticated_source.as_ref().is_some_and(|binding| {
+                self.local_path.as_ref() == Some(&binding.path)
+                    && self.source_snapshot_sha256.as_ref() == Some(&binding.snapshot)
+                    && self.source_bytes == Some(binding.bytes)
+                    && self.source_digest == binding.source_digest
+                    && !self.metadata_only
+            })
     }
 }
 
 pub fn authorize_media_source(request: &MediaSourceRequest) -> MediaSourceAuthority {
-    let source_digest = stable_sha256(&format!("{:?}:{}", request.kind, request.locator));
     let local = Path::new(&request.locator);
     let local_exists = local.is_file();
     let mut blockers = Vec::new();
@@ -117,6 +135,18 @@ pub fn authorize_media_source(request: &MediaSourceRequest) -> MediaSourceAuthor
             (false, true, None)
         }
     };
+    // A relative locator is resolved once, before attestation. Its meaning cannot
+    // drift merely because a trusted caller later changes the process cwd.
+    let local_path = local_path.and_then(|path| path.canonicalize().ok());
+    let source_digest = stable_sha256(&format!(
+        "media-source-locator.v2\0{:?}\0{}\0{}",
+        request.kind,
+        request.locator,
+        local_path
+            .as_ref()
+            .and_then(|path| path.to_str())
+            .unwrap_or("metadata-only")
+    ));
     let source_snapshot_sha256 = local_path
         .as_deref()
         .and_then(|path| sha256_file(path).ok());
@@ -139,6 +169,7 @@ pub fn authorize_media_source(request: &MediaSourceRequest) -> MediaSourceAuthor
         attestation_receipt_digest: None,
         eligible_for_attestation: eligible,
         source_attestation: None,
+        authenticated_source: None,
     }
 }
 
@@ -179,8 +210,67 @@ pub fn authorize_media_source_attested(
         .blockers
         .retain(|blocker| blocker != "authenticated_media_source_receipt_required");
     authority.attestation_receipt_digest = Some(verified.receipt_digest());
+    authority.authenticated_source = Some(AuthenticatedMediaSource {
+        request: request.clone(),
+        path: authority
+            .local_path
+            .clone()
+            .ok_or(MediaError::SourceSnapshotUnavailable)?,
+        snapshot: authority
+            .source_snapshot_sha256
+            .clone()
+            .ok_or(MediaError::SourceSnapshotUnavailable)?,
+        bytes: authority
+            .source_bytes
+            .ok_or(MediaError::SourceSnapshotUnavailable)?,
+        source_digest: authority.source_digest.clone(),
+        payload_digest: media_source_payload_digest(request, &authority)?,
+        issuer_fingerprint: verified.verifier_key_fingerprint().into(),
+    });
     authority.source_attestation = Some(verified.into_untrusted());
     Ok(authority)
+}
+
+/// Revalidating a source attestation is not consuming a one-shot side effect.
+/// The caller supplies trusted current time; host revocation remains a separate
+/// host contract rather than being inferred from this cached diagnostic token.
+pub fn validate_current_media_authority(
+    authority: &MediaSourceAuthority,
+    verifier: &ReceiptVerifier,
+    now_epoch: u64,
+) -> Result<(), MediaError> {
+    if !authority.attestation_verified() {
+        return Err(MediaError::SourceReceiptRejected);
+    }
+    let binding = authority
+        .authenticated_source
+        .as_ref()
+        .ok_or(MediaError::SourceReceiptRejected)?;
+    if binding.issuer_fingerprint != verifier.key_fingerprint() {
+        return Err(MediaError::SourceReceiptRejected);
+    }
+    let verified = verifier
+        .verify(
+            authority
+                .source_attestation
+                .clone()
+                .ok_or(MediaError::SourceReceiptRejected)?,
+            &ReceiptPolicy::exact(
+                ReceiptClass::MediaSource,
+                SubjectRevision::checked(&binding.snapshot)
+                    .map_err(|_| MediaError::SourceReceiptRejected)?,
+                ReceiptScope::checked(media_source_scope(binding.request.kind))
+                    .map_err(|_| MediaError::SourceReceiptRejected)?,
+                &binding.payload_digest,
+                now_epoch,
+            ),
+            &mut ReplayGuard::default(),
+        )
+        .map_err(|_| MediaError::SourceReceiptRejected)?;
+    if authority.attestation_receipt_digest.as_deref() != Some(verified.receipt_digest().as_str()) {
+        return Err(MediaError::SourceReceiptRejected);
+    }
+    Ok(())
 }
 
 pub fn media_source_payload_digest(
@@ -224,6 +314,7 @@ pub enum BackendFamily {
     Decode,
     ShotBoundary,
     ObjectDetection,
+    FaceDetection,
     SegmentationTracking,
     Pose,
     FaceActionUnit,
@@ -270,6 +361,11 @@ pub fn default_method_catalog() -> Vec<MethodCandidate> {
             BackendFamily::SegmentationTracking,
             "sam2-or-sam3-plus-bytetrack",
             "anonymous mask tracks",
+        ),
+        method(
+            BackendFamily::FaceDetection,
+            "opencv-haar-frontalface",
+            "anonymous face-region candidates",
         ),
         method(
             BackendFamily::Pose,
@@ -423,10 +519,15 @@ pub struct BackendRegistry {
 
 impl BackendRegistry {
     pub fn register(&mut self, descriptor: BackendDescriptor) -> Result<(), MediaError> {
-        if self.entries.insert(descriptor.family, descriptor).is_some() {
-            return Err(MediaError::DuplicateBackendFamily);
+        match self.entries.entry(descriptor.family) {
+            std::collections::btree_map::Entry::Occupied(_) => {
+                Err(MediaError::DuplicateBackendFamily)
+            }
+            std::collections::btree_map::Entry::Vacant(slot) => {
+                slot.insert(descriptor);
+                Ok(())
+            }
         }
-        Ok(())
     }
 
     pub fn entries(&self) -> impl Iterator<Item = &BackendDescriptor> {
@@ -668,6 +769,8 @@ pub struct MediaProcessReceipt {
     pub stderr_truncated: bool,
     pub process_tree_kill_attempted: bool,
     pub process_tree_kill_verified: bool,
+    pub memory_limit_bytes: Option<usize>,
+    pub memory_limit_kind: String,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -695,6 +798,10 @@ struct RawMediaObservation {
     track_id: Option<u64>,
     label: String,
     evidence_digest: String,
+    #[serde(default)]
+    label_truncated: bool,
+    #[serde(default)]
+    original_label_bytes: Option<usize>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -744,12 +851,11 @@ pub fn execute_local_media_backend_attested(
     replay: &mut ReplayGuard,
     now_epoch: u64,
 ) -> Result<MediaBackendExecutionReceipt, MediaError> {
+    let execution_started = Instant::now();
     if !authority.authorized || authority.metadata_only {
         return Err(MediaError::SourceAuthorityDenied);
     }
-    if !authority.attestation_verified() {
-        return Err(MediaError::SourceReceiptRejected);
-    }
+    validate_current_media_authority(authority, verifier, now_epoch)?;
     let source = authority
         .local_path
         .as_ref()
@@ -794,6 +900,18 @@ pub fn execute_local_media_backend_attested(
     {
         return Err(MediaError::MediaBudgetExceeded);
     }
+    let source_snapshot = lc631_process_supervisor::AuthenticatedSourceSnapshot::capture(
+        source,
+        &source_sha256,
+        MAX_MEDIA_BYTES,
+        budget.max_temporary_bytes,
+    )
+    .map_err(|error| MediaError::Io(format!("media_source_snapshot:{error}")))?;
+    let decoder_temporary_bytes = budget
+        .max_temporary_bytes
+        .checked_sub(source_snapshot.bytes())
+        .filter(|remaining| *remaining > 0)
+        .ok_or(MediaError::MediaBudgetExceeded)?;
     let python_sha256 = sha256_file(&config.python_executable)?;
     let backend_script_sha256 = sha256_file(&config.backend_script)?;
     let ffmpeg_sha256 = sha256_file(&config.ffmpeg_executable)?;
@@ -834,7 +952,7 @@ pub fn execute_local_media_backend_attested(
     command
         .arg(&config.backend_script)
         .arg("--media")
-        .arg(source)
+        .arg(source_snapshot.path())
         .arg("--ffmpeg")
         .arg(&config.ffmpeg_executable)
         .arg("--model-cache")
@@ -842,7 +960,7 @@ pub fn execute_local_media_backend_attested(
         .arg("--mode")
         .arg("all")
         .arg("--max-temp-bytes")
-        .arg(budget.max_temporary_bytes.to_string())
+        .arg(decoder_temporary_bytes.to_string())
         .arg("--max-frames")
         .arg(budget.max_decoded_frames.to_string())
         .arg("--max-pcm-samples")
@@ -857,12 +975,39 @@ pub fn execute_local_media_backend_attested(
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    let launch_epoch = now_epoch
+        .checked_add(execution_started.elapsed().as_secs())
+        .ok_or(MediaError::SourceReceiptRejected)?;
+    validate_current_media_authority(authority, verifier, launch_epoch)?;
+    let remaining_authority_seconds = authority
+        .source_attestation
+        .as_ref()
+        .and_then(|receipt| receipt.claims().expires_at_epoch())
+        .map_or(config.timeout_seconds, |expiry| {
+            expiry.saturating_sub(launch_epoch)
+        });
     let output = run_media_process(
         command,
-        Duration::from_secs(config.timeout_seconds),
+        Duration::from_secs(config.timeout_seconds.min(remaining_authority_seconds)),
         budget.max_stdout_bytes,
         budget.max_stderr_bytes,
     )?;
+    validate_current_media_authority(
+        authority,
+        verifier,
+        now_epoch
+            .checked_add(execution_started.elapsed().as_secs())
+            .ok_or(MediaError::SourceReceiptRejected)?,
+    )?;
+    if sha256_file(source)? != source_sha256 {
+        return Err(MediaError::SourceSnapshotChanged);
+    }
+    if sha256_file(&config.python_executable)? != execution_plan.python_sha256
+        || sha256_file(&config.backend_script)? != execution_plan.backend_script_sha256
+        || sha256_file(&config.ffmpeg_executable)? != execution_plan.ffmpeg_sha256
+    {
+        return Err(MediaError::BackendReceiptBindingMismatch);
+    }
     if !output.success {
         return Err(MediaError::BackendFailed(truncate_diagnostic(
             &String::from_utf8_lossy(&output.stderr),
@@ -871,7 +1016,7 @@ pub fn execute_local_media_backend_attested(
     if output.stdout_truncated || output.stderr_truncated {
         return Err(MediaError::MediaBudgetExceeded);
     }
-    let raw: RawBackendReceipt = serde_json::from_slice(&output.stdout)
+    let mut raw: RawBackendReceipt = serde_json::from_slice(&output.stdout)
         .map_err(|error| MediaError::InvalidBackendJson(error.to_string()))?;
     if raw.schema_version != MEDIA_BACKEND_SCHEMA || raw.source_sha256 != source_sha256 {
         return Err(MediaError::BackendReceiptBindingMismatch);
@@ -885,6 +1030,28 @@ pub fn execute_local_media_backend_attested(
     if raw.observations.len() > budget.max_observations {
         return Err(MediaError::MediaBudgetExceeded);
     }
+    for observation in &raw.observations {
+        if observation.label_truncated {
+            let original = observation
+                .original_label_bytes
+                .filter(|length| *length > observation.label.len())
+                .ok_or(MediaError::InvalidBackendObservation)?;
+            raw.diagnostics.push(format!(
+                "label_truncated:{}:original_utf8_bytes={original}",
+                observation.observation_id
+            ));
+        } else if observation
+            .original_label_bytes
+            .is_some_and(|length| length != observation.label.len())
+        {
+            return Err(MediaError::InvalidBackendObservation);
+        }
+    }
+    let executed = raw
+        .executed_families
+        .iter()
+        .map(|family| parse_backend_family(family))
+        .collect::<Result<BTreeSet<_>, _>>()?;
     let mut graph = MultimodalEventGraph::default();
     for observation in raw.observations {
         if observation.label.len() > 4_096
@@ -896,6 +1063,7 @@ pub fn execute_local_media_backend_attested(
         let start = RationalTime::checked(observation.start_ms, 1_000)?;
         let end = RationalTime::checked(observation.end_ms, 1_000)?;
         let kind = parse_observation_kind(&observation.kind)?;
+        validate_observation_family(&kind, &executed)?;
         let source_fragment_digest = stable_sha256(&format!(
             "{}:{}:{}",
             source_sha256, observation.start_ms, observation.end_ms
@@ -930,11 +1098,6 @@ pub fn execute_local_media_backend_attested(
             internal_state_committed: false,
         })?;
     }
-    let executed = raw
-        .executed_families
-        .iter()
-        .map(|family| parse_backend_family(family))
-        .collect::<Result<BTreeSet<_>, _>>()?;
     for family in &executed {
         let key = backend_family_wire_name(*family);
         let actual = raw
@@ -978,6 +1141,8 @@ pub fn execute_local_media_backend_attested(
             stderr_truncated: output.stderr_truncated,
             process_tree_kill_attempted: output.process_tree_kill_attempted,
             process_tree_kill_verified: output.process_tree_kill_verified,
+            memory_limit_bytes: output.memory_limit_bytes,
+            memory_limit_kind: output.memory_limit_kind.into(),
         },
         executed_family_states,
         graph,
@@ -991,6 +1156,13 @@ pub fn execute_local_media_backend_attested(
         translation_envelope,
         claim_boundary: "authenticated backend execution yields provenance-bound candidates only; family semantics remain unvalidated until independent method receipts exist, and identity, emotion, intent, transcript perfection, or diarization accuracy are not established",
     };
+    source_snapshot
+        .close()
+        .map_err(|error| MediaError::Io(format!("media_source_snapshot_cleanup:{error}")))?;
+    let observed_epoch = now_epoch
+        .checked_add(execution_started.elapsed().as_secs())
+        .ok_or(MediaError::SourceReceiptRejected)?;
+    validate_current_media_authority(authority, verifier, observed_epoch)?;
     let payload = media_backend_payload_digest(&receipt);
     let subject = SubjectRevision::checked(source_sha256)
         .map_err(|_| MediaError::BackendReceiptBindingMismatch)?;
@@ -1002,7 +1174,7 @@ pub fn execute_local_media_backend_attested(
             subject.clone(),
             scope.clone(),
             payload.clone(),
-            now_epoch,
+            observed_epoch,
             None,
             authority.attestation_receipt_digest.clone(),
         )
@@ -1015,7 +1187,7 @@ pub fn execute_local_media_backend_attested(
                 subject,
                 scope,
                 payload,
-                now_epoch,
+                observed_epoch,
             )
             .with_parent(
                 authority
@@ -1136,11 +1308,12 @@ fn build_media_translation_envelope(
 }
 
 impl BackendFamily {
-    fn all() -> [Self; 16] {
+    fn all() -> [Self; 17] {
         [
             Self::Decode,
             Self::ShotBoundary,
             Self::ObjectDetection,
+            Self::FaceDetection,
             Self::SegmentationTracking,
             Self::Pose,
             Self::FaceActionUnit,
@@ -1163,6 +1336,7 @@ fn parse_backend_family(value: &str) -> Result<BackendFamily, MediaError> {
         "decode" => Ok(BackendFamily::Decode),
         "shot_boundary" => Ok(BackendFamily::ShotBoundary),
         "object_detection" => Ok(BackendFamily::ObjectDetection),
+        "face_detection" => Ok(BackendFamily::FaceDetection),
         "segmentation_tracking" => Ok(BackendFamily::SegmentationTracking),
         "pose" => Ok(BackendFamily::Pose),
         "face_action_unit" => Ok(BackendFamily::FaceActionUnit),
@@ -1185,6 +1359,7 @@ fn backend_family_wire_name(family: BackendFamily) -> &'static str {
         BackendFamily::Decode => "decode",
         BackendFamily::ShotBoundary => "shot_boundary",
         BackendFamily::ObjectDetection => "object_detection",
+        BackendFamily::FaceDetection => "face_detection",
         BackendFamily::SegmentationTracking => "segmentation_tracking",
         BackendFamily::Pose => "pose",
         BackendFamily::FaceActionUnit => "face_action_unit",
@@ -1206,6 +1381,7 @@ fn expected_executed_method(family: BackendFamily) -> Option<&'static str> {
         BackendFamily::Decode => Some("ffmpeg-cli"),
         BackendFamily::ShotBoundary => Some("opencv-hsv-histogram-bhattacharyya"),
         BackendFamily::ObjectDetection => Some("opencv-hog-default-people-detector"),
+        BackendFamily::FaceDetection => Some("opencv-haar-frontalface"),
         BackendFamily::FrameDifference => Some("opencv-mean-absolute-frame-difference"),
         BackendFamily::Asr => Some("faster-whisper-local-cache"),
         BackendFamily::AcousticClustering => Some("pcm-feature-two-cluster"),
@@ -1238,6 +1414,40 @@ fn parse_observation_kind(value: &str) -> Result<ObservationKind, MediaError> {
     }
 }
 
+fn validate_observation_family(
+    kind: &ObservationKind,
+    executed: &BTreeSet<BackendFamily>,
+) -> Result<(), MediaError> {
+    use BackendFamily as Family;
+    use ObservationKind as Kind;
+    let family = match kind {
+        Kind::ShotBoundary => Family::ShotBoundary,
+        Kind::ObjectBox => Family::ObjectDetection,
+        Kind::ObjectMask | Kind::AnonymousPersonTrack => Family::SegmentationTracking,
+        Kind::PoseLandmarks => Family::Pose,
+        Kind::FaceLandmarks | Kind::FacialActionUnit => Family::FaceActionUnit,
+        Kind::FaceRegionCandidate => Family::FaceDetection,
+        Kind::ActionCandidate => Family::ActionRecognition,
+        Kind::OcrTextCandidate => Family::Ocr,
+        Kind::RelativeDepthCandidate => Family::DepthMotion,
+        Kind::MotionCandidate if executed.contains(&Family::FrameDifference) => {
+            Family::FrameDifference
+        }
+        Kind::MotionCandidate => Family::DepthMotion,
+        Kind::TranscriptCandidate => Family::Asr,
+        Kind::AnonymousSpeakerSegment => Family::Diarization,
+        Kind::AudioEventCandidate => Family::AudioEvent,
+        Kind::CrossModalRelationCandidate => Family::CrossModalAlignment,
+        Kind::AcousticClusterCandidate => Family::AcousticClustering,
+        Kind::TemporalCoPresenceCandidate => Family::TemporalCoPresence,
+    };
+    if executed.contains(&family) {
+        Ok(())
+    } else {
+        Err(MediaError::BackendMethodMismatch)
+    }
+}
+
 struct MediaProcessOutput {
     success: bool,
     exit_code: Option<i32>,
@@ -1247,106 +1457,70 @@ struct MediaProcessOutput {
     stderr_truncated: bool,
     process_tree_kill_attempted: bool,
     process_tree_kill_verified: bool,
+    memory_limit_bytes: Option<usize>,
+    memory_limit_kind: &'static str,
 }
 
 fn run_media_process(
-    mut command: Command,
+    command: Command,
     timeout: Duration,
     stdout_limit: usize,
     stderr_limit: usize,
 ) -> Result<MediaProcessOutput, MediaError> {
-    let mut child = command
-        .spawn()
-        .map_err(|error| MediaError::BackendUnavailable(error.to_string()))?;
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| MediaError::Io("backend_stdout_unavailable".into()))?;
-    let stderr = child
-        .stderr
-        .take()
-        .ok_or_else(|| MediaError::Io("backend_stderr_unavailable".into()))?;
-    let stdout_reader = thread::spawn(move || drain_bounded(stdout, stdout_limit));
-    let stderr_reader = thread::spawn(move || drain_bounded(stderr, stderr_limit));
-    let started = Instant::now();
-    let status = loop {
-        match child
-            .try_wait()
-            .map_err(|error| MediaError::Io(error.to_string()))?
-        {
-            Some(status) => break status,
-            None if started.elapsed() > timeout => {
-                let _kill_verified = kill_media_process_tree(&mut child);
-                let _ = child.kill();
-                let _ = child.wait();
-                let _ = stdout_reader.join();
-                let _ = stderr_reader.join();
-                return Err(MediaError::BackendTimeout);
-            }
-            None => thread::sleep(Duration::from_millis(25)),
+    use std::ffi::OsString;
+    let arguments = command.get_args().map(OsString::from).collect::<Vec<_>>();
+    let mut environment = Vec::new();
+    for key in [
+        "PATH",
+        "PATHEXT",
+        "SystemRoot",
+        "WINDIR",
+        "TEMP",
+        "TMP",
+        "COMSPEC",
+    ] {
+        if let Some(value) = std::env::var_os(key) {
+            environment.push((OsString::from(key), value));
         }
-    };
-    let stdout = stdout_reader
-        .join()
-        .map_err(|_| MediaError::Io("stdout_reader_panicked".into()))?;
-    let stderr = stderr_reader
-        .join()
-        .map_err(|_| MediaError::Io("stderr_reader_panicked".into()))?;
-    Ok(MediaProcessOutput {
-        success: status.success(),
-        exit_code: status.code(),
-        stdout: stdout.bytes,
-        stderr: stderr.bytes,
-        stdout_truncated: stdout.truncated,
-        stderr_truncated: stderr.truncated,
-        process_tree_kill_attempted: false,
-        process_tree_kill_verified: true,
+    }
+    environment.extend(
+        command
+            .get_envs()
+            .filter_map(|(key, value)| value.map(|value| (key.into(), value.into()))),
+    );
+    let cwd = std::env::current_dir().map_err(|error| MediaError::Io(error.to_string()))?;
+    let output = lc631_process_supervisor::run_bounded(lc631_process_supervisor::RunRequest {
+        executable: command.get_program(),
+        arguments: &arguments,
+        current_dir: command.get_current_dir().unwrap_or(&cwd),
+        environment: &environment,
+        stdin: None,
+        timeout,
+        stdout_limit,
+        stderr_limit,
     })
-}
-
-#[derive(Default)]
-struct DrainedBytes {
-    bytes: Vec<u8>,
-    truncated: bool,
-}
-
-fn drain_bounded(mut reader: impl Read, limit: usize) -> DrainedBytes {
-    let mut output = DrainedBytes::default();
-    let mut buffer = [0_u8; 8 * 1024];
-    loop {
-        let read = match reader.read(&mut buffer) {
-            Ok(0) | Err(_) => break,
-            Ok(read) => read,
-        };
-        let remaining = limit.saturating_sub(output.bytes.len());
-        let keep = remaining.min(read);
-        output.bytes.extend_from_slice(&buffer[..keep]);
-        output.truncated |= keep < read;
+    .map_err(|error| MediaError::Io(error.to_string()))?;
+    if output.timed_out {
+        return Err(MediaError::BackendTimeout);
     }
-    output
-}
-
-fn kill_media_process_tree(child: &mut Child) -> bool {
-    #[cfg(windows)]
+    if !output.io_cleanup_complete
+        || !output.process_tree_kill_verified
+        || output.diagnostic.is_some()
     {
-        Command::new("taskkill")
-            .args(["/PID", &child.id().to_string(), "/T", "/F"])
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .is_ok_and(|status| status.success())
+        return Err(MediaError::Io("media_process_cleanup_unverified".into()));
     }
-    #[cfg(not(windows))]
-    {
-        Command::new("pkill")
-            .args(["-TERM", "-P", &child.id().to_string()])
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .is_ok_and(|status| status.success())
-    }
+    Ok(MediaProcessOutput {
+        success: output.exit_code == Some(0),
+        exit_code: output.exit_code,
+        stdout: output.stdout,
+        stderr: output.stderr,
+        stdout_truncated: output.stdout_truncated,
+        stderr_truncated: output.stderr_truncated,
+        process_tree_kill_attempted: output.process_tree_kill_attempted,
+        process_tree_kill_verified: output.process_tree_kill_verified,
+        memory_limit_bytes: output.memory_limit_bytes,
+        memory_limit_kind: output.memory_limit_kind,
+    })
 }
 
 fn sha256_directory(root: &Path) -> Result<String, MediaError> {
@@ -1354,8 +1528,8 @@ fn sha256_directory(root: &Path) -> Result<String, MediaError> {
     collect_directory_entries(root, root, &mut entries)?;
     entries.sort();
     Ok(stable_sha256(&format!(
-        "lc631-directory-manifest.v2\0{}",
-        entries.join("\u{1f}")
+        "lc631-directory-manifest.v3\0{}",
+        serde_json::to_string(&entries).map_err(|_| MediaError::BackendDescriptorMismatch)?
     )))
 }
 
@@ -1366,7 +1540,7 @@ pub fn model_cache_manifest_sha256(root: &Path) -> Result<String, MediaError> {
 fn collect_directory_entries(
     root: &Path,
     current: &Path,
-    entries: &mut Vec<String>,
+    entries: &mut Vec<(String, u64, String)>,
 ) -> Result<(), MediaError> {
     if entries.len() > 100_000 {
         return Err(MediaError::MediaBudgetExceeded);
@@ -1389,14 +1563,10 @@ fn collect_directory_entries(
             let relative = path
                 .strip_prefix(root)
                 .map_err(|_| MediaError::BackendDescriptorMismatch)?
-                .to_string_lossy()
+                .to_str()
+                .ok_or(MediaError::BackendDescriptorMismatch)?
                 .replace('\\', "/");
-            entries.push(format!(
-                "{}:{}:{}",
-                relative,
-                metadata.len(),
-                sha256_file(&path)?
-            ));
+            entries.push((relative, metadata.len(), sha256_file(&path)?));
         }
     }
     Ok(())
@@ -1526,7 +1696,16 @@ mod tests {
             .iter()
             .map(|item| item.family)
             .collect::<BTreeSet<_>>();
-        assert_eq!(families.len(), 16);
+        // Face detection is distinct from object detection; no family may be
+        // silently omitted or duplicated by the public method catalog.
+        assert_eq!(families.len(), 17);
+        assert_eq!(families, BTreeSet::from(BackendFamily::all()));
+        assert_eq!(catalog.len(), families.len());
+        let method_ids = catalog
+            .iter()
+            .map(|item| item.method_id)
+            .collect::<BTreeSet<_>>();
+        assert_eq!(method_ids.len(), catalog.len());
         assert!(catalog
             .iter()
             .all(|item| item.backend_required && !item.bundled));

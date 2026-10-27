@@ -3,6 +3,8 @@
 mod dgcl_journal;
 mod dgcl_package;
 mod dgcl_repair;
+mod effect_error;
+use effect_error::CliFailure;
 
 #[cfg(feature = "gpu-cubecl-wgpu")]
 use lc631_accelerator::{compare_lane_digests, CubeClWgpuBackend, MeasurementState};
@@ -78,8 +80,9 @@ pub fn main_entry() {
     if let Err(error) = run() {
         let payload = serde_json::json!({
             "schema_version": "lc631-cli-error.v1",
-            "error": error,
-            "claim_boundary": "diagnostic failure; no mutation or fallback success was performed"
+            "error": &error.message,
+            "effect_state": &error,
+            "claim_boundary": "diagnostic failure; effect state is explicit or unknown; no fallback success is implied"
         });
         eprintln!(
             "{}",
@@ -89,10 +92,10 @@ pub fn main_entry() {
     }
 }
 
-fn run() -> Result<(), String> {
+fn run() -> Result<(), CliFailure> {
     let mut args = env::args().skip(1).collect::<Vec<_>>();
     if args.is_empty() {
-        return Err("missing_lc631_command".into());
+        return Err(CliFailure::not_attempted("missing_lc631_command"));
     }
     let command = args.remove(0);
     let repo = take_option(&mut args, "--repo").map(PathBuf::from);
@@ -152,7 +155,9 @@ fn run() -> Result<(), String> {
         .map(|value| value.parse::<u64>().map_err(|_| "invalid_--turn"))
         .transpose()?;
     if !args.is_empty() {
-        return Err(format!("unknown_arguments:{args:?}"));
+        return Err(CliFailure::not_attempted(format!(
+            "unknown_arguments:{args:?}"
+        )));
     }
     match command.as_str() {
         "lc631-doctor" => {
@@ -283,7 +288,8 @@ fn run() -> Result<(), String> {
                     .map_err(|error| format!("dgcl_package_bundle:{error}"))?;
                 dgcl_package::finalize_package(&root, &source, bundle, &context, &author)?
             };
-            emit(&command, result)
+            emit(&command, &result).map_err(|message| CliFailure::output_failure(message, &result))?;
+            Ok(())
         }
         "lc631-dgcl-run" => {
             let source = source_file
@@ -953,7 +959,7 @@ fn run() -> Result<(), String> {
             ),
         },
         _ => Err(format!("unknown_lc631_command:{command}")),
-    }
+    }.map_err(CliFailure::from)
 }
 
 fn run_host_stop_hook() -> Result<(), String> {

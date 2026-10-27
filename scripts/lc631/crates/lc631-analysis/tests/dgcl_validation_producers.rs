@@ -12,6 +12,283 @@ use lc631_receipt_kernel::{
 };
 use sha2::{Digest, Sha256};
 
+#[cfg(windows)]
+#[test]
+fn epr_18_repository_identity_matches_its_existing_windows_path_alias() {
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let root = std::env::temp_dir().join(format!("epr-root-alias-{}-{unique}", std::process::id()));
+    std::fs::create_dir_all(&root).unwrap();
+    let alias = std::path::PathBuf::from(root.to_string_lossy().to_ascii_uppercase());
+    assert_ne!(
+        root, alias,
+        "fixture must actually exercise a lexical alias"
+    );
+    assert_eq!(root.canonicalize().unwrap(), alias.canonicalize().unwrap());
+    assert_eq!(
+        dgcl_repository_root_digest(&root).unwrap(),
+        dgcl_repository_root_digest(&alias).unwrap()
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn epr_18_non_utf8_repository_names_cannot_collapse_to_one_lossy_identity() {
+    use std::os::unix::ffi::OsStringExt;
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let base = std::env::temp_dir().join(format!("epr-root-bytes-{}-{unique}", std::process::id()));
+    let first = base.join(std::ffi::OsString::from_vec(vec![b'r', 0x80]));
+    let second = base.join(std::ffi::OsString::from_vec(vec![b'r', 0x81]));
+    std::fs::create_dir_all(&first).unwrap();
+    std::fs::create_dir_all(&second).unwrap();
+    assert_ne!(first, second);
+    assert_eq!(first.to_string_lossy(), second.to_string_lossy());
+    for root in [&first, &second] {
+        assert_eq!(
+            dgcl_repository_root_digest(root),
+            Err(DgclValidationProducerError::UnsafePath)
+        );
+    }
+}
+
+#[cfg(unix)]
+fn snapshot_for_path_identity(
+    root: &std::path::Path,
+) -> Result<DgclExecutionSnapshot, DgclValidationProducerError> {
+    let source = "Please test the package.";
+    let pipeline = build_dgcl_pipeline(
+        source,
+        DgclBackendSet {
+            english: None,
+            japanese: None,
+        },
+    )
+    .unwrap();
+    let fingerprint = stable_sha256("snapshot identity fixture key only");
+    let principal =
+        PrincipalBinding::from_attested_seed(&stable_sha256("snapshot fixture only"), &fingerprint)
+            .unwrap();
+    capture_dgcl_cargo_snapshot(
+        root,
+        source,
+        &pipeline,
+        &ExecutionPermitContext {
+            principal: &principal,
+            action: Action::Test,
+            scope: "snapshot-identity-fixture",
+            source_revision: &pipeline.source_revision,
+            authority_revision: AuthorityRevision(1),
+            now_epoch: 100,
+            revocation_revision: 0,
+            revoked_permit_digests: &[],
+            caller_origin: CallerOrigin::HostVerifiedUser,
+            trusted_host_fingerprint: &fingerprint,
+        },
+    )
+}
+
+#[cfg(unix)]
+#[test]
+fn epr_18_snapshot_rejects_non_utf8_input_keys_without_omitting_or_overwriting() {
+    use std::os::unix::ffi::OsStringExt;
+    let root = fixture_package();
+    assert!(snapshot_for_path_identity(&root).is_ok());
+    for byte in [0x80, 0x81] {
+        let path = root.join(std::ffi::OsString::from_vec(vec![
+            b'r', byte, b'.', b'r', b's',
+        ]));
+        std::fs::write(path, "pub fn example() {}\n").unwrap();
+    }
+    assert_eq!(
+        snapshot_for_path_identity(&root).err(),
+        Some(DgclValidationProducerError::UnsafePath)
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn epr_18_snapshot_rejects_literal_backslash_input_instead_of_aliasing_a_directory() {
+    let root = fixture_package();
+    assert!(snapshot_for_path_identity(&root).is_ok());
+    std::fs::write(root.join("src\\lib.rs"), "pub fn distinct_file() {}\n").unwrap();
+    assert!(root.join("src/lib.rs").is_file());
+    assert_ne!(
+        root.join("src\\lib.rs").canonicalize().unwrap(),
+        root.join("src/lib.rs").canonicalize().unwrap()
+    );
+    assert_eq!(
+        snapshot_for_path_identity(&root).err(),
+        Some(DgclValidationProducerError::UnsafePath)
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn epr_18_repository_literal_backslash_cannot_alias_a_nested_directory() {
+    let base = fixture_package();
+    let literal = base.join("branch\\nested");
+    let nested = base.join("branch/nested");
+    std::fs::create_dir_all(&literal).unwrap();
+    std::fs::create_dir_all(&nested).unwrap();
+    assert_ne!(
+        literal.canonicalize().unwrap(),
+        nested.canonicalize().unwrap()
+    );
+    assert!(dgcl_repository_root_digest(&nested).is_ok());
+    assert_eq!(
+        dgcl_repository_root_digest(&literal),
+        Err(DgclValidationProducerError::UnsafePath)
+    );
+}
+
+#[test]
+fn epr_08_an_unrelated_library_summary_is_not_connection_evidence() {
+    assert!(!check_cargo_test_result(
+        CodingEvidenceKind::ProductionConnection,
+        b"test unrelated ... ok\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out"
+    ));
+}
+
+#[test]
+fn epr_17_std_shadow_can_pass_plain_cargo_but_never_mints_connection_evidence() {
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let root = std::env::temp_dir().join(format!("epr-std-shadow-{}-{unique}", std::process::id()));
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../../fixtures/dgcl/std-shadow");
+    for relative in [
+        "Cargo.toml",
+        "Cargo.lock",
+        "src/lib.rs",
+        "tests/connection.rs",
+        "shadow_std/Cargo.toml",
+        "shadow_std/src/lib.rs",
+    ] {
+        let target = root.join(relative);
+        std::fs::create_dir_all(target.parent().unwrap()).unwrap();
+        std::fs::copy(fixture.join(relative), target).unwrap();
+    }
+    #[cfg(windows)]
+    let root = std::path::PathBuf::from(root.to_string_lossy().to_ascii_uppercase());
+    let cargo_output = std::process::Command::new("rustup")
+        .args(["which", "cargo"])
+        .output()
+        .unwrap();
+    let cargo = std::path::PathBuf::from(String::from_utf8(cargo_output.stdout).unwrap().trim());
+    let manifest = root.join("Cargo.toml");
+    let plain = run_bounded_tool(BoundedToolRequest {
+        program: cargo.to_str().unwrap(),
+        args: &[
+            "test",
+            "--manifest-path",
+            manifest.to_str().unwrap(),
+            "--locked",
+            "--offline",
+            "--test",
+            "connection",
+            "production_api_connection",
+            "--",
+            "--exact",
+            "--test-threads=1",
+        ],
+        stdin: None,
+        timeout_ms: 60_000,
+        stdout_limit: 1_048_576,
+        stderr_limit: 1_048_576,
+    });
+    assert_eq!(plain.exit_code, Some(0));
+    assert!(check_cargo_test_result(
+        CodingEvidenceKind::RuntimeValidation,
+        &plain.stdout
+    ));
+
+    let source = "Please test the package.";
+    let pipeline = build_dgcl_pipeline(
+        source,
+        DgclBackendSet {
+            english: None,
+            japanese: None,
+        },
+    )
+    .unwrap();
+    let task = pipeline
+        .completion_plan
+        .tasks
+        .iter()
+        .find(|task| task.evidence_kind == CodingEvidenceKind::ProductionConnection)
+        .unwrap();
+    let issuer = ReceiptIssuer::from_key_bytes("std-shadow-observer-fixture", &[63; 32]).unwrap();
+    let verifier =
+        ReceiptVerifier::from_key_bytes("std-shadow-observer-fixture", &[63; 32]).unwrap();
+    let plan = DgclCargoValidationPlan {
+        schema_version: "epistesys-dgcl-cargo-validation-plan.v1".into(),
+        source_revision: pipeline.source_revision.clone(),
+        completion_plan_digest: pipeline.completion_plan.plan_digest.clone(),
+        requirement_id: task.requirement_id.clone(),
+        task_id: task.task_id.clone(),
+        kind: task.evidence_kind,
+        cargo_path: cargo.to_string_lossy().into_owned(),
+        cargo_digest: file_hash(&cargo),
+        manifest_path: "Cargo.toml".into(),
+        manifest_digest: file_hash(&manifest),
+        repository_root_digest: dgcl_repository_root_digest(&root).unwrap(),
+        acceptance_target: None,
+        acceptance_test: None,
+        connection: Some(connection_spec_for(&root, &issuer, 100, "audit_api::entry")),
+        timeout_ms: 60_000,
+        tool_registration: Some(registration(&issuer, &cargo)),
+    };
+    assert!(
+        preflight_dgcl_cargo_plan(&root, &pipeline, &plan).is_ok(),
+        "counterexample is a valid direct-call source profile"
+    );
+    let scope = dgcl_cargo_validation_scope(&plan);
+    let authorization = permit(source, &scope, &issuer, &verifier);
+    let principal = PrincipalBinding::from_attested_seed(
+        &stable_sha256("test host ingress only; not a real Codex host observation"),
+        verifier.key_fingerprint(),
+    )
+    .unwrap();
+    let context = ExecutionPermitContext {
+        principal: &principal,
+        action: Action::Test,
+        scope: &scope,
+        source_revision: &pipeline.source_revision,
+        authority_revision: AuthorityRevision(1),
+        now_epoch: 100,
+        revocation_revision: 0,
+        revoked_permit_digests: &[],
+        caller_origin: CallerOrigin::HostVerifiedUser,
+        trusted_host_fingerprint: verifier.key_fingerprint(),
+    };
+    let snapshot = capture_dgcl_cargo_snapshot(&root, source, &pipeline, &context).unwrap();
+    let observed = observe_dgcl_cargo_validation(
+        &root,
+        source,
+        &pipeline,
+        &plan,
+        DgclCargoExecutionContext {
+            lifecycle: &snapshot,
+            permit: &authorization,
+            authority: &context,
+            tool_verifier: &verifier,
+            max_duration: std::time::Duration::from_secs(60),
+        },
+    );
+    assert_eq!(
+        observed.err(),
+        Some(DgclValidationProducerError::ConnectionNotObserved),
+        "renamed std forged the pinned assertion but must not produce a checked observation"
+    );
+}
+
 struct RealFileValidator<'a> {
     root: &'a std::path::Path,
     source: &'a str,
@@ -88,6 +365,8 @@ impl DgclFileEvidenceValidator for RealFileValidator<'_> {
                     .then(|| "acceptance".into()),
                 acceptance_test: (task.evidence_kind == CodingEvidenceKind::AcceptanceTest)
                     .then(|| "required_checked_arithmetic_contract".into()),
+                connection: (task.evidence_kind == CodingEvidenceKind::ProductionConnection)
+                    .then(|| connection_spec(self.root, self.issuer, 100)),
             };
             let scope = dgcl_cargo_validation_scope(&plan);
             let authorization = permit(self.source, &scope, self.issuer, self.verifier);
@@ -286,6 +565,46 @@ fn file_hash(path: &std::path::Path) -> String {
     )
 }
 
+fn connection_spec(root: &std::path::Path, issuer: &ReceiptIssuer, now: u64) -> DgclConnectionSpec {
+    connection_spec_for(root, issuer, now, "dgcl_producer_fixture::checked_add")
+}
+
+fn connection_spec_for(
+    root: &std::path::Path,
+    issuer: &ReceiptIssuer,
+    now: u64,
+    entrypoint: &str,
+) -> DgclConnectionSpec {
+    let mut spec = DgclConnectionSpec {
+        schema_version: "epistesys-dgcl-connection-spec.v1".into(),
+        integration_target: "connection".into(),
+        test_name: "production_api_connection".into(),
+        entrypoint: entrypoint.into(),
+        implementation_path: "src/lib.rs".into(),
+        driver_path: "tests/connection.rs".into(),
+        driver_digest: file_hash(&root.join("tests/connection.rs")),
+        observer_id: DIRECT_API_OBSERVER.into(),
+        oracle_id: "checked-add-example.v1".into(),
+        oracle_revision: stable_sha256("::std::assert_eq!(observed, Some(10))"),
+        coverage: DIRECT_API_COVERAGE.into(),
+        registration: None,
+    };
+    spec.registration = Some(
+        issuer
+            .issue(
+                ReceiptClass::VerifierCapability,
+                SubjectRevision::checked(&spec.driver_digest).unwrap(),
+                ReceiptScope::checked(dgcl_connection_registration_scope(&spec)).unwrap(),
+                dgcl_connection_registration_payload(&spec),
+                now,
+                Some(now + 300),
+                None,
+            )
+            .unwrap(),
+    );
+    spec
+}
+
 fn registration(
     issuer: &ReceiptIssuer,
     cargo: &std::path::Path,
@@ -322,9 +641,14 @@ fn fixture_package() -> std::path::PathBuf {
         "Cargo.lock",
         "src/lib.rs",
         "tests/acceptance.rs",
+        "tests/connection.rs",
     ] {
         std::fs::copy(fixture.join(relative), root.join(relative)).unwrap();
     }
+    // Exercise the same canonical/lexical alias boundary as Windows runner
+    // TEMP paths containing an 8.3 user component, even on machines without it.
+    #[cfg(windows)]
+    let root = std::path::PathBuf::from(root.to_string_lossy().to_ascii_uppercase());
     root
 }
 
@@ -429,6 +753,7 @@ fn actual_separate_cargo_observations_close_only_the_declared_package_requiremen
     let revision = stable_sha256(source);
     let mut claims = Vec::new();
     let mut last_snapshot = None;
+    let mut executed_routes = Vec::new();
     for task in pipeline
         .completion_plan
         .tasks
@@ -451,10 +776,35 @@ fn actual_separate_cargo_observations_close_only_the_declared_package_requiremen
                 .then(|| "acceptance".into()),
             acceptance_test: (task.evidence_kind == CodingEvidenceKind::AcceptanceTest)
                 .then(|| "required_checked_arithmetic_contract".into()),
+            connection: (task.evidence_kind == CodingEvidenceKind::ProductionConnection)
+                .then(|| connection_spec(&root, &issuer, 100)),
             timeout_ms: 60000,
             tool_registration: Some(registration(&issuer, &cargo)),
         };
         let scope = dgcl_cargo_validation_scope(&plan);
+        if task.evidence_kind == CodingEvidenceKind::ProductionConnection {
+            let mut legacy = plan.clone();
+            legacy.connection = None;
+            assert_eq!(
+                preflight_dgcl_cargo_plan(&root, &pipeline, &legacy),
+                Err(DgclValidationProducerError::InvalidPlan)
+            );
+
+            let driver_path = root.join("tests/connection.rs");
+            let original_driver = std::fs::read(&driver_path).unwrap();
+            std::fs::write(
+                &driver_path,
+                "#[test]\nfn production_api_connection() { ::std::assert_eq!(1 + 1, 2); }\n",
+            )
+            .unwrap();
+            let mut disconnected = plan.clone();
+            disconnected.connection = Some(connection_spec(&root, &issuer, 100));
+            assert_eq!(
+                preflight_dgcl_cargo_plan(&root, &pipeline, &disconnected),
+                Err(DgclValidationProducerError::InvalidConnectionDriver)
+            );
+            std::fs::write(&driver_path, original_driver).unwrap();
+        }
         let mut unregistered = plan.clone();
         unregistered.tool_registration = None;
         assert_eq!(
@@ -510,9 +860,24 @@ fn actual_separate_cargo_observations_close_only_the_declared_package_requiremen
         )
         .unwrap();
         assert_eq!(observation.process().exit_code, Some(0));
+        executed_routes.push((
+            task.evidence_kind,
+            observation.process().args_digest.clone(),
+        ));
         claims.push(issue_dgcl_cargo_evidence(observation, &issuer, &verifier).unwrap());
         last_snapshot = Some(snapshot);
     }
+    let route = |kind| {
+        &executed_routes
+            .iter()
+            .find(|(observed, _)| *observed == kind)
+            .unwrap()
+            .1
+    };
+    assert_ne!(
+        route(CodingEvidenceKind::RuntimeValidation),
+        route(CodingEvidenceKind::ProductionConnection)
+    );
     let snapshot = last_snapshot.unwrap();
     let task = pipeline
         .completion_plan

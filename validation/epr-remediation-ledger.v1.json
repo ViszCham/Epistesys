@@ -1,0 +1,198 @@
+{
+  "schema_version": "epistesys-epr-remediation-ledger.v1",
+  "date_jst": "2026-10-27",
+  "baseline_commit": "75500ed7a33a009f5e1ce813862dc0a7986372c9",
+  "candidate_version": "6.3.2-alpha.3",
+  "priority_remediation_closed": true,
+  "scope": "Known review findings plus related adversarial counterexamples; targeted observations are not final snapshot/research/host assurance",
+  "findings": [
+    {
+      "id": "E01",
+      "scope": "Japanese reference progress",
+      "slice": "EPR-01",
+      "status": "fixed_targeted_passed",
+      "final_current_snapshot_gate": "passed_declared_profile_alpha3_20084b4"
+    },
+    {
+      "id": "E02",
+      "scope": "Japanese coordinate conversion",
+      "slice": "EPR-01",
+      "status": "fixed_targeted_passed",
+      "final_current_snapshot_gate": "passed_declared_profile_alpha3_20084b4"
+    },
+    {
+      "id": "E03",
+      "scope": "Secret Debug disclosure",
+      "slice": "EPR-02",
+      "status": "fixed_targeted_passed",
+      "final_current_snapshot_gate": "passed_declared_profile_alpha3_20084b4"
+    },
+    {
+      "id": "E04",
+      "scope": "Verified authority source binding",
+      "slice": "EPR-03",
+      "status": "fixed_targeted_passed",
+      "final_current_snapshot_gate": "passed_declared_profile_alpha3_20084b4"
+    },
+    {
+      "id": "E05",
+      "scope": "Mutable/stale Media authority",
+      "slice": "EPR-04",
+      "status": "fixed_targeted_passed",
+      "final_current_snapshot_gate": "passed_declared_profile_alpha3_20084b4"
+    },
+    {
+      "id": "E06",
+      "scope": "Production connection semantics",
+      "slice": "EPR-08",
+      "status": "fixed_targeted_passed",
+      "final_current_snapshot_gate": "passed_declared_profile_alpha3_20084b4"
+    },
+    {
+      "id": "E07",
+      "scope": "Unix process lifetime",
+      "slice": "EPR-07",
+      "status": "fixed_windows_linux_targeted_passed",
+      "final_current_snapshot_gate": "passed_declared_profile_alpha3_20084b4"
+    },
+    {
+      "id": "E08",
+      "scope": "Media pipe lifetime",
+      "slice": "EPR-07",
+      "status": "fixed_targeted_passed",
+      "final_current_snapshot_gate": "passed_declared_profile_alpha3_20084b4"
+    },
+    {
+      "id": "E09",
+      "scope": "Anchored file repair",
+      "slice": "EPR-10",
+      "status": "fixed_windows_linux_targeted_passed",
+      "final_current_snapshot_gate": "passed_declared_profile_alpha3_20084b4"
+    },
+    {
+      "id": "E10",
+      "scope": "Backup permissions and ACL",
+      "slice": "EPR-10",
+      "status": "fixed_windows_linux_targeted_passed",
+      "final_current_snapshot_gate": "passed_declared_profile_alpha3_20084b4"
+    },
+    {
+      "id": "E11",
+      "scope": "Committed/approved package inventory",
+      "slice": "EPR-14",
+      "status": "fixed_targeted_passed",
+      "final_current_snapshot_gate": "passed_declared_profile_alpha3_20084b4"
+    },
+    {
+      "id": "E12",
+      "scope": "Rejection leaves state unchanged",
+      "slice": "EPR-05",
+      "status": "partially_corrected_reference_and_fixed_targeted_passed",
+      "final_current_snapshot_gate": "passed_declared_profile_alpha3_20084b4"
+    },
+    {
+      "id": "E13",
+      "scope": "Cross-runtime manifest canonicalization",
+      "slice": "EPR-12",
+      "status": "fixed_golden_vector_passed",
+      "final_current_snapshot_gate": "passed_declared_profile_alpha3_20084b4"
+    },
+    {
+      "id": "E14",
+      "scope": "Media observation kind/method",
+      "slice": "EPR-12",
+      "status": "fixed_targeted_passed",
+      "final_current_snapshot_gate": "passed_declared_profile_alpha3_20084b4"
+    },
+    {
+      "id": "E15",
+      "scope": "UTF-8 byte limits",
+      "slice": "EPR-12",
+      "status": "fixed_targeted_passed",
+      "final_current_snapshot_gate": "passed_declared_profile_alpha3_20084b4"
+    },
+    {
+      "id": "E16",
+      "scope": "Media resource admission/streaming",
+      "slice": "EPR-07/EPR-12",
+      "status": "fixed_targeted_passed_actual_backend_observed",
+      "final_current_snapshot_gate": "passed_declared_profile_alpha3_20084b4"
+    },
+    {
+      "id": "E17",
+      "scope": "Effect-aware CLI errors",
+      "slice": "EPR-09",
+      "status": "fixed_real_post_edit_failure_passed",
+      "final_current_snapshot_gate": "passed_declared_profile_alpha3_20084b4"
+    },
+    {
+      "id": "E18",
+      "scope": "CSR/arithmetic/GPU admission",
+      "slice": "EPR-06",
+      "status": "fixed_cpu_and_actual_gpu_targeted_passed",
+      "final_current_snapshot_gate": "passed_declared_profile_alpha3_20084b4"
+    },
+    {
+      "id": "E19",
+      "scope": "Token/syntax graph identity",
+      "slice": "EPR-13",
+      "status": "fixed_targeted_passed",
+      "final_current_snapshot_gate": "passed_declared_profile_alpha3_20084b4"
+    },
+    {
+      "id": "E20",
+      "scope": "Replay root containment",
+      "slice": "EPR-11",
+      "status": "fixed_targeted_passed",
+      "final_current_snapshot_gate": "passed_declared_profile_alpha3_20084b4"
+    },
+    {
+      "id": "E21",
+      "scope": "Continuous Rust CI",
+      "slice": "EPR-00/EPR-16",
+      "status": "rust_negative_both_os_and_current_linux_passed_windows_c9_pending",
+      "final_current_snapshot_gate": "passed_declared_profile_alpha3_20084b4"
+    }
+  ],
+  "additional_counterexamples": {
+    "A1": "Inherited POSIX ACL before mode restoration: fixed with Linux regression",
+    "A2": "usize::MAX read budget overflow: checked admission and regression",
+    "A3": "Media A-to-B-to-A source reuse: authenticated private snapshot, shared temporary budget, observed cleanup",
+    "A4": "Media kind/family/method mismatch: explicit receiver mapping and negative",
+    "A5": "Mutable/expired host seed and direct validation lineage: immutable original and current use checks",
+    "A6": "Expiry boundary inconsistency: half-open issued/expires",
+    "A7": "Unknown CLI effect state: retained Unknown, not NotAttempted",
+    "A8": "False closing Markdown fence: pinned offset parser and code/data eligibility",
+    "A9": "Superscript Windows reserved aliases: pure admission tests, no device opens",
+    "A10": "Cross-seed output stages: transactional lineage continuity",
+    "A11": "Mutable callback/durability flags: agreement with authenticated origin",
+    "B01": "Cargo dependency shadowing std assertion: full metadata rejection and real negative fixture",
+    "B02": "Postprocessing budget after allocation: shared action/scope/reference/condition/graph work meter and downstream BudgetRejected/Clarify tests passed",
+    "P1": "Pinned NLP byte identities changed by checkout CRLF: explicit LF attributes and physical-byte tests; declared digests unchanged",
+    "C1": "Windows short-path/canonical-root identity divergence: fail-first reproduced, canonical existing-directory identity fixed; alias-targeted and current local Windows suites passed",
+    "C2": "FaceDetection additive family left a stale 16-family catalog assertion: corrected to exact 17-family coverage plus family/method uniqueness; targeted unit suite passed",
+    "C3": "Post-apply clock reuse and stale adapter backdating: fail-firsts observed, shared logical clock and coordinator monotonic floor fixed; six repair-loop tests passed, including genuine future-lease rejection",
+    "C4": "Concurrent runtime tests exhausted the two-run admission limit before process start: test-only serialization plus explicit admission/recovery negative added; final 70-case Windows stress and current strict clippy passed",
+    "C5": "Lossy UTF-8 and Unix backslash normalization collided in root/input keys: three fail-firsts observed, strict path keys and vacant-entry insertion fixed; four Linux regressions passed",
+    "C6": "Additive connection/history fields missing from strict public schemas: real production captures failed first; typed optional fields and closed connection definition added; six schema tests and 27 surface/consumer checks passed; twelve mutation executions across two feature profiles rejected",
+    "C7": "README API-to-executor runtime-trace claim exceeded registered direct-driver observation: paired Japanese/English wording corrected and separately reviewed",
+    "C8": "Repeated cryptographic executable checks exhausted local unoptimized debug budgets: optimize only sha2 code generation in dev/test, without caching/skipping freshness checks or extending deadlines; standard vectors and all six real producer cases passed serially",
+    "C9": "Test-only native positive/contention correction passed 70 targeted cases and all Windows/Ubuntu alpha.3 CI steps. Product predicates/budgets and the 500ms descendant negative unchanged; intermediate PowerShell initialization failure retained."
+  },
+  "global_gates": {
+    "windows": "all_13_local_commands_passed_alpha3_20084b4",
+    "linux": "all_portable_ci_steps_passed_alpha3_20084b4",
+    "configured_ja_en": "actual_configured_positive_passed_alpha3_command_64426ms",
+    "actual_gpu": "rtx3060_vulkan_native_completion_and_bounded_parity_passed_alpha3",
+    "actual_media": "owned_private_snapshot_cpu_asr_candidate_passed_alpha3_command_11561ms",
+    "fresh_package": "fixed_20084b4_normal_full_helper_exit0_216_members_all_hashes_matched_6_real_cli_passed",
+    "remote_ci": "alpha3_windows_and_ubuntu_all_required_steps_success_run40461969877",
+    "audit_a": "team_scoped_review_retained_delta_currentness_recorded",
+    "audit_b": "team_scoped_review_retained_reported_counterexamples_fixed",
+    "final_delta": "integrator_delta_review_current_selected_source_pins_not_third_party_assurance",
+    "schema": "alpha3_6_units_18_captures_27_checks_passed_12_mutation_executions_rejected",
+    "reposeiri": "executed_byte_exact_323c0b1_export_320_blob_ids_matched_summary_bracket_digest_821f4049_native_other_query_digests_unexposed_findings_holds_unknowns_retained"
+  },
+  "claim_boundary": "No zero-unknown-defect, formal proof, general performance or host activation claim",
+  "closed_scope": "Known E01-E21 and related counterexamples under declared standalone source profiles at alpha.3 source commit 20084b4; repository publication audit and unobserved research/host conditions are separate."
+}

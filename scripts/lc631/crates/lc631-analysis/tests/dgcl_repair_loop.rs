@@ -44,6 +44,9 @@ enum RepairFixture {
     Oscillation,
     ApplyTimeout,
     RevalidationTimeout,
+    DelayedApply,
+    FutureLease,
+    BackdatedClock,
 }
 
 struct MemoryRepairDriver {
@@ -60,6 +63,10 @@ struct MemoryRepairDriver {
 }
 
 impl DgclRepairDriver for MemoryRepairDriver {
+    fn observation_epoch(&self) -> Option<u64> {
+        matches!(self.fixture, RepairFixture::BackdatedClock).then_some(self.now_epoch)
+    }
+
     fn apply(
         &mut self,
         request: &DgclRepairRequest,
@@ -69,6 +76,12 @@ impl DgclRepairDriver for MemoryRepairDriver {
     ) -> Result<DgclRepairApplication, DgclRepairDriverError> {
         if matches!(self.fixture, RepairFixture::ApplyTimeout) {
             return Err(DgclRepairDriverError::TimedOut);
+        }
+        if matches!(self.fixture, RepairFixture::DelayedApply) {
+            std::thread::sleep(Duration::from_millis(1100));
+            self.now_epoch += 1;
+        } else if matches!(self.fixture, RepairFixture::FutureLease) {
+            self.now_epoch += 60;
         }
         let before_digest = stable_sha256(&self.current_target);
         let desired_after = match self.fixture {
@@ -148,7 +161,10 @@ impl DgclRepairDriver for MemoryRepairDriver {
             return Err(DgclRepairDriverError::TimedOut);
         }
         let (outcome, remaining_gap_ids, closure_digest) = match self.fixture {
-            RepairFixture::Route => {
+            RepairFixture::Route
+            | RepairFixture::DelayedApply
+            | RepairFixture::FutureLease
+            | RepairFixture::BackdatedClock => {
                 let connected = route_is_connected(&self.current_target);
                 if connected {
                     (
@@ -367,7 +383,16 @@ fn input_parts(
         }],
     )
     .unwrap();
-    let lease = issue_dgcl_evidence_lease(&snapshot, 100, 180).unwrap();
+    let lease = issue_dgcl_evidence_lease(
+        &snapshot,
+        100,
+        if matches!(fixture, RepairFixture::BackdatedClock) {
+            300
+        } else {
+            180
+        },
+    )
+    .unwrap();
     let selected_task_kind = match fixture {
         RepairFixture::ConditionProjection => lc631_analysis::CodingEvidenceKind::StaticValidation,
         _ => lc631_analysis::CodingEvidenceKind::ProductionConnection,
@@ -531,14 +556,22 @@ fn execute_fixture(
                 permit: &permit,
                 authority_revision: AuthorityRevision(7),
                 trusted_host_fingerprint: &fingerprint,
-                now_epoch: 110,
+                now_epoch: if matches!(fixture, RepairFixture::BackdatedClock) {
+                    301
+                } else {
+                    110
+                },
                 revocation_revision: 1,
                 revoked_permit_digests: &[],
             },
             verifier: &verifier,
             replay: &mut ReplayGuard::default(),
             max_attempts,
-            max_wall_time: Duration::from_secs(2),
+            max_wall_time: Duration::from_secs(if matches!(fixture, RepairFixture::DelayedApply) {
+                10
+            } else {
+                2
+            }),
             max_delta_bytes: 64 * 1024,
         },
         &mut driver,
@@ -588,6 +621,131 @@ fn condition_projection_repair_is_revalidated_but_unknown_truth_remains_open() {
         .remaining_gap_ids
         .contains(&stable_sha256("condition-truth-remains-unknown")));
     assert_ne!(report.initial_snapshot_digest, report.final_snapshot_digest);
+}
+
+#[test]
+fn epr_18_cross_second_apply_samples_current_time_without_accepting_a_future_lease() {
+    let delayed = execute_fixture(
+        "src/router.rs",
+        DISCONNECTED_ROUTER,
+        &[CONNECTED_ROUTER],
+        RepairFixture::DelayedApply,
+        None,
+        MAX_DGCL_REPAIR_ATTEMPTS,
+        false,
+    )
+    .unwrap();
+    assert_eq!(delayed.status, DgclRepairStatus::Hold, "{delayed:?}");
+    assert!(delayed.attempts[0].application_receipt_digest.is_some());
+    assert!(delayed.attempts[0].validation_receipt_digest.is_some());
+    assert_eq!(
+        delayed.attempts[0].effect_state,
+        lc631_analysis::RepairEffectState::ReceiptVerified
+    );
+    assert!(!delayed.remaining_gap_ids.is_empty());
+
+    let future = execute_fixture(
+        "src/router.rs",
+        DISCONNECTED_ROUTER,
+        &[CONNECTED_ROUTER],
+        RepairFixture::FutureLease,
+        None,
+        MAX_DGCL_REPAIR_ATTEMPTS,
+        false,
+    )
+    .unwrap();
+    assert_eq!(future.status, DgclRepairStatus::Conflict, "{future:?}");
+    assert_eq!(
+        future.attempts[0].reason,
+        "post_apply_lifecycle_snapshot_or_lease_invalid"
+    );
+    assert!(future.attempts[0].application_receipt_digest.is_none());
+    assert_eq!(
+        future.attempts[0].effect_state,
+        lc631_analysis::RepairEffectState::MayHaveApplied
+    );
+}
+
+#[test]
+fn epr_18_file_driver_exposes_its_logical_clock_without_an_external_epoch_source() {
+    use lc631_analysis::{
+        CodingEvidenceClaim, DgclFileEvidenceValidator, DgclFileRepairConfig, DgclFileRepairDriver,
+    };
+
+    struct UnavailableValidator;
+    impl DgclFileEvidenceValidator for UnavailableValidator {
+        fn observe(
+            &mut self,
+            _snapshot: &lc631_analysis::DgclExecutionSnapshot,
+            _budget: Duration,
+        ) -> Result<Vec<CodingEvidenceClaim>, DgclRepairDriverError> {
+            Err(DgclRepairDriverError::Unavailable)
+        }
+    }
+
+    let scope = repair_authorization_scope("src/router.rs");
+    let (permit, fingerprint, key) = permit_for(&scope);
+    let (pipeline, _, _, snapshot, _, _, _) = input_parts(
+        "src/router.rs",
+        DISCONNECTED_ROUTER,
+        &[CONNECTED_ROUTER],
+        &permit,
+        &fingerprint,
+        MAX_DGCL_REPAIR_ATTEMPTS,
+        RepairFixture::Route,
+    );
+    let issuer = ReceiptIssuer::from_key_bytes("repair-host", &key).unwrap();
+    let verifier = ReceiptVerifier::from_key_bytes("repair-host", &key).unwrap();
+    let authorization = DgclRepairAuthorization {
+        permit: &permit,
+        authority_revision: AuthorityRevision(7),
+        trusted_host_fingerprint: &fingerprint,
+        now_epoch: 110,
+        revocation_revision: 1,
+        revoked_permit_digests: &[],
+    };
+    let mut validator = UnavailableValidator;
+    let driver = DgclFileRepairDriver::new(DgclFileRepairConfig {
+        root: std::path::Path::new("."),
+        source: USER_SOURCE,
+        pipeline: &pipeline,
+        initial_snapshot: &snapshot,
+        authorization: &authorization,
+        issuer: &issuer,
+        verifier: &verifier,
+        candidates: std::collections::BTreeMap::new(),
+        validator: &mut validator,
+        epoch_clock: None,
+    })
+    .unwrap();
+    assert!(
+        driver.observation_epoch().is_some_and(|now| now >= 110),
+        "the driver issues leases on a logical clock, so the coordinator must observe that clock"
+    );
+}
+
+#[test]
+fn epr_18_backdated_driver_clock_cannot_revive_a_permit_expired_at_the_input_epoch() {
+    let report = execute_fixture(
+        "src/router.rs",
+        DISCONNECTED_ROUTER,
+        &[CONNECTED_ROUTER],
+        RepairFixture::BackdatedClock,
+        None,
+        MAX_DGCL_REPAIR_ATTEMPTS,
+        false,
+    )
+    .unwrap();
+    assert_eq!(report.status, DgclRepairStatus::Unauthorized, "{report:?}");
+    assert_eq!(
+        report.attempts[0].reason,
+        "edit_permit_missing_expired_denied_or_scope_mismatched"
+    );
+    assert_eq!(
+        report.attempts[0].effect_state,
+        lc631_analysis::RepairEffectState::NotAttempted
+    );
+    assert_eq!(report.initial_snapshot_digest, report.final_snapshot_digest);
 }
 
 #[test]

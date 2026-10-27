@@ -11,12 +11,11 @@ use crate::{
 use lc631_core::{
     stable_sha256, Action, CallerOrigin, ExecutionPermit, ExecutionPermitContext, PermitValidation,
 };
+use lc631_process_supervisor::filesystem::DirectoryAnchor;
 use lc631_receipt_kernel::{
     ReceiptClass, ReceiptIssuer, ReceiptScope, ReceiptVerifier, ReplayGuard, SubjectRevision,
 };
 use std::collections::BTreeMap;
-use std::fs::{self, OpenOptions};
-use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Component, Path};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -115,7 +114,9 @@ impl<'a> DgclFileRepairDriver<'a> {
 
 impl DgclRepairDriver for DgclFileRepairDriver<'_> {
     fn observation_epoch(&self) -> Option<u64> {
-        self.config.epoch_clock.map(|_| self.now())
+        // Leases and the coordinator must observe the same clock, including
+        // the SDK's monotonic logical fallback when no host clock is supplied.
+        Some(self.now())
     }
     fn apply(
         &mut self,
@@ -142,18 +143,13 @@ impl DgclRepairDriver for DgclFileRepairDriver<'_> {
         {
             return Err(fail);
         }
-        let root = checked_root(self.config.root)?;
+        let root = DirectoryAnchor::open_existing(self.config.root).map_err(|_| fail)?;
         let relative = Path::new(&request.target_ref);
         if relative
             .components()
             .any(|component| !matches!(component, Component::Normal(_)))
             || relative.extension().and_then(|value| value.to_str()) != Some("rs")
         {
-            return Err(fail);
-        }
-        let target = root.join(relative);
-        check_path(&target)?;
-        if !target.canonicalize().map_err(|_| fail)?.starts_with(&root) {
             return Err(fail);
         }
         let candidate = self
@@ -175,22 +171,8 @@ impl DgclRepairDriver for DgclFileRepairDriver<'_> {
         if current.snapshot_digest != self.snapshot.snapshot_digest {
             return Err(fail);
         }
-        let mut options = OpenOptions::new();
-        options.read(true).write(true);
-        #[cfg(windows)]
-        {
-            use std::os::windows::fs::OpenOptionsExt;
-            options.share_mode(0);
-        }
-        let mut file = options.open(&target).map_err(|_| fail)?;
-        file.try_lock().map_err(|_| fail)?;
-        if file.metadata().map_err(|_| fail)?.len() > 1024 * 1024 {
-            return Err(fail);
-        }
-        let mut before = String::new();
-        (&mut file)
-            .take(1024 * 1024 + 1)
-            .read_to_string(&mut before)
+        let mut target = root.open_read_write(relative).map_err(|_| fail)?;
+        let before = String::from_utf8(target.read_bounded(1024 * 1024).map_err(|_| fail)?)
             .map_err(|_| fail)?;
         if before.len() > 1024 * 1024 || stable_sha256(&before) != request.target_digest_before {
             return Err(fail);
@@ -200,11 +182,9 @@ impl DgclRepairDriver for DgclFileRepairDriver<'_> {
             return Err(fail);
         }
         // Preserve recoverable preimage bytes. Never delete/overwrite backups.
-        let backups = root.join(".dgcl-repair-backups");
-        if !backups.exists() {
-            fs::create_dir(&backups).map_err(|_| fail)?;
-        }
-        checked_root(&backups)?;
+        let backups = root
+            .directory(Path::new(".dgcl-repair-backups"), true)
+            .map_err(|_| fail)?;
         let unique = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_err(|_| fail)?
@@ -214,27 +194,21 @@ impl DgclRepairDriver for DgclFileRepairDriver<'_> {
             std::process::id(),
             dgcl_repair_request_digest(request)
         ));
-        let mut backup = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(backups.join(format!("{}-{unique}.backup", request.attempt)))
+        let backup_name = format!("{}-{unique}.backup", request.attempt);
+        let mut backup = backups
+            .create_private_file(Path::new(&backup_name))
             .map_err(|_| fail)?;
-        backup
-            .write_all(before.as_bytes())
-            .and_then(|_| backup.sync_all())
-            .map_err(|_| fail)?;
+        backup.write_and_sync(before.as_bytes()).map_err(|_| fail)?;
         if start.elapsed() >= remaining_time
             || permit.validate(&self.authority(permit, &request.authorization_scope))
                 != PermitValidation::ValidGrant
         {
             return Err(fail);
         }
-        file.seek(SeekFrom::Start(0))
-            .and_then(|_| file.write_all(candidate.as_bytes()))
-            .and_then(|_| file.set_len(candidate.len() as u64))
-            .and_then(|_| file.sync_all())
+        target
+            .compare_and_write(before.as_bytes(), candidate.as_bytes())
             .map_err(|_| fail)?;
-        drop(file);
+        drop(target);
         // A post-write failure is explicitly MayHaveApplied in the coordinator.
         if start.elapsed() >= remaining_time {
             return Err(DgclRepairDriverError::TimedOut);
@@ -365,31 +339,4 @@ impl DgclRepairDriver for DgclFileRepairDriver<'_> {
         );
         Ok(validation)
     }
-}
-
-fn checked_root(root: &Path) -> Result<std::path::PathBuf, DgclRepairDriverError> {
-    check_path(root)?;
-    if !root.is_dir() {
-        return Err(DgclRepairDriverError::Failed);
-    }
-    root.canonicalize()
-        .map_err(|_| DgclRepairDriverError::Failed)
-}
-
-fn check_path(path: &Path) -> Result<(), DgclRepairDriverError> {
-    let absolute = std::path::absolute(path).map_err(|_| DgclRepairDriverError::Failed)?;
-    for ancestor in absolute.ancestors() {
-        let metadata = fs::symlink_metadata(ancestor).map_err(|_| DgclRepairDriverError::Failed)?;
-        #[cfg(windows)]
-        {
-            use std::os::windows::fs::MetadataExt;
-            if metadata.file_attributes() & 0x400 != 0 {
-                return Err(DgclRepairDriverError::Failed);
-            }
-        }
-        if metadata.file_type().is_symlink() {
-            return Err(DgclRepairDriverError::Failed);
-        }
-    }
-    Ok(())
 }

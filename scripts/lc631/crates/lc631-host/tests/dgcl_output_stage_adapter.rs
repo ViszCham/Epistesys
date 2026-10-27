@@ -82,6 +82,57 @@ fn stage_receipt(
 }
 
 #[test]
+fn epr_15_output_stages_cannot_mix_distinct_valid_seed_receipts() {
+    let (issuer, verifier, first_seed) = trusted_context();
+    let (_, _, second_seed) = trusted_context();
+    assert_ne!(
+        first_seed.host_receipt_digest,
+        second_seed.host_receipt_digest
+    );
+    let output = "same exact output";
+    let candidate = HostOutputCandidate {
+        artifact_id: ArtifactId(17),
+        turn_id: TurnId(4),
+        candidate_digest: stable_sha256(output),
+        output_text: output.into(),
+    };
+    let precommit = stage_receipt(
+        &issuer,
+        &verifier,
+        &first_seed,
+        HostOutputStageRequest {
+            candidate: &candidate,
+            stage: HostOutputStage::PreCommitCandidate,
+            callback_payload: "precommit A",
+            sink_id: None,
+            delivered: None,
+            attestation: None,
+        },
+    );
+    let post_send = stage_receipt(
+        &issuer,
+        &verifier,
+        &second_seed,
+        HostOutputStageRequest {
+            candidate: &candidate,
+            stage: HostOutputStage::PostSendObserved,
+            callback_payload: "post-send B",
+            sink_id: None,
+            delivered: None,
+            attestation: None,
+        },
+    );
+    let mut ledger = HostOutputStageLedger::new(&candidate).unwrap();
+    ledger.append(precommit).unwrap();
+    let before = serde_json::to_value(&ledger).unwrap();
+    assert_eq!(
+        ledger.append(post_send),
+        Err(HostError::HostOutputStageConflict)
+    );
+    assert_eq!(serde_json::to_value(&ledger).unwrap(), before);
+}
+
+#[test]
 fn host_output_stages_are_exactly_ordered_and_not_collapsed() {
     let (issuer, verifier, seed) = trusted_context();
     let output = "the full candidate";

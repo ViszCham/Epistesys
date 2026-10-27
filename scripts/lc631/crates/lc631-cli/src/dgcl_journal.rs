@@ -15,6 +15,10 @@ pub struct RepairJournal<'a> {
 }
 
 impl<'a> RepairJournal<'a> {
+    pub(super) fn journal_reference(&self) -> String {
+        format!("checkpoint-journal/{}", self.action)
+    }
+
     pub fn new(
         ledger: &'a Path,
         heads: &'a Path,
@@ -72,6 +76,59 @@ impl<'a> RepairJournal<'a> {
             now,
         )
         .map_err(|error| format!("repair_resume:{error:?}"))
+    }
+
+    fn inspect_historical(&self) -> Result<(ResumeObservation, CheckpointHeadAnchor), String> {
+        let now = super::current_epoch_seconds()?;
+        let anchor =
+            load_checkpoint_head_historical(self.ledger, self.heads, self.host.verifier(), now)
+                .map_err(|error| format!("repair_historical_head:{error:?}"))?;
+        let observation = inspect_resume_with_historical_anchor(
+            self.ledger,
+            &self.source,
+            &self.workflow,
+            &anchor.authority_revision,
+            Some(&anchor),
+            Some(self.host.verifier()),
+            now,
+        )
+        .map_err(|error| format!("repair_historical_resume:{error:?}"))?;
+        Ok((observation, anchor))
+    }
+
+    /// Called only after current Test authority, independent implementation
+    /// binding, actual Cargo observations, and exact candidate checks succeed.
+    /// The renewed object is a history lease, never restored execution authority.
+    fn renew_after_fresh_validation(
+        &self,
+        previous: &CheckpointHeadAnchor,
+    ) -> Result<bool, String> {
+        let now = super::current_epoch_seconds()?;
+        if now <= previous.issued_at_epoch {
+            return Ok(false);
+        }
+        let renewed = issue_checkpoint_head_anchor(
+            self.host.issuer(),
+            CheckpointHeadRequest {
+                source_revision: &self.source,
+                plan_digest: &self.workflow,
+                authority_revision: &self.authority,
+                sequence: previous.sequence,
+                head_digest: previous.head_digest.as_deref(),
+                now_epoch: now,
+                lease_seconds: 3600,
+            },
+        )
+        .map_err(|error| format!("repair_head_renew_issue:{error:?}"))?;
+        persist_checkpoint_head_renewal(
+            self.ledger,
+            self.heads,
+            &renewed,
+            self.host.verifier(),
+            now,
+        )
+        .map_err(|error| format!("repair_head_renew_persist:{error:?}"))?;
+        Ok(true)
     }
 
     fn append(
@@ -180,17 +237,20 @@ pub fn resume_package(
     {
         return Err("repair_resume_identity".into());
     }
-    let journal = RepairJournal::new(
+    let mut journal = RepairJournal::new(
         ledger,
         heads,
         host,
         &bundle.request,
         bundle.validation.authority_revision,
     )?;
-    let observation = journal.inspect()?;
-    if observation.integrity_state != CheckpointIntegrityState::TrustedHeadMatched {
-        return Err("repair_resume_trusted_head_required".into());
+    let (observation, historical_head) = journal.inspect_historical()?;
+    if observation.integrity_state != CheckpointIntegrityState::HistoricalHeadMatched {
+        return Err("repair_resume_authenticated_history_required".into());
     }
+    // Keep historical authority identity attached to the old action. The new
+    // bundle's authority revision is independently checked by fresh finalization.
+    journal.authority = historical_head.authority_revision.clone();
     // The current target is checked through the same safe snapshot producer.
     // finalize_with_pipeline captures and rechecks every current file, issuer,
     // independent intent and command permit; no prior completion is reused.
@@ -217,6 +277,7 @@ pub fn resume_package(
     {
         return Err("repair_resume_fresh_validation_hold".into());
     }
+    let head_renewed = journal.renew_after_fresh_validation(&historical_head)?;
     if observation.latest_event_kind == Some(CheckpointEventKind::ActionStarted) {
         journal.finish(&report, true)?;
     }
@@ -224,6 +285,7 @@ pub fn resume_package(
         serde_json::json!({"schema_version": "epistesys-dgcl-package-resume.v1",
         "candidate": report["candidate"], "claims": report["claims"], "processes": report["processes"],
         "journal": journal.inspect()?, "repair_reapplied": false, "completion_restored_from_checkpoint": false,
+        "history_authenticated": true, "historical_head_renewed_after_fresh_validation": head_renewed,
         "authority_created": false, "host_send_authorized": false, "output_commit_allowed": false,
         "host_observation": "pending", "research_evaluation": "pending_no_corpus"}),
     )

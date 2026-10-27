@@ -52,7 +52,7 @@ fn arc631_03_public_verified_host_enum_cannot_grant() {
 }
 
 #[test]
-fn arc631_03_only_attested_event_can_grant_exact_scope() {
+fn arc631_03_context_free_attested_event_is_not_current_execution_authority() {
     let event = AuthorityEvent {
         action: Action::Edit,
         source: AuthoritySourceKind::VerifiedHostUserSpan,
@@ -66,7 +66,12 @@ fn arc631_03_only_attested_event_can_grant_exact_scope() {
         "authority/edit/repo",
     );
     let verified = VerifiedAuthorityEvent::checked(event, receipt).unwrap();
-    assert!(decide_verified_authority(Action::Edit, "repo", &[verified]).authorized);
+    let decision = decide_verified_authority(Action::Edit, "repo", &[verified]);
+    assert!(!decision.authorized);
+    assert!(decision
+        .residuals
+        .iter()
+        .any(|reason| reason == "verified_authority_needs_current_context"));
 }
 
 #[test]

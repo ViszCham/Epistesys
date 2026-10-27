@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-use lc631_receipt_kernel::{ReceiptClass, VerifiedReceipt};
+use lc631_receipt_kernel::{ReceiptClass, SubjectRevision, VerifiedReceipt};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
@@ -331,6 +331,10 @@ impl ExecutionPermit {
         if source_event.source != AuthoritySourceKind::VerifiedHostUserSpan {
             return Err(PermitError::UnverifiedOrigin);
         }
+        let source_revision = stable_sha256(source_text);
+        if event.subject_revision.as_str() != source_revision {
+            return Err(PermitError::SourceRevisionMismatch);
+        }
         if !matches!(
             source_event.polarity,
             DeonticPolarity::Grant | DeonticPolarity::Deny
@@ -338,11 +342,11 @@ impl ExecutionPermit {
             return Err(PermitError::PolarityNotActionable);
         }
         if source_event.scope.trim().is_empty()
+            || source_event.span.start >= source_event.span.end
             || source_event.span.slice(source_text).is_err()
             || !is_sha256_digest(&event.verifier_key_fingerprint)
             || !is_sha256_digest(&event.receipt_digest)
             || !is_sha256_digest(&seed_receipt_digest)
-            || !is_sha256_digest(&stable_sha256(source_text))
             || issued_at_epoch < event.receipt_issued_at_epoch
             || expires_at_epoch <= issued_at_epoch
             || event
@@ -352,7 +356,6 @@ impl ExecutionPermit {
         {
             return Err(PermitError::PermitBindingInvalid);
         }
-        let source_revision = stable_sha256(source_text);
         let issuer_key_fingerprint = event.verifier_key_fingerprint.clone();
         let authority_receipt_digest = event.receipt_digest.clone();
         let permit_digest = execution_permit_digest(
@@ -625,6 +628,8 @@ fn execution_permit_digest(
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct VerifiedAuthorityEvent {
     event: AuthorityEvent,
+    subject_revision: SubjectRevision,
+    issuer_principal: String,
     receipt_digest: String,
     verifier_key_fingerprint: String,
     parent_seed_receipt_digest: Option<String>,
@@ -652,6 +657,8 @@ impl VerifiedAuthorityEvent {
         }
         Ok(Self {
             event,
+            subject_revision: receipt.subject_revision().clone(),
+            issuer_principal: receipt.issuer().as_str().to_string(),
             receipt_digest: receipt.receipt_digest(),
             verifier_key_fingerprint: receipt.verifier_key_fingerprint().to_string(),
             parent_seed_receipt_digest: receipt.parent_receipt_digest().map(str::to_string),
@@ -662,6 +669,14 @@ impl VerifiedAuthorityEvent {
 
     pub fn event(&self) -> &AuthorityEvent {
         &self.event
+    }
+
+    pub fn subject_revision(&self) -> &SubjectRevision {
+        &self.subject_revision
+    }
+
+    pub fn issuer_principal(&self) -> &str {
+        &self.issuer_principal
     }
 
     pub fn receipt_digest(&self) -> &str {
@@ -752,7 +767,9 @@ pub fn decide_verified_authority(
         .iter()
         .filter(|verified| verified.event.polarity == DeonticPolarity::Grant)
         .count();
-    let authorized = !has_deny && grants == 1;
+    // Historical verification lacks the current source, parent, clock, and
+    // revocation context required for an executable authority decision.
+    let authorized = false;
     let polarity = if has_deny {
         DeonticPolarity::Deny
     } else if grants == 1 {
@@ -764,7 +781,7 @@ pub fn decide_verified_authority(
     } else {
         DeonticPolarity::Mention
     };
-    let mut residuals = Vec::new();
+    let mut residuals = vec!["verified_authority_needs_current_context".to_string()];
     if grants > 1 {
         residuals.push("duplicate_grant_events".to_string());
     }
@@ -774,6 +791,109 @@ pub fn decide_verified_authority(
         polarity,
         scope: requested_scope.to_string(),
         residuals,
+    }
+}
+
+/// The caller supplies current, trusted host context, not model-derived labels.
+/// A verified receipt remains historical evidence until these bindings are
+/// rechecked; this context does not issue a new permit or renew a receipt.
+pub struct VerifiedAuthorityContext<'a> {
+    pub action: Action,
+    pub scope: &'a str,
+    pub source_text: &'a str,
+    pub parent_seed_receipt_digest: &'a str,
+    pub caller_origin: CallerOrigin,
+    pub trusted_host_fingerprint: &'a str,
+    pub now_epoch: u64,
+    pub revoked_authority_receipt_digests: &'a [String],
+}
+
+pub fn decide_verified_authority_in_context(
+    context: &VerifiedAuthorityContext<'_>,
+    events: &[VerifiedAuthorityEvent],
+) -> AuthorityDecision {
+    let source_revision = stable_sha256(context.source_text);
+    let mut grants = 0usize;
+    let mut denies = 0usize;
+    let mut matching = 0usize;
+    let mut rejected = false;
+    let mut residuals = Vec::new();
+    for verified in events.iter().filter(|verified| {
+        verified.event.action == context.action && verified.event.scope == context.scope
+    }) {
+        matching += 1;
+        let rejection = verified_authority_rejection(context, verified, &source_revision);
+        if let Some(reason) = rejection {
+            rejected = true;
+            residuals.push(reason.to_string());
+            continue;
+        }
+        match verified.event.polarity {
+            DeonticPolarity::Grant => grants += 1,
+            DeonticPolarity::Deny => denies += 1,
+            _ => {}
+        }
+    }
+    let (authorized, polarity) = if denies > 0 {
+        (false, DeonticPolarity::Deny)
+    } else if grants > 1 || (grants == 1 && rejected) {
+        (false, DeonticPolarity::Conflict)
+    } else if grants == 1 {
+        (true, DeonticPolarity::Grant)
+    } else if matching == 0 || rejected {
+        (false, DeonticPolarity::Unknown)
+    } else {
+        (false, DeonticPolarity::Mention)
+    };
+    AuthorityDecision {
+        action: context.action,
+        authorized,
+        polarity,
+        scope: context.scope.to_string(),
+        residuals,
+    }
+}
+
+fn verified_authority_rejection(
+    context: &VerifiedAuthorityContext<'_>,
+    verified: &VerifiedAuthorityEvent,
+    source_revision: &str,
+) -> Option<&'static str> {
+    if context.caller_origin != CallerOrigin::HostVerifiedUser
+        || verified.event.source != AuthoritySourceKind::VerifiedHostUserSpan
+    {
+        Some("verified_authority_untrusted_origin")
+    } else if verified.subject_revision.as_str() != source_revision {
+        Some("verified_authority_source_mismatch")
+    } else if !is_sha256_digest(context.parent_seed_receipt_digest)
+        || verified.parent_seed_receipt_digest.as_deref()
+            != Some(context.parent_seed_receipt_digest)
+    {
+        Some("verified_authority_parent_mismatch")
+    } else if !is_sha256_digest(context.trusted_host_fingerprint)
+        || verified.verifier_key_fingerprint != context.trusted_host_fingerprint
+    {
+        Some("verified_authority_issuer_mismatch")
+    } else if verified.event.scope.trim().is_empty()
+        || verified.event.span.start >= verified.event.span.end
+        || verified.event.span.slice(context.source_text).is_err()
+    {
+        Some("verified_authority_invalid_span_or_scope")
+    } else if context.now_epoch < verified.receipt_issued_at_epoch {
+        Some("verified_authority_not_yet_valid")
+    } else if verified
+        .receipt_expires_at_epoch
+        .is_some_and(|expiry| context.now_epoch >= expiry)
+    {
+        Some("verified_authority_expired")
+    } else if context
+        .revoked_authority_receipt_digests
+        .iter()
+        .any(|digest| digest == &verified.receipt_digest)
+    {
+        Some("verified_authority_revoked")
+    } else {
+        None
     }
 }
 

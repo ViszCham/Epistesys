@@ -12,6 +12,4 @@ lc631-tldg = { path = "../lc631-tldg" }
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
-
-[target.'cfg(windows)'.dependencies]
 lc631-process-supervisor = { path = "../lc631-process-supervisor" }

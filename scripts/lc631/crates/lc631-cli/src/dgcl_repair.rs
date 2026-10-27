@@ -1,4 +1,5 @@
 use super::dgcl_package::{finalize_with_pipeline, PackageSeedReceipt, PackageValidationBundle};
+use super::effect_error::CliFailure;
 use lc631_analysis::*;
 use lc631_core::{
     Action, ArtifactId, AuthorityRevision, CallerOrigin, ExecutionPermitContext, SourceSpan, TurnId,
@@ -56,14 +57,15 @@ impl DgclFileEvidenceValidator for PackageRevalidator<'_> {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn repair_package(
+pub(super) fn repair_package(
     root: &Path,
     source: &str,
     bundle: PackageRepairBundle,
     host: &HostReceiptContext,
     author: &HostReceiptContext,
     journal_roots: Option<(&Path, &Path)>,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value, CliFailure> {
+    let request_digest = dgcl_repair_request_digest(&bundle.request);
     if bundle.schema_version != "epistesys-dgcl-package-repair-bundle.v1"
         || bundle.request.attempt != 1
         || bundle.replacement_utf8.len() > 1024 * 1024
@@ -310,7 +312,10 @@ pub fn repair_package(
         })
         .transpose()?;
     if let Some(journal) = &journal {
-        journal.start()?;
+        journal.start().map_err(|message| {
+            CliFailure::persistence_uncertain(message, &request_digest)
+                .at_journal(journal.journal_reference())
+        })?;
     }
     let report = run_dgcl_repair_loop(
         DgclRepairLoopInput {
@@ -340,14 +345,24 @@ pub fn repair_package(
         },
         &mut driver,
     )
-    .map_err(|error| format!("dgcl_package_repair:{error:?}"))?;
+    .map_err(|error| {
+        CliFailure::possible_edit(format!("dgcl_package_repair:{error:?}"), &request_digest)
+    })?;
     let mut output = serde_json::json!({ "schema_version": "epistesys-dgcl-package-repair.v1", "repair": report,
         "authority_created": false, "host_send_authorized": false, "output_commit_allowed": false,
         "host_observation": "pending", "research_evaluation": "pending_no_corpus" });
     if let Some(journal) = &journal {
-        journal.finish(&output, report.status == DgclRepairStatus::Completed)?;
-        output["journal"] =
-            serde_json::to_value(journal.inspect()?).map_err(|_| "repair_journal_encode")?;
+        journal
+            .finish(&output, report.status == DgclRepairStatus::Completed)
+            .map_err(|message| {
+                CliFailure::after_repair(message, &request_digest, &report)
+                    .at_journal(journal.journal_reference())
+            })?;
+        output["journal"] = serde_json::to_value(journal.inspect().map_err(|message| {
+            CliFailure::after_repair(message, &request_digest, &report)
+                .at_journal(journal.journal_reference())
+        })?)
+        .map_err(|_| CliFailure::after_repair("repair_journal_encode", &request_digest, &report))?;
     }
     Ok(output)
 }

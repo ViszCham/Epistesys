@@ -3,8 +3,8 @@ use crate::{
     ConstraintState, DeepGrammarArtifact, Dg1Error, Dg1Language, Dg1Region, Dg1RegionKind,
     Dg1Report, GrammarProduction, GrammarProfileId, PackedDerivation, ParseDefect, RegionCandidate,
     RegionLattice, RelationKind, RelationState, SyntaxNode, SyntaxNodeId, SyntaxNodeKind,
-    SyntaxRelation, Token, TokenKind, TokenLattice, TypedConstraintGraph, UnifiedGrammarIr,
-    UnifiedSyntaxHypergraph,
+    SyntaxRelation, Token, TokenKind, TokenLattice, TokenSyntaxBinding, TypedConstraintGraph,
+    UnifiedGrammarIr, UnifiedSyntaxHypergraph,
 };
 use lc631_core::SourceSpan;
 use serde::Serialize;
@@ -14,6 +14,8 @@ use std::collections::{BTreeMap, BTreeSet};
 pub enum TldgError {
     SourceRoundtripMismatch,
     Dg1(Dg1Error),
+    ConstraintBinding(crate::ConstraintBindingError),
+    BudgetExceeded(&'static str),
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize)]
@@ -76,10 +78,13 @@ pub(crate) fn analyze_with_dg1(
         return Err(TldgError::SourceRoundtripMismatch);
     }
     let regions = build_regions(&dg1);
-    let tokens = tokenize(source);
+    let tokens = tokenize(source)?;
     let grammar = builtin_grammar();
-    let syntax = build_syntax(source, &dg1, &regions)?;
-    let constraints = build_constraints(&tokens);
+    let mut syntax = build_syntax(source, &dg1, &regions)?;
+    let constraints = build_constraints(&tokens, &mut syntax)?;
+    constraints
+        .validate_source_bindings(source, &tokens, &syntax)
+        .map_err(TldgError::ConstraintBinding)?;
     let boundary_roundtrip = boundary.roundtrip();
     Ok((
         DeepGrammarArtifact {
@@ -147,10 +152,13 @@ fn profile_for_region(region: &Dg1Region) -> GrammarProfileId {
     }
 }
 
-fn tokenize(source: &str) -> TokenLattice {
+fn tokenize(source: &str) -> Result<TokenLattice, TldgError> {
     let mut tokens = Vec::new();
     let mut start = 0;
     while start < source.len() {
+        if tokens.len() >= crate::Dg1Budget::default().max_syntax_nodes {
+            return Err(TldgError::BudgetExceeded("surface_tokens"));
+        }
         let Some(character) = source.get(start..).and_then(|suffix| suffix.chars().next()) else {
             break;
         };
@@ -174,17 +182,59 @@ fn tokenize(source: &str) -> TokenLattice {
         start = end;
     }
     let primary = tokens.iter().map(|token| token.id).collect::<Vec<_>>();
-    TokenLattice {
+    Ok(TokenLattice {
         tokens,
         competing_segmentations: vec![primary],
-    }
+    })
 }
 
-fn build_constraints(tokens: &TokenLattice) -> TypedConstraintGraph {
+fn build_constraints(
+    tokens: &TokenLattice,
+    syntax: &mut UnifiedSyntaxHypergraph,
+) -> Result<TypedConstraintGraph, TldgError> {
+    let total_nodes = syntax
+        .nodes
+        .len()
+        .checked_add(tokens.tokens.len())
+        .ok_or(TldgError::BudgetExceeded("unified_syntax_nodes"))?;
+    if total_nodes > crate::Dg1Budget::default().max_syntax_nodes {
+        return Err(TldgError::BudgetExceeded("unified_syntax_nodes"));
+    }
+    let root = syntax
+        .derivations
+        .first()
+        .ok_or(TldgError::SourceRoundtripMismatch)?
+        .root;
+    let mut token_bindings = Vec::with_capacity(tokens.tokens.len());
+    for token in &tokens.tokens {
+        let id = SyntaxNodeId(
+            u64::try_from(syntax.nodes.len())
+                .map_err(|_| TldgError::BudgetExceeded("unified_syntax_nodes"))?,
+        );
+        syntax.nodes.push(SyntaxNode {
+            id,
+            spans: vec![token.span],
+            kind: SyntaxNodeKind::Token,
+            profile_candidates: vec![GrammarProfileId(1)],
+            origin: "source_anchored_surface_token".into(),
+        });
+        syntax.relations.push(SyntaxRelation {
+            from: root,
+            to: id,
+            kind: RelationKind::Contains,
+            state: RelationState::Verified,
+            evidence: "checked_document_contains_exact_token_span_not_semantic_truth".into(),
+        });
+        token_bindings.push(TokenSyntaxBinding {
+            token_id: token.id,
+            syntax_node: id,
+            source_span: token.span,
+        });
+    }
     let mut edges = Vec::new();
-    for pair in tokens.tokens.windows(2) {
-        let left = SyntaxNodeId(u64::from(pair[0].id) + 1);
-        let right = SyntaxNodeId(u64::from(pair[1].id) + 1);
+    for (pair, bindings) in tokens.tokens.windows(2).zip(token_bindings.windows(2)) {
+        let left = bindings[0].syntax_node;
+        let right = bindings[1].syntax_node;
         let lowered = pair[0].surface.to_lowercase();
         let kind = if matches!(lowered.as_str(), "let" | "const" | "fn") {
             ConstraintKind::Binding
@@ -204,10 +254,13 @@ fn build_constraints(tokens: &TokenLattice) -> TypedConstraintGraph {
             } else {
                 ConstraintState::Candidate
             },
-            source: "surface_constraint_reference".into(),
+            source: "source_anchored_token_adjacency_candidate".into(),
         });
     }
-    TypedConstraintGraph { edges }
+    Ok(TypedConstraintGraph {
+        edges,
+        token_bindings,
+    })
 }
 
 fn classify(character: char) -> TokenKind {

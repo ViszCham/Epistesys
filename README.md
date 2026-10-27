@@ -10,9 +10,9 @@ Epistesys（エピステシス）は、AIシステムの**要求管理、実行�
 
 | 項目 | 現在の状態 |
 | --- | --- |
-| バージョン | `6.3.2-alpha.2` |
+| バージョン | `6.3.2-alpha.3` |
 | 実装の由来 | Labyrinth-Codex v6.3.1の選択source snapshotに、DGCLの構文解析・検証・修復経路を追加 |
-| ソース検証 | 宣言された実行条件に対する`SourceReleaseReady`。条件と記録は[最終検証](validation/epia2-alpha2-release-verification-2026-10-02.md)に記載 |
+| ソース検証 | [alpha.3検証記録](validation/epr-release-verification-2026-10-27.md)に昇格前・昇格後のgateを分離。alpha.2の[履歴的な最終検証](validation/epia2-alpha2-release-verification-2026-10-02.md)は保持し、最終readinessは最新記録で確認する |
 | 配布 | source-only。モデルweight、秘密鍵、個人設定、未監査の配布binaryを同梱しない |
 | ホスト接続 | adapter・receipt・replayの実装を含む。実ホストのcallback／delivery観測は`PendingHostObservation` |
 | 研究評価 | Epistesys固有の効果と独立評価は未実施。独立gold corpusは`PendingNoCorpus` |
@@ -29,7 +29,7 @@ Epistesys（エピステシス）は、AIシステムの**要求管理、実行�
 | 要求の追跡 | 否定・条件・例外・時間・scope・参照・依存を、source revisionと要求別Program IRに結び付ける |
 | 射影の検査 | TranslationLoss v3の`ProjectionDefectGraph`で、対応・欠落・矛盾・比較不能を保持する。幾何的提案は補助情報 |
 | 権限・証拠 | principal、scope、revision、nonce、期限、parent、payload digestを持つreceiptを検証する |
-| Coding検証・修復 | compiler check、runtime test、指定APIからexecutorへの呼出し、acceptance testを別観測として扱い、限定ファイル修復と新snapshotの再検証を接続する |
+| Coding検証・修復 | compiler check、runtime test、登録されたproduction APIの直接呼出し、acceptance testを別観測として扱い、限定ファイル修復と新snapshotの再検証を接続する |
 | 仮説探索・GPU | 256のdistinct world × 8 projection＝2,048 evaluation rows。数値計算経路とCPU最終検証を分離する |
 | Program Analysis・Media | Rust／Python／AssemblyのRPA型、媒体のsource・backend・model・license・method・budgetに束縛した候補と観測 |
 | 出力・再開 | exact output digest、HostOutputReceipt v2、Stop hook、sink検査、checkpoint、append-only journal／replay |
@@ -38,13 +38,21 @@ Epistesys（エピステシス）は、AIシステムの**要求管理、実行�
 
 alpha.2は、実ファイル修復、非上書きbackup、最大4回を上限とするSDK repair coordinator、writer lock、ledgerと別管理の署名head、状態更新を伴う離散・連続表現の蒸留、明示的consumer view v1/v2を追加しています。Rust workspaceは13 crateです。修復・再開の事前条件と検証範囲は[DGCL実行契約](docs/dgcl-operating-profile-and-closure.md)、型・境界・継承機構の詳細は[システムアーキテクチャ](docs/system-architecture.md)に整理しています。
 
+alpha.3はEPR監査に基づき、既存経路の次の境界を強化します。
+
+- **解析・権限**：日本語解析の進行・byte span・共有作業予算と、元receiptに束縛したsource／scope／期限の検査。
+- **実行・回復**：登録direct driverの接続証拠、共通process監督、handle基準のfile修復、private Media snapshot。
+- **数値・配布**：数値／graphの入場検査、固定inventory配布、Rust変更を捕捉するWindows／Linux CI。
+
+[変更一覧](docs/epistesys-6.3.2-alpha.3-release-notes-2026-10-27.md)と[境界契約](docs/epr-boundary-contracts.md)に実装範囲を示し、研究効果や実host activationとは区別します。
+
 <a id="coding-assistance-ja"></a>
 
 ### コーディング支援：要求追跡・検証・修復
 
 コーディング支援は、Epistesysの主要な適用先の一つです。対応するprofileでは、要求、実装対象、呼び出し経路、検証結果を対応づけ、完了判定の根拠を追跡する制御経路を実装しています。対象とする問題には、要求の一部欠落、追加した機能の未接続、検証不足、変更前の証拠の再利用があります。
 
-Epistesysを明示的に選択した場合、Coding Projectorが設計・実装・テスト・レビューの依頼を解析経路へ渡します。原文に結び付く要求と未解決事項をProgram IRに保持し、要求ごとの検証計画へ接続します。要求と実装対象の対応、コンパイラ検査、指定した実行時テスト、APIからexecutorへの呼び出し、受入試験を別々の検証材料として扱います。例えば、コンパイラ検査が成功しても、計画で要求した呼び出しの証拠がなければ、その接続のgapは残ります。
+Epistesysを明示的に選択した場合、Coding Projectorが設計・実装・テスト・レビューの依頼を解析経路へ渡します。原文に結び付く要求と未解決事項をProgram IRに保持し、要求ごとの検証計画へ接続します。要求と実装対象の対応、コンパイラ検査、指定した実行時テスト、登録されたproduction APIの直接呼出し、受入試験を別々の検証材料として扱います。例えば、コンパイラ検査が成功しても、計画で要求した呼び出しの証拠がなければ、その接続のgapは残ります。このruntime観測は登録driverとpinしたassertionに限定し、API内部からexecutorまでの任意の呼出し追跡とは区別します。
 
 修復経路は、呼び出し側が提供した候補を、許可された既存Rustファイルへ適用し、変更前の内容を保存して、変更後snapshotと新しい証拠から要求を再評価します。再開時にも現在のsource・権限・証拠を確認します。完了判定の範囲は、抽出・登録された要求と検証計画です。要求抽出の意味精度、一般的なCoding性能、実hostへの出力・配信は別の評価・観測対象です。[利用手順](docs/execution-guide.md)、[実行契約](docs/dgcl-operating-profile-and-closure.md)、[既知の制約](docs/known-limitations.md)で条件を確認できます。
 
@@ -80,7 +88,7 @@ Epistesysを明示的に選択した場合、Coding Projectorが設計・実装�
 
 主要差の記録されたQID bootstrap 95%区間は+12.20〜+27.83ポイントで、差は丸め前に計算しています。主要65 QIDでは32勝・20同点・13敗でした。選択は75→67→65 QID、225→171→167ペアです。平均適合度は完全遵守や正答率ではなく、区間は取得選択やJudgeの系統誤差を含みません。
 
-これは**前身の限定観測**で、Epistesys alpha.2の改善、公式ComplexConstraintsスコア、独立human gold、TLの因果効果、ハルシネーション削減、長期保持の実証ではありません。経路ラベル等を非提示とするJudge設計ですが、Labyrinthを含む評価系の独立性は未確立です。既知の75問を新しいholdoutとして扱いません。
+これは**前身の限定観測**で、Epistesys alpha.2／alpha.3の改善、公式ComplexConstraintsスコア、独立human gold、TLの因果効果、ハルシネーション削減、長期保持の実証ではありません。経路ラベル等を非提示とするJudge設計ですが、Labyrinthを含む評価系の独立性は未確立です。既知の75問を新しいholdoutとして扱いません。
 
 [研究本文](docs/research/gb-cc75-study.md)・[方法と由来](docs/research/gb-cc75-methods-and-provenance.md)・[統計仕様](docs/research/gb-cc75-statistical-analysis.md)・[方法論監査](docs/research/gb-cc75-adversarial-audit.md)・[再計算可能な集計](benchmarks/gb-cc75/2026-08-18/README.md)を提供しています。
 
@@ -105,7 +113,7 @@ launcherは自身の配置からrunnerを解決します。別cwdからの起動
 | 実行条件・修復・再開 | [実行ガイド](docs/execution-guide.md) → [DGCL実行契約](docs/dgcl-operating-profile-and-closure.md) |
 | wire形式・互換性 | [DGCL wire互換性](docs/dgcl-wire-compatibility.md) → [schema契約](schemas/closure-and-receipt-contract.md) |
 | 評価設計・経験的結果 | [研究仮説](docs/research-hypotheses.md) → [GB-CC75研究本文](docs/research/gb-cc75-study.md) |
-| 現行の検証・残存条件 | [alpha.2最終検証](validation/epia2-alpha2-release-verification-2026-10-02.md) → [既知の制約](docs/known-limitations.md) |
+| 現行の検証・残存条件 | [alpha.3検証](validation/epr-release-verification-2026-10-27.md) → [既知の制約](docs/known-limitations.md) |
 | sourceの由来・除外・履歴 | [移行契約](docs/migration-contract.md) → [文書索引](docs/README.md) |
 
 初期cloneは独立したGit履歴で保存され、個人状態、credentials、cache、receipt root、replay ledgerを継承していません。`lc631-*`は挙動差を抑える互換識別子です。詳細な実装記録と継承元の設計・監査文書は[文書索引](docs/README.md)で現行仕様から区別しています。
@@ -122,9 +130,9 @@ The failure model includes commitment of unsupported generation, omitted constra
 
 | Item | Current state |
 | --- | --- |
-| Version | `6.3.2-alpha.2` |
+| Version | `6.3.2-alpha.3` |
 | Implementation provenance | Selected Labyrinth-Codex v6.3.1 source snapshot with added DGCL parsing, validation, and repair paths |
-| Source verification | `SourceReleaseReady` for declared operating conditions; conditions and records are in the [final verification](validation/epia2-alpha2-release-verification-2026-10-02.md) |
+| Source verification | The [alpha.3 verification record](validation/epr-release-verification-2026-10-27.md) separates pre- and post-promotion gates; retain [historical alpha.2 verification](validation/epia2-alpha2-release-verification-2026-10-02.md) and consult the current record for final readiness |
 | Distribution | Source-only; excludes model weights, private keys, personal settings, and unaudited distribution binaries |
 | Host integration | Includes adapter/receipt/replay implementations; real-host callback/delivery observations remain `PendingHostObservation` |
 | Research evaluation | Epistesys-specific effects and independent evaluation are pending; independent gold corpus remains `PendingNoCorpus` |
@@ -141,7 +149,7 @@ The principal dataflow is **source preservation → syntax/requirement extractio
 | Requirement traceability | Bind negation, conditions, exceptions, time, scope, references, and dependencies to source revision and per-requirement Program IR |
 | Projection checks | TranslationLoss v3 `ProjectionDefectGraph` retains correspondence, omissions, contradictions, and incomparability; geometric proposals are advisory |
 | Authority and evidence | Validate receipts containing principal, scope, revision, nonce, expiry, parent, and payload digest |
-| Coding validation and repair | Separate compiler checks, runtime tests, specified API-to-executor invocations, and acceptance observations; connect bounded file repair and revalidation of changed snapshots |
+| Coding validation and repair | Separate compiler checks, runtime tests, registered direct production-API invocations, and acceptance observations; connect bounded file repair and revalidation of changed snapshots |
 | Hypothesis exploration and GPU | 256 distinct worlds × 8 projections = 2,048 evaluation rows; separate numeric computation from CPU final validation |
 | Program Analysis and Media | Rust/Python/Assembly RPA types; candidates/observations bound to source, backend, model, license, method, and budget |
 | Output and resume | Exact output digests, HostOutputReceipt v2, Stop hook, sink checks, checkpoints, append-only journals/replay |
@@ -150,13 +158,21 @@ The principal dataflow is **source preservation → syntax/requirement extractio
 
 Alpha.2 adds real file repair, non-overwriting backups, an SDK repair coordinator capped at four attempts, writer locks, signed heads managed separately from ledgers, state-changing discrete/continuous distillation, and explicit consumer views v1/v2. The Rust workspace contains 13 crates. See the [DGCL execution contract](docs/dgcl-operating-profile-and-closure.md) for repair/resume prerequisites and scope; the [system architecture](docs/system-architecture.md) details types, boundaries, and inherited mechanisms.
 
+Following the EPR audit, alpha.3 strengthens these boundaries in existing paths:
+
+- **Parsing and authority:** Japanese-parser progress, byte spans and shared work budgets; source/scope/expiry checks bound to original receipts.
+- **Execution and recovery:** registered direct-driver connection evidence, shared process supervision, handle-based file repair, and private Media snapshots.
+- **Numerics and distribution:** numeric/graph admission, fixed-inventory packaging, and Windows/Linux CI that captures Rust changes.
+
+The [change notes](docs/epistesys-6.3.2-alpha.3-release-notes-2026-10-27.md) and [boundary contracts](docs/epr-boundary-contracts.md) define implementation coverage, separate from research effects or real-host activation.
+
 <a id="coding-assistance-en"></a>
 
 ### Coding assistance: requirement traceability, validation, and repair
 
 Coding assistance is one of Epistesys's principal application areas. Within supported profiles, it implements a control path relating requirements, implementation targets, invocation paths, and validation results, making the basis for completion decisions traceable. The failure model includes omitted requirements, disconnected functionality, missing validation, and reuse of evidence collected before a change.
 
-When Epistesys is explicitly selected, the Coding Projector routes design, implementation, testing, and review requests into the analysis path. Source-linked requirements and unresolved items are retained in Program IR and connected to per-requirement validation plans. Requirement-to-implementation bindings, compiler checks, specified runtime tests, API-to-executor invocations, and acceptance tests are treated as distinct validation materials. For example, a successful compiler check still leaves a connection gap open when evidence for the invocation required by the plan is missing.
+When Epistesys is explicitly selected, the Coding Projector routes design, implementation, testing, and review requests into the analysis path. Source-linked requirements and unresolved items are retained in Program IR and connected to per-requirement validation plans. Requirement-to-implementation bindings, compiler checks, specified runtime tests, registered direct production-API invocations, and acceptance tests are treated as distinct validation materials. For example, a successful compiler check still leaves a connection gap open when evidence for the invocation required by the plan is missing. This runtime observation is limited to a registered driver and pinned assertion, not arbitrary internal API-to-executor tracing.
 
 The repair path applies a caller-provided candidate to an authorized existing Rust file, preserves its previous contents, and reevaluates requirements using the changed snapshot and fresh evidence. Resume also checks current source, authority, and evidence. Completion decisions cover the extracted and registered requirements and validation plans. Semantic accuracy of requirement extraction, general coding performance, and real-host output and delivery require separate evaluation or observation. See the [execution guide](docs/execution-guide.md), [execution contract](docs/dgcl-operating-profile-and-closure.md), and [known limitations](docs/known-limitations.md) for conditions.
 
@@ -192,7 +208,7 @@ A retrospective exploratory paired evaluation of predecessor Labyrinth-Codex, da
 
 The recorded QID-bootstrap 95% interval is +12.20 to +27.83 points; differences use unrounded values. The primary 65 QIDs show 32 wins, 20 ties, and 13 losses. Selection is 75→67→65 QIDs and 225→171→167 pairs. Mean adherence is neither complete compliance nor task accuracy; the interval excludes acquisition selection and systematic Judge error.
 
-These are **bounded predecessor observations**, not evidence of alpha.2 improvement, official ComplexConstraints scores, independent human gold, causal TL effects, hallucination reduction, or long retention. The Judge design withholds route labels and other identifiers, but independence of the Labyrinth-based evaluator is unestablished. Known tasks are not a new holdout.
+These are **bounded predecessor observations**, not evidence of alpha.2/alpha.3 improvement, official ComplexConstraints scores, independent human gold, causal TL effects, hallucination reduction, or long retention. The Judge design withholds route labels and other identifiers, but independence of the Labyrinth-based evaluator is unestablished. Known tasks are not a new holdout.
 
 See the [study](docs/research/gb-cc75-study.md), [methods/provenance](docs/research/gb-cc75-methods-and-provenance.md), [statistical specification](docs/research/gb-cc75-statistical-analysis.md), [methodological audit](docs/research/gb-cc75-adversarial-audit.md), and [recomputable aggregates](benchmarks/gb-cc75/2026-08-18/README.md).
 
@@ -217,7 +233,7 @@ The launcher resolves its runner relative to its installation. See the [executio
 | Execution, repair, resume | [Execution guide](docs/execution-guide.md) → [DGCL execution contract](docs/dgcl-operating-profile-and-closure.md) |
 | Wire formats and compatibility | [DGCL wire compatibility](docs/dgcl-wire-compatibility.md) → [schema contract](schemas/closure-and-receipt-contract.md) |
 | Evaluation design and observations | [Research hypotheses](docs/research-hypotheses.md) → [GB-CC75 study](docs/research/gb-cc75-study.md) |
-| Current verification and residual conditions | [Alpha.2 final verification](validation/epia2-alpha2-release-verification-2026-10-02.md) → [Known limitations](docs/known-limitations.md) |
+| Current verification and residual conditions | [Alpha.3 verification](validation/epr-release-verification-2026-10-27.md) → [Known limitations](docs/known-limitations.md) |
 | Source provenance, exclusions, history | [Migration contract](docs/migration-contract.md) → [Documentation index](docs/README.md) |
 
 The initial clone uses independent Git history and excludes personal state, credentials, caches, receipt roots, and replay ledgers. `lc631-*` names are compatibility identifiers retained to limit behavior changes. The [documentation index](docs/README.md) separates detailed implementation records and inherited design/audit history from the current specification.

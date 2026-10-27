@@ -6,7 +6,6 @@ use std::sync::{Arc, OnceLock};
 
 const WORKGROUP_SIZE: u32 = 64;
 const SUMMARY_CHUNK_VALUES: usize = 1_024;
-const MAX_RELATION_PAIRS: usize = 262_144;
 static GPU_IN_FLIGHT: AtomicUsize = AtomicUsize::new(0);
 
 #[cube(launch)]
@@ -210,7 +209,7 @@ fn qubo_delta_kernel(
             let left = term_left[term] as usize;
             let right = term_right[term] as usize;
             let other = if left == ABSOLUTE_POS { right } else { left };
-            if selected[other] != 0u32 {
+            if left == right || selected[other] != 0u32 {
                 local += coefficients[term];
             }
         }
@@ -388,8 +387,8 @@ fn summarize_i32_chunks_kernel(input: &Array<i32>, chunk_size: usize, output: &m
 fn reduce_u32_chunks_kernel(chunks: &Array<u32>, chunk_count: usize, output: &mut Array<u32>) {
     if ABSOLUTE_POS == 0 {
         let mut count = 0u32;
-        let mut minimum = chunks[1];
-        let mut maximum = chunks[2];
+        let mut minimum = 4_294_967_295u32;
+        let mut maximum = 0u32;
         let mut hash_1 = 0u32;
         let mut hash_2 = 0u32;
         let mut hash_3 = 0u32;
@@ -423,6 +422,7 @@ fn reduce_u32_chunks_kernel(chunks: &Array<u32>, chunk_count: usize, output: &mu
 fn reduce_i32_chunks_kernel(chunks: &Array<u32>, chunk_count: usize, output: &mut Array<u32>) {
     if ABSOLUTE_POS == 0 {
         let mut count = 0u32;
+        // Admission rejects empty Jacobi/QUBO lanes, so chunk zero exists.
         let mut minimum = chunks[1] as i32;
         let mut maximum = chunks[2] as i32;
         let mut hash_1 = 0u32;
@@ -579,7 +579,7 @@ impl NumericBackend for CubeClWgpuBackend {
         }
         let in_flight = InFlightGuard::enter();
         let pair_count = input.relation_left.len();
-        if pair_count > MAX_RELATION_PAIRS {
+        if pair_count > MAX_NUMERIC_EDGES {
             return Err(AcceleratorError::BudgetExceeded("relation_pairs"));
         }
 
@@ -600,10 +600,10 @@ impl NumericBackend for CubeClWgpuBackend {
         let mask_handle = client.create_from_slice(u32::as_bytes(&mask_codes));
         let relation_offset_handle =
             client.create_from_slice(u32::as_bytes(&input.relation_offsets));
-        let relation_left_handle = client.create_from_slice(u32::as_bytes(&input.relation_left));
-        let relation_right_handle = client.create_from_slice(u32::as_bytes(&input.relation_right));
+        let relation_left_handle = upload_u32(&client, &input.relation_left);
+        let relation_right_handle = upload_u32(&client, &input.relation_right);
         let projection_handle = client.empty(input.rows() * std::mem::size_of::<u32>());
-        let relation_handle = client.empty(pair_count * std::mem::size_of::<u32>());
+        let relation_handle = client.empty(pair_count.max(1) * std::mem::size_of::<u32>());
         let world_distance_handle = client.empty(input.rows() * std::mem::size_of::<u32>());
         let world_contradiction_handle = client.empty(input.rows() * std::mem::size_of::<u32>());
         let world_incomparability_handle = client.empty(input.rows() * std::mem::size_of::<u32>());
@@ -641,18 +641,20 @@ impl NumericBackend for CubeClWgpuBackend {
                     ArrayArg::from_raw_parts(mask_handle.clone(), input.rows()),
                     ArrayArg::from_raw_parts(projection_handle.clone(), input.rows()),
                 );
-                relation_kernel::launch::<WgpuRuntime>(
-                    &client,
-                    CubeCount::Static(pairs.div_ceil(WORKGROUP_SIZE), 1, 1),
-                    CubeDim::new_1d(WORKGROUP_SIZE),
-                    ArrayArg::from_raw_parts(axis_handles[0].clone(), input.rows()),
-                    ArrayArg::from_raw_parts(axis_handles[1].clone(), input.rows()),
-                    ArrayArg::from_raw_parts(axis_handles[2].clone(), input.rows()),
-                    ArrayArg::from_raw_parts(mask_handle.clone(), input.rows()),
-                    ArrayArg::from_raw_parts(relation_left_handle.clone(), pair_count),
-                    ArrayArg::from_raw_parts(relation_right_handle.clone(), pair_count),
-                    ArrayArg::from_raw_parts(relation_handle.clone(), pair_count),
-                );
+                if pairs != 0 {
+                    relation_kernel::launch::<WgpuRuntime>(
+                        &client,
+                        CubeCount::Static(pairs.div_ceil(WORKGROUP_SIZE), 1, 1),
+                        CubeDim::new_1d(WORKGROUP_SIZE),
+                        ArrayArg::from_raw_parts(axis_handles[0].clone(), input.rows()),
+                        ArrayArg::from_raw_parts(axis_handles[1].clone(), input.rows()),
+                        ArrayArg::from_raw_parts(axis_handles[2].clone(), input.rows()),
+                        ArrayArg::from_raw_parts(mask_handle.clone(), input.rows()),
+                        ArrayArg::from_raw_parts(relation_left_handle.clone(), pair_count),
+                        ArrayArg::from_raw_parts(relation_right_handle.clone(), pair_count),
+                        ArrayArg::from_raw_parts(relation_handle.clone(), pair_count),
+                    );
+                }
                 world_distance_kernel::launch::<WgpuRuntime>(
                     &client,
                     CubeCount::Static(rows.div_ceil(WORKGROUP_SIZE), 1, 1),
@@ -920,6 +922,18 @@ impl NumericBackend for CubeClWgpuBackend {
     }
 }
 
+fn upload_u32(client: &ComputeClient<WgpuRuntime>, values: &[u32]) -> cubecl_core::server::Handle {
+    // Empty logical arrays still need a bindable allocation. Their checked
+    // logical length remains zero at every ArrayArg boundary.
+    let values = if values.is_empty() { &[0_u32] } else { values };
+    client.create_from_slice(u32::as_bytes(values))
+}
+
+fn upload_i32(client: &ComputeClient<WgpuRuntime>, values: &[i32]) -> cubecl_core::server::Handle {
+    let values = if values.is_empty() { &[0_i32] } else { values };
+    client.create_from_slice(i32::as_bytes(values))
+}
+
 fn launch_u32_summary(
     client: &ComputeClient<WgpuRuntime>,
     input: cubecl_core::server::Handle,
@@ -928,19 +942,21 @@ fn launch_u32_summary(
 ) {
     let chunk_count = input_len.div_ceil(SUMMARY_CHUNK_VALUES);
     let chunk_words = chunk_count * NUMERIC_SUMMARY_WORDS;
-    let chunks = client.empty(chunk_words * std::mem::size_of::<u32>());
+    let chunks = client.empty(chunk_words.max(1) * std::mem::size_of::<u32>());
     let chunk_count_u32 = u32::try_from(chunk_count).unwrap_or(u32::MAX);
     // SAFETY: the input, chunk, and final output handles use their exact checked
     // logical lengths. Each chunk owns one disjoint eight-word summary.
     unsafe {
-        summarize_u32_chunks_kernel::launch::<WgpuRuntime>(
-            client,
-            CubeCount::Static(chunk_count_u32.div_ceil(WORKGROUP_SIZE), 1, 1),
-            CubeDim::new_1d(WORKGROUP_SIZE),
-            ArrayArg::from_raw_parts(input, input_len),
-            SUMMARY_CHUNK_VALUES,
-            ArrayArg::from_raw_parts(chunks.clone(), chunk_words),
-        );
+        if chunk_count != 0 {
+            summarize_u32_chunks_kernel::launch::<WgpuRuntime>(
+                client,
+                CubeCount::Static(chunk_count_u32.div_ceil(WORKGROUP_SIZE), 1, 1),
+                CubeDim::new_1d(WORKGROUP_SIZE),
+                ArrayArg::from_raw_parts(input, input_len),
+                SUMMARY_CHUNK_VALUES,
+                ArrayArg::from_raw_parts(chunks.clone(), chunk_words),
+            );
+        }
         reduce_u32_chunks_kernel::launch::<WgpuRuntime>(
             client,
             CubeCount::Static(1, 1, 1),
@@ -960,7 +976,7 @@ fn launch_i32_summary(
 ) {
     let chunk_count = input_len.div_ceil(SUMMARY_CHUNK_VALUES);
     let chunk_words = chunk_count * NUMERIC_SUMMARY_WORDS;
-    let chunks = client.empty(chunk_words * std::mem::size_of::<u32>());
+    let chunks = client.empty(chunk_words.max(1) * std::mem::size_of::<u32>());
     let chunk_count_u32 = u32::try_from(chunk_count).unwrap_or(u32::MAX);
     // SAFETY: the input, chunk, and final output handles use their exact checked
     // logical lengths. Each chunk owns one disjoint eight-word summary.
@@ -1010,7 +1026,7 @@ fn launch_jacobi(
     client: &ComputeClient<WgpuRuntime>,
     input: &JacobiInput,
 ) -> Result<(cubecl_core::server::Handle, usize), AcceleratorError> {
-    if input.rounds > 1_024 {
+    if input.rounds > MAX_JACOBI_ROUNDS {
         return Err(AcceleratorError::BudgetExceeded("jacobi_rounds"));
     }
     let weights = input
@@ -1029,8 +1045,8 @@ fn launch_jacobi(
         .map(|mask| mask.code())
         .collect::<Vec<_>>();
     let offsets = client.create_from_slice(u32::as_bytes(&input.offsets));
-    let indices = client.create_from_slice(u32::as_bytes(&input.indices));
-    let weights = client.create_from_slice(i32::as_bytes(&weights));
+    let indices = upload_u32(client, &input.indices);
+    let weights = upload_i32(client, &weights);
     let masks = client.create_from_slice(u32::as_bytes(&masks));
     let mut old = client.create_from_slice(i32::as_bytes(&initial));
     let mut next = client.empty(initial.len() * std::mem::size_of::<i32>());
@@ -1104,10 +1120,10 @@ fn launch_qubo(
     let handles = (
         client.create_from_slice(i32::as_bytes(&input.linear)),
         client.create_from_slice(u32::as_bytes(&offsets)),
-        client.create_from_slice(u32::as_bytes(&terms)),
-        client.create_from_slice(u32::as_bytes(&left)),
-        client.create_from_slice(u32::as_bytes(&right)),
-        client.create_from_slice(i32::as_bytes(&coefficients)),
+        upload_u32(client, &terms),
+        upload_u32(client, &left),
+        upload_u32(client, &right),
+        upload_i32(client, &coefficients),
         client.create_from_slice(u32::as_bytes(&selected)),
         client.empty(nodes * std::mem::size_of::<i32>()),
     );

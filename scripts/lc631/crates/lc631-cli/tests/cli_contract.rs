@@ -9,10 +9,46 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 fn binary() -> &'static str {
     env!("CARGO_BIN_EXE_lc631")
+}
+
+fn connection_binary(root: &Path) -> PathBuf {
+    let parent = root.join(".cache/epr-cli-contract-binaries");
+    fs::create_dir_all(&parent).unwrap();
+    let native = Path::new(binary()).canonicalize().unwrap();
+    if native.starts_with(root) {
+        return native;
+    }
+
+    // A connection plan intentionally requires a root-relative executable. An
+    // out-of-tree Cargo target must not weaken that production guard.
+    static STAGED: OnceLock<PathBuf> = OnceLock::new();
+    STAGED
+        .get_or_init(|| {
+            let nonce = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos();
+            let directory = parent.join(format!("{}-{nonce}", std::process::id()));
+            fs::create_dir(&directory).unwrap();
+            let staged = directory.join(format!("lc631{}", std::env::consts::EXE_SUFFIX));
+            let mut input = fs::File::open(&native).unwrap();
+            let permissions = input.metadata().unwrap().permissions();
+            let mut output = fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&staged)
+                .unwrap();
+            std::io::copy(&mut input, &mut output).unwrap();
+            output.sync_all().unwrap();
+            fs::set_permissions(&staged, permissions).unwrap();
+            staged.canonicalize().unwrap()
+        })
+        .clone()
 }
 
 fn dgcl_connection_plan() -> (PathBuf, lc631_analysis::CodingConnectionPlan) {
@@ -22,9 +58,8 @@ fn dgcl_connection_plan() -> (PathBuf, lc631_analysis::CodingConnectionPlan) {
         .unwrap()
         .canonicalize()
         .unwrap();
-    let relative_binary = Path::new(binary())
-        .canonicalize()
-        .unwrap()
+    let staged_binary = connection_binary(&root);
+    let relative_binary = staged_binary
         .strip_prefix(&root)
         .unwrap()
         .to_string_lossy()
@@ -38,6 +73,7 @@ fn dgcl_connection_plan() -> (PathBuf, lc631_analysis::CodingConnectionPlan) {
         }
         value
     };
+    assert_eq!(digest(&staged_binary), digest(Path::new(binary())));
     let implementation_path = "scripts/lc631/crates/lc631-tldg/src/dg1.rs";
     let router_path = "scripts/lc631/crates/lc631-cli/src/lib.rs";
     let source = "Please parse the DG1 source.";
@@ -100,10 +136,10 @@ fn dgcl_22_production_connection_mutations_fail_and_positive_route_observes() {
         .unwrap()
         .as_nanos();
     let plan_path = root
-        .join("scripts/lc631/target")
+        .join(".cache/epr-cli-contract-binaries")
         .join(format!("dgcl-registered-plan-{unique}.json"));
     fs::write(&plan_path, serde_json::to_vec(&plan).unwrap()).unwrap();
-    let output = Command::new(binary())
+    let output = Command::new(root.join(&plan.executable_path))
         .args([
             "lc631-dgcl-verify",
             "--execute",
@@ -164,7 +200,7 @@ fn dgcl_22_production_connection_mutations_fail_and_positive_route_observes() {
     let first_run_id = trace["run_id"].as_str().unwrap().to_string();
     let first_trace_digest = trace["trace_digest"].as_str().unwrap().to_string();
     fs::write(&plan_path, serde_json::to_vec(&plan).unwrap()).unwrap();
-    let repeated = Command::new(binary())
+    let repeated = Command::new(root.join(&plan.executable_path))
         .args([
             "lc631-dgcl-verify",
             "--execute",
@@ -284,13 +320,13 @@ fn dgcl_finalizer_rejects_missing_receipt_root_before_delivery_or_checkpoint() {
         .unwrap()
         .as_nanos();
     let test_root = root
-        .join("scripts/lc631/target")
+        .join(".cache/epr-cli-contract-binaries")
         .join(format!("dgcl-preflight-{}-{unique}", std::process::id()));
     fs::create_dir(&test_root).unwrap();
     let plan_path = test_root.join("plan.json");
     let ledger_root = test_root.join("ledger");
     fs::write(&plan_path, serde_json::to_vec(&plan).unwrap()).unwrap();
-    let output = Command::new(binary())
+    let output = Command::new(root.join(&plan.executable_path))
         .args([
             "lc631-dgcl-finalize",
             "--execute",
@@ -313,7 +349,7 @@ fn dgcl_finalizer_rejects_missing_receipt_root_before_delivery_or_checkpoint() {
 
     let missing_receipt_root = test_root.join("unprovisioned-receipt-root");
     let missing_root_ledger = test_root.join("missing-root-ledger");
-    let no_trust_root = Command::new(binary())
+    let no_trust_root = Command::new(root.join(&plan.executable_path))
         .args([
             "lc631-dgcl-finalize",
             "--execute",
@@ -334,7 +370,7 @@ fn dgcl_finalizer_rejects_missing_receipt_root_before_delivery_or_checkpoint() {
     assert!(!missing_receipt_root.exists());
     assert!(!missing_root_ledger.exists());
 
-    let no_execute = Command::new(binary())
+    let no_execute = Command::new(root.join(&plan.executable_path))
         .args([
             "lc631-dgcl-verify",
             "--repo",
@@ -356,7 +392,7 @@ fn dgcl_connection_observation_cannot_mint_compiler_runtime_or_acceptance_eviden
         .unwrap()
         .as_nanos();
     let test_root = root
-        .join("scripts/lc631/target")
+        .join(".cache/epr-cli-contract-binaries")
         .join(format!("dgcl-evidence-producer-{unique}"));
     fs::create_dir(&test_root).unwrap();
     let plan_path = test_root.join("plan.json");
@@ -364,7 +400,7 @@ fn dgcl_connection_observation_cannot_mint_compiler_runtime_or_acceptance_eviden
     let receipt_root = test_root.join("receipt-root");
     HostReceiptContext::load_or_create(&receipt_root).unwrap();
     fs::write(&plan_path, serde_json::to_vec(&plan).unwrap()).unwrap();
-    let output = Command::new(binary())
+    let output = Command::new(root.join(&plan.executable_path))
         .args([
             "lc631-dgcl-finalize",
             "--execute",

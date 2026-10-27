@@ -1,0 +1,196 @@
+{
+  "schema_version": "epistesys-epr-audit-snapshot.v1",
+  "date_jst": "2026-10-27",
+  "base_commit": "75500ed7a33a009f5e1ce813862dc0a7986372c9",
+  "source_state": "dirty worktree delta-rechecked after A8/A10 fixes; not a release or host activation receipt",
+  "coverage": "selected authority/currentness, anchored filesystem/replay, cleanup and Media adapter paths; not entire repository; self-authored numeric/graph/connection implementation excluded from independent audit",
+  "files": [
+    {
+      "path": "scripts/lc631/crates/lc631-core/src/lib.rs",
+      "bytes": 33360,
+      "sha256": "60ea7c9f9a0f94136165cfe2dad162abf102a1ca2ffbbdc94bf08c209a9f6bd7",
+      "initial_sha256": "60ea7c9f9a0f94136165cfe2dad162abf102a1ca2ffbbdc94bf08c209a9f6bd7",
+      "authored_during_audit": false
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-receipt-kernel/src/lib.rs",
+      "bytes": 16853,
+      "sha256": "2738473d892ba1ef6cd6c8fc0f60b974cc2274f3eefacd48de6005fe0b61ecc6",
+      "initial_sha256": "3379e2fc22a622b37c2f4b7d6c2c52ce2ac6bbf65eb96e47013ffca1686bde9e",
+      "authored_during_audit": false
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-process-supervisor/src/filesystem.rs",
+      "bytes": 8463,
+      "sha256": "c3c981db61cc222d8d06e87692b496ab270078450424252faf02463b387622e9",
+      "initial_sha256": "84493c87a89eb6db8a15da2a7223a168e9eed8d8aabb2756cc7c2a4aa52e1cac",
+      "authored_during_audit": false
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-process-supervisor/src/filesystem/windows.rs",
+      "bytes": 9162,
+      "sha256": "8a0257b6f1ca67d4a246b09f44269fd27ec8d6eeb9d44caaf377c6d1fbcfbd5b",
+      "initial_sha256": "8a0257b6f1ca67d4a246b09f44269fd27ec8d6eeb9d44caaf377c6d1fbcfbd5b",
+      "authored_during_audit": false
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-process-supervisor/src/filesystem/unix.rs",
+      "bytes": 9892,
+      "sha256": "39e07390da80691f0142dbad8f9332d483a95d18c9a494b92f86edf98a3bf3ed",
+      "initial_sha256": "085ca6d374abc61dba9d7c9f7f0c9c042a42fd0f3ae076a14d3e92bd217a8163",
+      "authored_during_audit": false
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-process-supervisor/src/bounded.rs",
+      "bytes": 16346,
+      "sha256": "1526ff154429c162dd40dd7d3d6779f92731b07011841414d54ec321aceb568e",
+      "initial_sha256": "1389301bcfa9423b3ca89e4fc31a3f4ba556d4565b94fbd0ad45e338330bf69a",
+      "authored_during_audit": false
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-process-supervisor/src/unix.rs",
+      "bytes": 6017,
+      "sha256": "a5f2805322accb3e3d09ea1a0b4d58aa63044cc0899ae88601884fad0324ee18",
+      "initial_sha256": "8271b6ba1f6db124810c09fcc010f7d04884c041fafdd5bfb68e9b53d0a2f5af",
+      "authored_during_audit": false
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/src/file_repair.rs",
+      "bytes": 13687,
+      "sha256": "ccea592b8619f37a869ba90db37137dd36aa4cfe528f7d499a4db12a081bcfa2",
+      "initial_sha256": "ccea592b8619f37a869ba90db37137dd36aa4cfe528f7d499a4db12a081bcfa2",
+      "authored_during_audit": false
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-host/src/lib.rs",
+      "bytes": 67838,
+      "sha256": "54a75a32b022e56b706b9a10cf1ae6b413302981f9b03fb35cad58929a09ae85",
+      "initial_sha256": "935a8bf539c2c73fb6548c30f31d01c9bfd61ba9ea91a4b10ad58f40ef50b85c",
+      "authored_during_audit": false
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-media/src/lib.rs",
+      "bytes": 62017,
+      "sha256": "56d7e1a6e8eaa5e8141c3ff1c7cd77af8610844241f796b03f22c51e084b95a3",
+      "initial_sha256": "337bdf8eb6126a155113c0c95309835834ecd0c1490d0dc040320b88a4b575d8",
+      "authored_during_audit": false
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-cli/src/effect_error.rs",
+      "bytes": 5567,
+      "sha256": "8383e1738208aeda351fc6508f1eab776cc108694da9f710156826d8db92d2e6",
+      "initial_sha256": "449d90de9471d6e4f54b37a010e606bca9e6ae7f23c4598b165f7d1b28ac7b3a",
+      "authored_during_audit": false
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-cli/src/dgcl_repair.rs",
+      "bytes": 14430,
+      "sha256": "5c7e672dd11df9d54076e232239726754461ba1953c144e47c2ae44789d9e78c",
+      "initial_sha256": "6376d8cb096d9f62d6190e872f6cfacbfd3a0b0cabc648e9918db598f76006fd",
+      "authored_during_audit": false
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/src/closure_resume.rs",
+      "bytes": 50996,
+      "sha256": "5c4e8c5261e3b0ea4b521330c97da31bb1595c7468c71d933ebbdf0fca4fb485",
+      "initial_sha256": null,
+      "authored_during_audit": false
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-process-supervisor/src/media_snapshot.rs",
+      "bytes": 8195,
+      "sha256": "398168b08adf13c566c47ba87ae2a76cab8284621dee3b17c52b80b3f5166799",
+      "initial_sha256": null,
+      "authored_during_audit": true
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-process-supervisor/src/media_snapshot/windows.rs",
+      "bytes": 6409,
+      "sha256": "7c656d338725221b9fa6c333ca64bf8fb1abdc406395d0977e116f9dd38b16a7",
+      "initial_sha256": null,
+      "authored_during_audit": true
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-process-supervisor/src/media_snapshot/unix.rs",
+      "bytes": 2083,
+      "sha256": "54c02b5ad69ad43d505dd6004818dac8e5502deb272a658bede40e3d51c42827",
+      "initial_sha256": null,
+      "authored_during_audit": true
+    }
+  ],
+  "assurance": [
+    {
+      "path": "scripts/lc631/crates/lc631-cli/src/effect_error.rs",
+      "bytes": 4925,
+      "sha256": "d99dc040f4794982eb9dbb00e45fc162c39d0f88e414f6579b3e1018d40c3f42",
+      "result": {
+        "command": "compile",
+        "fields": {
+          "diagnostics": 8,
+          "evidence": "missing_or_unknown",
+          "graph_digest": "76334e627bda7e7ad24e86ef0afce4815d179235deee542032a65bab97c3a243",
+          "input_digest": "c3e301105bfd856db5e8975f905af808baccaf8567448f36bc598d9b6f1db69e",
+          "nodes": 11,
+          "status": "blocked_with_diagnostics"
+        },
+        "replay_reference": "ASSURANCE-REPLAY-REF-V2\ninput=c3e301105bfd856db5e8975f905af808baccaf8567448f36bc598d9b6f1db69e\ngraph=76334e627bda7e7ad24e86ef0afce4815d179235deee542032a65bab97c3a243\nstate=4c2d9474359db0d7472fc7f52c778b5482639d8d187309d61e4cd9d57e9d9a6c\nplan=4a30cd646ab6622e04cd77d1d7c48ff3bc6f1922bccb48032be7c12dc5261ae6\nomission=ed2aad290311ec11b6ba2de6e7f9804b57cfabc7d4c12f5ae037764f086983ac\npolicy=df28b0a0ed912e9b341053f9c0be5c6f453e771ae233e613de4da2e0e492b5c6\nrendered=b2cc664293facdc04534522dbce5512ea3140cf3822fccb298b50e68fbd80ba9\nsurface=4d42254fc4a05d928fe7f1e46f12b2b4c86edb673e968a3b469e6d7b1e1bc31f\n",
+        "semantic_digest": "c79b6acfdabaaf41c406b720279e43dc8c3826da0f326ce020a314c8ea2f93d6"
+      },
+      "current_source_sha256": "8383e1738208aeda351fc6508f1eab776cc108694da9f710156826d8db92d2e6",
+      "input_currentness": "stale_input_preserved_not_current_evidence"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-process-supervisor/src/filesystem.rs",
+      "bytes": 7626,
+      "sha256": "199bfa153eed3e3410a5e6201553b05ac6fdaf27877f2edd387d3d8a38c9530d",
+      "result": {
+        "command": "compile",
+        "fields": {
+          "diagnostics": 13,
+          "evidence": "missing_or_unknown",
+          "graph_digest": "80739660183a4a868bc42c19749df6454425063061debd35ccd688ee972c63ba",
+          "input_digest": "0baa4918c5f58f36458be1af2b8014073fef9354cafe708d3fba98432584b0a4",
+          "nodes": 28,
+          "status": "blocked_with_diagnostics"
+        },
+        "replay_reference": "ASSURANCE-REPLAY-REF-V2\ninput=0baa4918c5f58f36458be1af2b8014073fef9354cafe708d3fba98432584b0a4\ngraph=80739660183a4a868bc42c19749df6454425063061debd35ccd688ee972c63ba\nstate=9a410e60f153a2235f43df9f2daf2afce091cbf19d16b070190c2ba64e76c41f\nplan=703c80a3e4c1e0f16cb4ff3395918a9b0276af19707e8eb041853c38d7e55d55\nomission=ac5a29b4323bf13cfb6bde4a2d5e21c050661269de77f0ffdfb4e47a7366fe04\npolicy=df28b0a0ed912e9b341053f9c0be5c6f453e771ae233e613de4da2e0e492b5c6\nrendered=fbfbf9eb1d10ae8c77b387a2be5c4f01f86a3f3f5112ff2dc8f6b29bfe43a27f\nsurface=e0ac0f56eead64c46b68d2d1c5fa51e400792417a7efd95255023199d32ff73a\n",
+        "semantic_digest": "a79c88cd8e75600d909f7d76f14200f29dd7f744accae4b6716151a2361c1ecb"
+      },
+      "current_source_sha256": "c3c981db61cc222d8d06e87692b496ab270078450424252faf02463b387622e9",
+      "input_currentness": "stale_input_preserved_not_current_evidence"
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-process-supervisor/src/unix.rs",
+      "bytes": 6017,
+      "sha256": "a5f2805322accb3e3d09ea1a0b4d58aa63044cc0899ae88601884fad0324ee18",
+      "result": {
+        "command": "compile",
+        "fields": {
+          "diagnostics": 6,
+          "evidence": "missing_or_unknown",
+          "graph_digest": "5d3179b50e011f6ab371eb5c3e9d8340b37b43a29c56c3eff7b77b7d2d5e7fb5",
+          "input_digest": "75976f00c5416e1c8d678eb68b4355c87ec5e150c1f04bbb07fa5c70586e7bf2",
+          "nodes": 23,
+          "status": "blocked_with_diagnostics"
+        },
+        "replay_reference": "ASSURANCE-REPLAY-REF-V2\ninput=75976f00c5416e1c8d678eb68b4355c87ec5e150c1f04bbb07fa5c70586e7bf2\ngraph=5d3179b50e011f6ab371eb5c3e9d8340b37b43a29c56c3eff7b77b7d2d5e7fb5\nstate=c52c20f65e26c6e04903cf0d1b661fe1d2a3b00d8044606f21de0b4d8e57596f\nplan=66684cb7ce3417a7c672d48b4288583bb3003df2bf4bbb8ca68cdda24f19f54c\nomission=d66c6bc2e9a7d9ed26af5e85fb65175d9024a7e4a21460005bf344762c9d1ebb\npolicy=df28b0a0ed912e9b341053f9c0be5c6f453e771ae233e613de4da2e0e492b5c6\nrendered=8c80244e73283a1bde857fdb7fb5fa951a4abda22da8407469653f765213e8e6\nsurface=be8178b95edc92c6bb0412f2d9b81009d9b4ad31cea8e036e30be530874750ad\n",
+        "semantic_digest": "0a8bd2d3eb48159caa79c025ec7497dbfd548b733aff462c9e2ed00227414fc1"
+      },
+      "current_source_sha256": "a5f2805322accb3e3d09ea1a0b4d58aa63044cc0899ae88601884fad0324ee18",
+      "input_currentness": "same_exact_source"
+    }
+  ],
+  "claim_boundary": "Source hashes identify exact examined bytes; static findings, local runtime tests and unsupported OS/host behavior remain separate. Changed selected units require delta reinspection.",
+  "audit_delta_recheck": {
+    "host_seed_binding_passed": 6,
+    "host_cross_seed_stage_rejection_passed": 1,
+    "receipt_half_open_passed": 1,
+    "pure_reserved_name_passed": 1,
+    "supervisor_cleanup_passed": 4,
+    "filesystem_windows_passed": 7,
+    "snapshot_windows_passed": 3,
+    "linux_acl": "unobserved_by_this_windows_reviewer",
+    "unix_snapshot_replacement": "unobserved_by_this_windows_reviewer",
+    "b01_self_authored_fix_independent": "excluded"
+  }
+}

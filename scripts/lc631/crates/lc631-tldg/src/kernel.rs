@@ -1,6 +1,7 @@
 use crate::{DeepGrammarArtifact, RelationState, SyntaxNodeId};
 use lc631_core::{stable_sha256, SourceSpan};
 use serde::Serialize;
+use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -47,11 +48,35 @@ pub struct MaterializedRelationEvidence {
 pub enum StructuralKernelError {
     NoAnchoredNodes,
     CanonicalEncodingUnavailable,
+    InvalidConstraintBinding,
 }
 
 pub fn build_structural_kernel(
     artifact: &DeepGrammarArtifact,
 ) -> Result<StructuralKernel, StructuralKernelError> {
+    if artifact.source != crate::SourceRevision::from_source(&artifact.boundary_roundtrip)
+        || artifact
+            .constraints
+            .validate_source_bindings(
+                &artifact.boundary_roundtrip,
+                &artifact.tokens,
+                &artifact.syntax,
+            )
+            .is_err()
+    {
+        return Err(StructuralKernelError::InvalidConstraintBinding);
+    }
+    let mut degrees = BTreeMap::<SyntaxNodeId, u32>::new();
+    let mut verified = BTreeSet::new();
+    for edge in &artifact.syntax.relations {
+        *degrees.entry(edge.from).or_default() += 1;
+        if edge.to != edge.from {
+            *degrees.entry(edge.to).or_default() += 1;
+        }
+        if edge.state == RelationState::Verified {
+            verified.extend([edge.from, edge.to]);
+        }
+    }
     let anchors = artifact
         .syntax
         .nodes
@@ -59,16 +84,8 @@ pub fn build_structural_kernel(
         .filter(|node| !node.spans.is_empty())
         .enumerate()
         .map(|(order, node)| {
-            let relation_degree = artifact
-                .syntax
-                .relations
-                .iter()
-                .filter(|edge| edge.from == node.id || edge.to == node.id)
-                .count() as u32;
-            let state = if artifact.syntax.relations.iter().any(|edge| {
-                (edge.from == node.id || edge.to == node.id)
-                    && edge.state == RelationState::Verified
-            }) {
+            let relation_degree = degrees.get(&node.id).copied().unwrap_or_default();
+            let state = if verified.contains(&node.id) {
                 AnchorState::Verified
             } else {
                 AnchorState::Unknown

@@ -2,7 +2,7 @@
 
 ## 日本語
 
-この索引は、現行の仕様、実行条件、検証証跡、評価設計、歴史的な設計記録を区別します。対象は`6.3.2-alpha.2`です。日本語説明の後に、同内容の英語説明を置きます。
+この索引は、現行の仕様、実行条件、検証証跡、評価設計、歴史的な設計記録を区別します。対象は`6.3.2-alpha.3`です。日本語説明の後に、同内容の英語説明を置きます。
 
 ### 読者別の参照経路
 
@@ -13,14 +13,14 @@
 | sourceを実行・検査する | [実行ガイド](execution-guide.md) → [DGCL実行契約](dgcl-operating-profile-and-closure.md) | 診断、権限・tool条件、修復、再開、適用範囲 |
 | interfaceを統合する | [wire互換性](dgcl-wire-compatibility.md) → [schema契約](../schemas/closure-and-receipt-contract.md) | field・stage・consumer view、失効と互換性 |
 | 効果を評価する | [研究仮説](research-hypotheses.md) → [前向き評価案](research/epistesys-prospective-evaluation-plan.md) | 仮説、予算統制、holdout、Judge、欠測 |
-| 現行状態を監査する | [最終検証](../validation/epia2-alpha2-release-verification-2026-10-02.md) → [既知の制約](known-limitations.md) | 局所gateの結果、研究・配布・hostの未観測範囲 |
+| 現行状態を監査する | [alpha.3検証](../validation/epr-release-verification-2026-10-27.md) → [既知の制約](known-limitations.md) | 局所gateの結果、研究・配布・hostの未観測範囲 |
 
 ### 文書の役割
 
 | 種別 | 現行の参照点 | 読み方 |
 | --- | --- | --- |
 | 仕様・実行契約 | [アーキテクチャ](system-architecture.md)、[DGCL実行契約](dgcl-operating-profile-and-closure.md)、[wire互換性](dgcl-wire-compatibility.md) | sourceの型・状態・適用条件を説明する |
-| release記録 | [alpha.2 release notes](epistesys-6.3.2-alpha.2-release-notes-2026-10-02.md)、[最終検証](../validation/epia2-alpha2-release-verification-2026-10-02.md) | 特定revision・環境で観測した結果を示す |
+| release記録 | [alpha.3 release notes](epistesys-6.3.2-alpha.3-release-notes-2026-10-27.md)、[alpha.3検証](../validation/epr-release-verification-2026-10-27.md) | 特定revision・環境で観測した結果を示す |
 | 評価設計 | [研究仮説](research-hypotheses.md)、[独立gold収集手順](dgcl-gold-collection-protocol.md)、[前向き評価案](research/epistesys-prospective-evaluation-plan.md) | 未実行の計画と検証済み結果を区別する |
 | 由来・除外 | [移行契約](migration-contract.md)、[採用manifest](adoption-manifest.md)、[clone検証](clone-verification.md) | sourceの継承範囲、互換名、非開示情報の除外を示す |
 | 補助監査 | [Assurance境界](assurance-compiler-status.md)、[RepoSeiri記録](reposeiri-audit.md) | 監査範囲・未対応・保留を保持する。一般安全性の証明ではない |
@@ -31,7 +31,7 @@ Coding支援の説明と実装範囲を照合した今回の所見・修正・�
 
 ### GB-CC75：前身の探索的な経験的観測
 
-主要65 QIDの平均適合度は74.38%→94.10%（+19.71ポイント）、167対応ペアの全基準達成率は39.52%→48.50%でした。前身の独自Judge下の結果であり、alpha.2の改善、完全遵守、ハルシネーション抑制、長期保持へ移転しません。
+主要65 QIDの平均適合度は74.38%→94.10%（+19.71ポイント）、167対応ペアの全基準達成率は39.52%→48.50%でした。前身の独自Judge下の結果であり、alpha.2／alpha.3の改善、完全遵守、ハルシネーション抑制、長期保持へ移転しません。
 
 | 文書 | 主な内容 |
 | --- | --- |
@@ -52,6 +52,7 @@ Coding支援の説明と実装範囲を照合した今回の所見・修正・�
 - [Clone baseline](clone-baseline.md)、[初回実装状態](implementation-status.md)、[初回release](initial-clone-release-record.md)
 - [初回commit候補](initial-commit-candidate.md)、[初回preflight](initial-commit-preflight.md)
 - [DGCL実装状態：2026-09-28](dgcl-implementation-status-2026-09-28.md)、[alpha.2詳細roadmap](epistesys-6.3.2-alpha.2-dgcl-closure-roadmap-2026-10-01.md)
+- [alpha.2 release notes](epistesys-6.3.2-alpha.2-release-notes-2026-10-02.md)、[alpha.2最終検証](../validation/epia2-alpha2-release-verification-2026-10-02.md)
 - [昇格前functional gate](../validation/epia2-prepromotion-functional-pass-2026-10-02.md)、[修復監査](../validation/epia2-repair-blocker-audit-2026-10-02.md)
 - [Codex明示選択時のルーティング](codex-default-routing.md)：現在のfacade利用契約。host強制とは区別する
 
@@ -77,7 +78,7 @@ Coding支援の説明と実装範囲を照合した今回の所見・修正・�
 
 ## English
 
-This index separates current specifications, operating conditions, verification records, evaluation designs, and historical design notes for `6.3.2-alpha.2`. Equivalent English prose follows Japanese prose.
+This index separates current specifications, operating conditions, verification records, evaluation designs, and historical design notes for `6.3.2-alpha.3`. Equivalent English prose follows Japanese prose.
 
 ### Reader-oriented routes
 
@@ -88,14 +89,14 @@ This index separates current specifications, operating conditions, verification 
 | Execute/inspect source | [Execution guide](execution-guide.md) → [DGCL contract](dgcl-operating-profile-and-closure.md) | Diagnostics, authority/tool conditions, repair, resume, scope |
 | Integrate interfaces | [Wire compatibility](dgcl-wire-compatibility.md) → [schema contract](../schemas/closure-and-receipt-contract.md) | Fields/stages/consumer views, invalidation, compatibility |
 | Evaluate effects | [Research hypotheses](research-hypotheses.md) → [Prospective plan](research/epistesys-prospective-evaluation-plan.md) | Hypotheses, budgets, holdouts, Judges, missingness |
-| Audit current status | [Final verification](../validation/epia2-alpha2-release-verification-2026-10-02.md) → [Known limitations](known-limitations.md) | Local gates and unobserved research/distribution/host scope |
+| Audit current status | [Alpha.3 verification](../validation/epr-release-verification-2026-10-27.md) → [Known limitations](known-limitations.md) | Local gates and unobserved research/distribution/host scope |
 
 ### Document roles
 
 | Category | Current reference | Interpretation |
 | --- | --- | --- |
 | Specification/operating contract | [Architecture](system-architecture.md), [DGCL contract](dgcl-operating-profile-and-closure.md), [wire compatibility](dgcl-wire-compatibility.md) | Source types/states/preconditions |
-| Release record | [Alpha.2 notes](epistesys-6.3.2-alpha.2-release-notes-2026-10-02.md), [final verification](../validation/epia2-alpha2-release-verification-2026-10-02.md) | Observations for a particular revision/environment |
+| Release record | [Alpha.3 notes](epistesys-6.3.2-alpha.3-release-notes-2026-10-27.md), [alpha.3 verification](../validation/epr-release-verification-2026-10-27.md) | Observations for a particular revision/environment |
 | Evaluation design | [Hypotheses](research-hypotheses.md), [independent-gold protocol](dgcl-gold-collection-protocol.md), [prospective plan](research/epistesys-prospective-evaluation-plan.md) | Unexecuted plans versus verified results |
 | Provenance/exclusions | [Migration contract](migration-contract.md), [adoption manifest](adoption-manifest.md), [clone verification](clone-verification.md) | Inheritance, compatibility names, excluded non-disclosable material |
 | Advisory audit | [Assurance boundary](assurance-compiler-status.md), [RepoSeiri record](reposeiri-audit.md) | Scope, unsupported cases, and holds; not general-safety proof |
@@ -106,7 +107,7 @@ The [documentation adversarial-review record](../validation/coding-documentation
 
 ### GB-CC75: exploratory predecessor observations
 
-Primary mean adherence over 65 QIDs changed from 74.38% to 94.10% (+19.71 points); all-criteria pass over 167 pairs changed from 39.52% to 48.50%. Results use the predecessor's custom Judge and do not transfer to alpha.2 improvement, complete compliance, hallucination containment, or long retention.
+Primary mean adherence over 65 QIDs changed from 74.38% to 94.10% (+19.71 points); all-criteria pass over 167 pairs changed from 39.52% to 48.50%. Results use the predecessor's custom Judge and do not transfer to alpha.2/alpha.3 improvement, complete compliance, hallucination containment, or long retention.
 
 | Document | Content |
 | --- | --- |
@@ -127,6 +128,7 @@ The following are not prerequisites for the current specification. Consult them 
 - [Clone baseline](clone-baseline.md), [initial implementation](implementation-status.md), [initial release](initial-clone-release-record.md)
 - [Initial commit candidate](initial-commit-candidate.md), [initial preflight](initial-commit-preflight.md)
 - [DGCL status: 2026-09-28](dgcl-implementation-status-2026-09-28.md), [detailed alpha.2 roadmap](epistesys-6.3.2-alpha.2-dgcl-closure-roadmap-2026-10-01.md)
+- [Alpha.2 release notes](epistesys-6.3.2-alpha.2-release-notes-2026-10-02.md), [alpha.2 final verification](../validation/epia2-alpha2-release-verification-2026-10-02.md)
 - [Prepromotion functional gates](../validation/epia2-prepromotion-functional-pass-2026-10-02.md), [repair audit](../validation/epia2-repair-blocker-audit-2026-10-02.md)
 - [Codex routing after explicit selection](codex-default-routing.md): current facade-use contract, distinct from host-wide enforcement
 

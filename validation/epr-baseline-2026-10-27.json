@@ -1,0 +1,19 @@
+{
+  "schema_version": "epistesys-epr-baseline.v1",
+  "date_jst": "2026-10-27",
+  "source_commit": "75500ed7a33a009f5e1ce813862dc0a7986372c9",
+  "source_version": "6.3.2-alpha.2",
+  "candidate_version": "6.3.2-alpha.3",
+  "initial_worktree": "clean",
+  "baseline_format": "passed",
+  "baseline_check": "passed",
+  "baseline_tests": "functional_binaries_passed_doctest_artifact_conflict_requires_serialized_rerun",
+  "baseline_scope": "Original sources were pinned before edits; final current-snapshot gates must be rerun after integration.",
+  "assurance_doctor": "facade_ok_not_source_assurance",
+  "time_target_hours": 3,
+  "time_upper_bound_hours": 6,
+  "version_promotion": "pending_all_required_gates",
+  "priority_remediation_closed": false,
+  "host_activation": "not_authorized_by_this_request",
+  "research_evaluation": "pending_independent_evaluation"
+}

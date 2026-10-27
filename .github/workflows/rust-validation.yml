@@ -1,0 +1,66 @@
+name: Rust implementation and boundary regression
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/lc631/**'
+      - 'scripts/media_backend.py'
+      - 'scripts/*source-package*'
+      - 'fixtures/**'
+      - 'schemas/**'
+      - '.github/workflows/rust-validation.yml'
+  push:
+    branches: [main, 'codex/epr-*']
+    paths:
+      - 'scripts/lc631/**'
+      - 'scripts/media_backend.py'
+      - 'scripts/*source-package*'
+      - 'fixtures/**'
+      - 'schemas/**'
+      - '.github/workflows/rust-validation.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-validation-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  portable:
+    name: Portable source (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: scripts/lc631
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Pin toolchain
+        run: rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy
+      - name: Format
+        run: cargo +1.98.0 fmt --all --check
+      - name: Rust failure-propagation control
+        run: cargo +1.98.0 test -p lc631-cli --no-default-features --test epr_ci_control --locked
+      - name: Check
+        run: cargo +1.98.0 check --workspace --locked
+      - name: Portable tests
+        run: cargo +1.98.0 test --workspace --no-default-features --locked
+      - name: Default feature tests
+        run: cargo +1.98.0 test --workspace --locked
+      - name: Strict clippy
+        run: cargo +1.98.0 clippy --workspace --all-targets --locked -- -D warnings
+      - name: Release build
+        run: cargo +1.98.0 build --workspace --release --locked
+      - name: Python worker locks
+        run: python -B workers/test_dgcl_nlp_worker.py
+      - name: Media wire regression
+        run: python -B workers/test_media_backend.py
+      - name: Pinned byte regression
+        run: python -B workers/test_pinned_bytes.py

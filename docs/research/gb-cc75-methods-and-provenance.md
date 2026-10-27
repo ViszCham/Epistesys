@@ -10,7 +10,7 @@ Complex Constraints Benchmark Set（Surge AI、`surgeai/ComplexConstraints`）�
 
 ### 実行設定の証拠段階
 
-歴史的run IDは`20260816T174216284-grok-bench-embedded`、最終集計日は2026-08-18である。経路名は記録上のDirect GrokとGrok＋Labyrinthであり、現在のalpha.2を指さない。
+歴史的run IDは`20260816T174216284-grok-bench-embedded`、最終集計日は2026-08-18である。経路名は記録上のDirect GrokとGrok＋Labyrinthであり、Epistesys alpha.2／alpha.3を指さない。
 
 | 項目 | 記録されている状態 | 限界 |
 | --- | --- | --- |
@@ -54,7 +54,7 @@ Official harness revision is `9ef1dd73d20030be94bdc399fd1c6ef7970f68d1`. Relativ
 
 ### Evidence levels for execution settings
 
-Historical run ID is `20260816T174216284-grok-bench-embedded`; final aggregation date is 2026-08-18. Direct Grok and Grok plus Labyrinth are recorded historical route labels, not the current alpha.2.
+Historical run ID is `20260816T174216284-grok-bench-embedded`; final aggregation date is 2026-08-18. Direct Grok and Grok plus Labyrinth are recorded historical route labels, not Epistesys alpha.2/alpha.3.
 
 | Item | Recorded state | Limitation |
 | --- | --- | --- |

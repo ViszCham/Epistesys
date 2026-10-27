@@ -15,8 +15,9 @@ use lc631_core::{
 };
 use lc631_receipt_kernel::{
     generate_key, ReceiptClass, ReceiptError, ReceiptIssuer, ReceiptPolicy, ReceiptScope,
-    ReceiptVerifier, ReplayGuard, SubjectRevision, UntrustedReceipt,
+    ReceiptVerifier, ReplayGuard, SubjectRevision, UntrustedReceipt, VerifiedReceipt,
 };
+use pulldown_cmark::{Event, Options, Parser, Tag};
 use serde::{Deserialize, Serialize};
 use std::fs::{self, OpenOptions};
 use std::io::Write;
@@ -50,6 +51,8 @@ pub struct HostSeedEnvelope {
     verified_host_key_fingerprint: Option<String>,
     #[serde(skip)]
     verified_receipt_expiry: Option<u64>,
+    #[serde(skip)]
+    verified_receipt: Option<VerifiedReceipt>,
 }
 
 impl HostSeedEnvelope {
@@ -108,6 +111,7 @@ impl HostSeedEnvelope {
             verified_receipt_digest: Some(receipt_digest),
             verified_host_key_fingerprint: Some(host_key_fingerprint),
             verified_receipt_expiry: verified.expires_at_epoch(),
+            verified_receipt: Some(verified),
         })
     }
 
@@ -165,6 +169,7 @@ impl HostSeedEnvelope {
             verified_receipt_digest: Some(receipt_digest),
             verified_host_key_fingerprint: Some(verifier.key_fingerprint().to_string()),
             verified_receipt_expiry: verified.expires_at_epoch(),
+            verified_receipt: Some(verified),
         })
     }
 
@@ -186,15 +191,95 @@ impl HostSeedEnvelope {
             verified_receipt_digest: None,
             verified_host_key_fingerprint: None,
             verified_receipt_expiry: None,
+            verified_receipt: None,
         }
     }
 
     pub fn may_source_grants(&self) -> bool {
-        self.binding_state == HostBindingState::VerifiedHostUser
+        self.binding_intact() && self.authorized_resource_scope.is_some()
+    }
+
+    fn binding_intact(&self) -> bool {
+        let Some(verified) = &self.verified_receipt else {
+            return false;
+        };
+        let (scope, payload) = if let Some(resource) = &self.authorized_resource_scope {
+            (
+                format!(
+                    "host/user-span/{}/{}/{}",
+                    self.artifact_id.0,
+                    self.turn_id.0,
+                    stable_sha256(resource)
+                ),
+                host_seed_scoped_payload_digest(
+                    self.artifact_id,
+                    self.turn_id,
+                    &self.raw_user_message,
+                    self.user_span,
+                    resource,
+                ),
+            )
+        } else {
+            (
+                format!("host/user-span/{}/{}", self.artifact_id.0, self.turn_id.0),
+                host_seed_payload_digest(
+                    self.artifact_id,
+                    self.turn_id,
+                    &self.raw_user_message,
+                    self.user_span,
+                ),
+            )
+        };
+        self.schema_version == HOST_CONTRACT_SCHEMA
+            && self.binding_state == HostBindingState::VerifiedHostUser
             && self.host_receipt_digest.is_some()
             && self.host_receipt_digest == self.verified_receipt_digest
-            && self.verified_host_key_fingerprint.is_some()
-            && self.authorized_resource_scope.is_some()
+            && self.host_receipt_digest.as_deref() == Some(verified.receipt_digest().as_str())
+            && self.verified_host_key_fingerprint.as_deref()
+                == Some(verified.verifier_key_fingerprint())
+            && verified.class() == ReceiptClass::HostSeed
+            && verified.subject_revision().as_str() == stable_sha256(&self.raw_user_message)
+            && verified.scope().as_str() == scope
+            && verified.payload_digest() == payload
+            && self.verified_receipt_expiry == verified.expires_at_epoch()
+    }
+
+    fn validate_current_binding(
+        &self,
+        verifier: &ReceiptVerifier,
+        now_epoch: u64,
+    ) -> Result<(), HostError> {
+        if !self.binding_intact() {
+            return Err(HostError::HostSeedUnbound);
+        }
+        let original = self
+            .verified_receipt
+            .as_ref()
+            .ok_or(HostError::MissingHostReceipt)?;
+        if original.verifier_key_fingerprint() != verifier.key_fingerprint() {
+            return Err(HostError::AuthorityHostMismatch);
+        }
+        if now_epoch < original.issued_at_epoch()
+            || original
+                .expires_at_epoch()
+                .is_some_and(|expiry| now_epoch >= expiry)
+        {
+            return Err(HostError::HostSeedUnbound);
+        }
+        verifier
+            .verify(
+                original.clone().into_untrusted(),
+                &ReceiptPolicy::exact(
+                    ReceiptClass::HostSeed,
+                    original.subject_revision().clone(),
+                    original.scope().clone(),
+                    original.payload_digest(),
+                    now_epoch,
+                ),
+                &mut ReplayGuard::default(),
+            )
+            .map_err(map_receipt_error)?;
+        Ok(())
     }
 
     pub fn authorized_resource_scope(&self) -> Option<&str> {
@@ -352,7 +437,7 @@ pub fn host_output_payload_digest(
     candidate: &HostOutputCandidate,
     callback_payload: &str,
 ) -> Result<String, HostError> {
-    if seed.binding_state != HostBindingState::VerifiedHostUser {
+    if !seed.binding_intact() {
         return Err(HostError::HostSeedUnbound);
     }
     if seed.artifact_id != candidate.artifact_id || seed.turn_id != candidate.turn_id {
@@ -397,6 +482,9 @@ pub fn host_output_stage_payload_digest(
     seed: &HostSeedEnvelope,
     request: &HostOutputStageRequest<'_>,
 ) -> Result<String, HostError> {
+    if !seed.binding_intact() {
+        return Err(HostError::HostSeedUnbound);
+    }
     let candidate = request.candidate;
     if candidate.artifact_id != seed.artifact_id || candidate.turn_id != seed.turn_id {
         return Err(HostError::ArtifactTurnMismatch);
@@ -454,6 +542,7 @@ pub fn observe_host_output_stage_attested(
     replay: &mut ReplayGuard,
     now_epoch: u64,
 ) -> Result<HostOutputStageReceipt, HostError> {
+    seed.validate_current_binding(verifier, now_epoch)?;
     let payload = host_output_stage_payload_digest(seed, &request)?;
     let wire = request.attestation.ok_or(HostError::MissingHostReceipt)?;
     let candidate = request.candidate;
@@ -510,6 +599,13 @@ impl HostOutputStageLedger {
     }
 
     pub fn append(&mut self, receipt: HostOutputStageReceipt) -> Result<(), HostError> {
+        if self
+            .stages
+            .first()
+            .is_some_and(|first| first.host_seed_receipt_digest != receipt.host_seed_receipt_digest)
+        {
+            return Err(HostError::HostOutputStageConflict);
+        }
         if receipt.artifact_id != self.artifact_id
             || receipt.turn_id != self.turn_id
             || receipt.candidate_digest != self.candidate_digest
@@ -585,6 +681,7 @@ pub fn bind_host_output_attested(
     replay: &mut ReplayGuard,
     now_epoch: u64,
 ) -> Result<HostOutputReceipt, HostError> {
+    seed.validate_current_binding(verifier, now_epoch)?;
     let payload = host_output_payload_digest(seed, candidate, callback_payload)?;
     let receipt = receipt.ok_or(HostError::MissingHostReceipt)?;
     let output_digest = stable_sha256(&candidate.output_text);
@@ -722,6 +819,19 @@ pub fn append_durable_replay_verified(
     replay: &mut ReplayGuard,
     now_epoch: u64,
 ) -> Result<DurableReplayReceipt, HostError> {
+    let hook_origin = matches!(
+        receipt.binding_origin,
+        HostOutputBindingOrigin::CodexStopHook | HostOutputBindingOrigin::ClaudeStopHook
+    );
+    // Report flags are projections of the authenticated origin, not additional
+    // caller-supplied evidence. Durability is observed by this operation below.
+    if receipt.schema_version != HOST_CONTRACT_SCHEMA
+        || receipt.durable_replay_observed
+        || receipt.automatic_host_callback_observed != hook_origin
+        || receipt.persistent_supervision_observed != hook_origin
+    {
+        return Err(HostError::ReceiptRejected);
+    }
     if !receipt.exact_binding {
         return Err(HostError::ReplayRequiresExactBinding);
     }
@@ -767,37 +877,45 @@ fn append_durable_replay_inner(
     receipt: &HostOutputReceipt,
     authenticity_receipt_digest: &str,
 ) -> Result<DurableReplayReceipt, HostError> {
-    fs::create_dir_all(owned_root).map_err(|error| HostError::Io(error.to_string()))?;
-    let canonical_root = owned_root
-        .canonicalize()
-        .map_err(|error| HostError::Io(error.to_string()))?;
-    let parent = ledger_path
-        .parent()
-        .ok_or(HostError::ReplayPathOutsideRoot)?;
-    fs::create_dir_all(parent).map_err(|error| HostError::Io(error.to_string()))?;
-    let canonical_parent = parent
-        .canonicalize()
-        .map_err(|error| HostError::Io(error.to_string()))?;
-    if !canonical_parent.starts_with(&canonical_root) {
+    use lc631_process_supervisor::filesystem::DirectoryAnchor;
+    const MAX_LEDGER_BYTES: usize = 8 * 1024 * 1024;
+    // Lexical scope admission precedes every filesystem mutation. Actual
+    // traversal then uses anchored no-follow handles rather than this check alone.
+    let absolute_root =
+        std::path::absolute(owned_root).map_err(|error| HostError::Io(error.to_string()))?;
+    let absolute_ledger =
+        std::path::absolute(ledger_path).map_err(|error| HostError::Io(error.to_string()))?;
+    let relative = absolute_ledger
+        .strip_prefix(&absolute_root)
+        .map_err(|_| HostError::ReplayPathOutsideRoot)?;
+    if relative.as_os_str().is_empty()
+        || relative
+            .components()
+            .any(|component| !matches!(component, std::path::Component::Normal(_)))
+    {
         return Err(HostError::ReplayPathOutsideRoot);
     }
-    if let Ok(metadata) = fs::symlink_metadata(ledger_path) {
-        if metadata.file_type().is_symlink() || !metadata.file_type().is_file() {
-            return Err(HostError::ReplayPathUnsafe);
-        }
-    }
-    let lock_path = ledger_path.with_extension("lc631.lock");
-    let lock = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&lock_path)
-        .map_err(|_| HostError::ReplayBusy)?;
-    let _lock = ReplayLock {
-        path: lock_path,
-        _file: lock,
-    };
-
-    let mut entries = read_and_verify_ledger(ledger_path)?;
+    let root =
+        DirectoryAnchor::open_or_create(&absolute_root).map_err(|_| HostError::ReplayPathUnsafe)?;
+    let parent = root
+        .directory(relative.parent().unwrap_or_else(|| Path::new("")), true)
+        .map_err(|_| HostError::ReplayPathUnsafe)?;
+    let leaf = relative.file_name().ok_or(HostError::ReplayPathUnsafe)?;
+    let mut file = parent
+        .open_or_create_file(Path::new(leaf))
+        .map_err(|error| {
+            if error.kind() == std::io::ErrorKind::WouldBlock || error.raw_os_error() == Some(32) {
+                HostError::ReplayBusy
+            } else {
+                HostError::ReplayPathUnsafe
+            }
+        })?;
+    let raw = String::from_utf8(
+        file.read_bounded(MAX_LEDGER_BYTES)
+            .map_err(|error| HostError::Io(error.to_string()))?,
+    )
+    .map_err(|error| HostError::InvalidReplay(error.to_string()))?;
+    let mut entries = parse_and_verify_ledger(&raw)?;
     if entries.iter().any(|entry| {
         !entry.authenticity_receipt_digest.is_empty()
             && entry.authenticity_receipt_digest == authenticity_receipt_digest
@@ -843,16 +961,23 @@ fn append_durable_replay_inner(
     let mut encoded =
         serde_json::to_vec(&entry).map_err(|error| HostError::InvalidReplay(error.to_string()))?;
     encoded.push(b'\n');
-    let mut file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(ledger_path)
+    if raw
+        .len()
+        .checked_add(encoded.len())
+        .is_none_or(|bytes| bytes > MAX_LEDGER_BYTES)
+    {
+        return Err(HostError::InvalidReplay(
+            "ledger_byte_budget_exceeded".into(),
+        ));
+    }
+    file.append_and_sync(&encoded)
         .map_err(|error| HostError::Io(error.to_string()))?;
-    file.write_all(&encoded)
-        .map_err(|error| HostError::Io(error.to_string()))?;
-    file.sync_all()
-        .map_err(|error| HostError::Io(error.to_string()))?;
-    entries = read_and_verify_ledger(ledger_path)?;
+    let after = String::from_utf8(
+        file.read_bounded(MAX_LEDGER_BYTES)
+            .map_err(|error| HostError::Io(error.to_string()))?,
+    )
+    .map_err(|error| HostError::InvalidReplay(error.to_string()))?;
+    entries = parse_and_verify_ledger(&after)?;
     let head = entries
         .last()
         .ok_or_else(|| HostError::InvalidReplay("ledger_empty_after_append".into()))?;
@@ -880,11 +1005,51 @@ pub fn verify_durable_replay(ledger_path: &Path) -> Result<usize, HostError> {
     read_and_verify_ledger(ledger_path).map(|entries| entries.len())
 }
 
+#[cfg(test)]
+mod epr_replay_path_tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn epr_11_outside_root_rejection_creates_no_outside_directories() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let fixture = std::env::temp_dir().join(format!("epr-replay-path-{unique}"));
+        let owned = fixture.join("owned");
+        let outside = fixture.join("outside/not-created");
+        fs::create_dir_all(&owned).unwrap();
+        let receipt = HostOutputReceipt::legacy_fixture_for_test(
+            ArtifactId(1),
+            TurnId(1),
+            stable_sha256("fixture output"),
+        );
+        assert_eq!(
+            append_durable_replay_inner(
+                &owned,
+                &outside.join("ledger.jsonl"),
+                &receipt,
+                &stable_sha256("fixture attestation")
+            ),
+            Err(HostError::ReplayPathOutsideRoot)
+        );
+        assert!(
+            !outside.exists(),
+            "denied replay created an outside-root directory"
+        );
+    }
+}
+
 fn read_and_verify_ledger(path: &Path) -> Result<Vec<ReplayEntry>, HostError> {
     if !path.exists() {
         return Ok(Vec::new());
     }
     let raw = fs::read_to_string(path).map_err(|error| HostError::Io(error.to_string()))?;
+    parse_and_verify_ledger(&raw)
+}
+
+fn parse_and_verify_ledger(raw: &str) -> Result<Vec<ReplayEntry>, HostError> {
     let mut entries = Vec::new();
     let mut previous: Option<String> = None;
     for (index, line) in raw.lines().enumerate() {
@@ -1031,6 +1196,17 @@ pub struct HostExecutionPermitAdmission {
 }
 
 impl HostReceiptContext {
+    fn validate_authority_seed(
+        &self,
+        seed: &HostSeedEnvelope,
+        now_epoch: u64,
+    ) -> Result<(), HostError> {
+        if !seed.may_source_grants() || seed.verified_receipt_expiry.is_none() {
+            return Err(HostError::HostSeedUnbound);
+        }
+        seed.validate_current_binding(&self.verifier, now_epoch)
+    }
+
     /// Consume an externally issued authority event. This reader never signs a
     /// Grant from parsed text, a seed envelope, a model output, or a public report.
     pub fn admit_execution_permit(
@@ -1039,11 +1215,8 @@ impl HostReceiptContext {
         admission: HostExecutionPermitAdmission,
         replay: &mut ReplayGuard,
     ) -> Result<ExecutionPermit, HostError> {
-        if !seed.may_source_grants()
-            || seed.verified_host_key_fingerprint.as_deref()
-                != Some(self.verifier.key_fingerprint())
-            || seed.authorized_resource_scope.as_deref() != Some(admission.scope.as_str())
-        {
+        self.validate_authority_seed(seed, admission.now_epoch)?;
+        if seed.authorized_resource_scope.as_deref() != Some(admission.scope.as_str()) {
             return Err(HostError::HostSeedUnbound);
         }
         if admission.span.start < seed.user_span.start
@@ -1197,12 +1370,7 @@ impl HostReceiptContext {
         now_epoch: u64,
         expires_at_epoch: u64,
     ) -> Result<VerifiedAuthorityEvent, HostError> {
-        if !seed.may_source_grants() {
-            return Err(HostError::HostSeedUnbound);
-        }
-        if seed.verified_host_key_fingerprint.as_deref() != Some(self.verifier.key_fingerprint()) {
-            return Err(HostError::AuthorityHostMismatch);
-        }
+        self.validate_authority_seed(seed, now_epoch)?;
         if event.source != AuthoritySourceKind::VerifiedHostUserSpan
             || !matches!(
                 event.polarity,
@@ -1228,7 +1396,12 @@ impl HostReceiptContext {
         {
             return Err(HostError::AuthoritySourceIneligible);
         }
-        if expires_at_epoch <= now_epoch || expires_at_epoch.saturating_sub(now_epoch) > 86_400 {
+        if expires_at_epoch <= now_epoch
+            || expires_at_epoch.saturating_sub(now_epoch) > 86_400
+            || seed
+                .verified_receipt_expiry
+                .is_none_or(|expiry| expires_at_epoch > expiry)
+        {
             return Err(HostError::AuthorityPermitRejected);
         }
         let seed_receipt_digest = seed
@@ -1307,11 +1480,24 @@ impl HostReceiptContext {
         seed: &HostSeedEnvelope,
         request: &ExecutionPermitValidationRequest<'_>,
     ) -> PermitValidation {
-        if !seed.may_source_grants()
-            || seed.verified_host_key_fingerprint.as_deref()
-                != Some(self.verifier.key_fingerprint())
+        if self
+            .validate_authority_seed(seed, request.now_epoch)
+            .is_err()
         {
             return PermitValidation::Rejected(lc631_core::PermitRejection::UntrustedCallerOrigin);
+        }
+        if request.source_revision != stable_sha256(&seed.raw_user_message) {
+            return PermitValidation::Rejected(lc631_core::PermitRejection::SourceRevisionMismatch);
+        }
+        if seed.authorized_resource_scope.as_deref() != Some(request.scope) {
+            return PermitValidation::Rejected(lc631_core::PermitRejection::ScopeMismatch);
+        }
+        let submitted_span = request.permit.source_span();
+        if submitted_span.start < seed.user_span.start
+            || submitted_span.end > seed.user_span.end
+            || !user_span_is_plain_prose(&seed.raw_user_message, submitted_span)
+        {
+            return PermitValidation::Rejected(lc631_core::PermitRejection::UnverifiedOrigin);
         }
         let Ok(principal) = seed.principal_binding() else {
             return PermitValidation::Rejected(
@@ -1464,40 +1650,85 @@ fn host_action_name(action: Action) -> &'static str {
 }
 
 fn user_span_is_plain_prose(source: &str, span: SourceSpan) -> bool {
-    if span.start > span.end
+    const MAX_AUTHORITY_SOURCE_BYTES: usize = 65_536;
+    const MAX_MARKDOWN_EVENTS: usize = 32_768;
+    const MAX_MARKDOWN_DEPTH: usize = 256;
+    if source.len() > MAX_AUTHORITY_SOURCE_BYTES
+        || span.start >= span.end
         || span.end > source.len()
         || !source.is_char_boundary(span.start)
         || !source.is_char_boundary(span.end)
     {
         return false;
     }
-    let mut in_fence: Option<char> = None;
-    let mut offset = 0usize;
-    for line in source.split_inclusive('\n') {
-        let line_span = offset..offset + line.len();
-        let trimmed = line.trim_start();
-        let fence = trimmed.starts_with("```") || trimmed.starts_with("~~~");
-        if fence {
-            let marker = trimmed.chars().next();
-            if in_fence.is_none() {
-                in_fence = marker;
-            } else if marker == in_fence {
-                in_fence = None;
-            }
-        }
-        if line_span.start < span.end
-            && span.start < line_span.end
-            && (in_fence.is_some() || trimmed.starts_with('>'))
-        {
+    let mut blocked_stack = Vec::<bool>::new();
+    let mut masked = source.as_bytes().to_vec();
+    let mut touched_bytes = 0usize;
+    for (count, (event, range)) in Parser::new_ext(source, Options::ENABLE_TABLES)
+        .into_offset_iter()
+        .enumerate()
+    {
+        if count >= MAX_MARKDOWN_EVENTS || source.get(range.clone()).is_none() {
             return false;
         }
-        offset = line_span.end;
+        let inherited_block = blocked_stack.last().copied().unwrap_or(false);
+        let blocked = match event {
+            Event::Start(tag) => {
+                if blocked_stack.len() >= MAX_MARKDOWN_DEPTH {
+                    return false;
+                }
+                let blocked = inherited_block
+                    || matches!(
+                        tag,
+                        Tag::CodeBlock(_)
+                            | Tag::BlockQuote(_)
+                            | Tag::HtmlBlock
+                            | Tag::Link { .. }
+                            | Tag::Image { .. }
+                            | Tag::FootnoteDefinition(_)
+                    );
+                blocked_stack.push(blocked);
+                blocked
+            }
+            Event::End(_) => {
+                let blocked = inherited_block;
+                if blocked_stack.pop().is_none() {
+                    return false;
+                }
+                blocked
+            }
+            Event::Code(_)
+            | Event::Html(_)
+            | Event::InlineHtml(_)
+            | Event::InlineMath(_)
+            | Event::DisplayMath(_)
+            | Event::FootnoteReference(_) => true,
+            _ => inherited_block,
+        };
+        if blocked {
+            if range.start < span.end && span.start < range.end {
+                return false;
+            }
+            touched_bytes = match touched_bytes.checked_add(range.len()) {
+                Some(bytes) if bytes <= source.len().saturating_mul(8).max(4096) => bytes,
+                _ => return false,
+            };
+            // This copy is only for literal-quote eligibility analysis. Signed
+            // source bytes and all source offsets remain unchanged.
+            masked[range].fill(b' ');
+        }
+    }
+    if !blocked_stack.is_empty() {
+        return false;
     }
     let excerpt = &source[span.start..span.end];
     if excerpt.contains('<') && excerpt.contains('>') {
         return false;
     }
-    !authority_quote_ranges(source)
+    let Ok(masked) = String::from_utf8(masked) else {
+        return false;
+    };
+    !authority_quote_ranges(&masked)
         .iter()
         .any(|quoted| span.start < quoted.end && quoted.start < span.end)
 }
@@ -1506,8 +1737,18 @@ fn authority_quote_ranges(source: &str) -> Vec<Range<usize>> {
     let mut ranges = Vec::new();
     let mut stack = Vec::<(char, char, usize)>::new();
     for (offset, character) in source.char_indices() {
+        if character == '\'' {
+            let before = source[..offset].chars().next_back();
+            let after = source[offset + character.len_utf8()..].chars().next();
+            let closing_single_quote = stack.last().is_some_and(|(_, close, _)| *close == '\'');
+            if before.is_some_and(char::is_alphanumeric)
+                && (after.is_some_and(char::is_alphanumeric) || !closing_single_quote)
+            {
+                continue; // Contractions/possessives are not quote openers.
+            }
+        }
         let opener = match character {
-            '"' | '`' => Some((character, character)),
+            '"' | '\'' => Some((character, character)),
             '“' => Some(('“', '”')),
             '「' => Some(('「', '」')),
             '『' => Some(('『', '』')),
@@ -1571,17 +1812,6 @@ fn create_key_file(path: &Path, key: &[u8; 32]) -> Result<(), std::io::Error> {
     }
     writeln!(file)?;
     file.sync_all()
-}
-
-struct ReplayLock {
-    path: PathBuf,
-    _file: fs::File,
-}
-
-impl Drop for ReplayLock {
-    fn drop(&mut self) {
-        let _ = fs::remove_file(&self.path);
-    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]

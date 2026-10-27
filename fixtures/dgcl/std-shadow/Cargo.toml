@@ -1,0 +1,10 @@
+[package]
+name = "audit-api"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+std = { package = "audit-std", path = "shadow_std" }

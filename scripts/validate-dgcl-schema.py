@@ -13,6 +13,17 @@ def read_json(path: Path):
     return json.loads(path.read_text(encoding="utf-8-sig"))
 
 
+def require_valid(validator, payload, label):
+    error = next(validator.iter_errors(payload), None)
+    if error is not None:
+        # Validation errors may embed entire signed bundles and host paths.
+        # Keep failure visible without echoing the untrusted instance.
+        path = "/".join(str(part) for part in error.absolute_path)[:256]
+        raise ValueError(
+            f"schema_rejected input={label[:160]} keyword={error.validator} path=/{path}"
+        )
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--captures", type=Path, required=True)
@@ -30,7 +41,7 @@ def main():
     checked = rejected = 0
     for path in files:
         payload = read_json(path)
-        validator.validate(payload)
+        require_valid(validator, payload, path.name)
         if json.loads(json.dumps(payload, ensure_ascii=False)) != payload:
             raise ValueError("JSON roundtrip changed payload")
         checked += 1
@@ -41,7 +52,7 @@ def main():
                 raise ValueError("schema accepted unauthorized candidate output")
             rejected += 1
         for view in payload.get("consumer_views", {}).values():
-            validator.validate(view)
+            require_valid(validator, view, path.name + ":consumer-view")
             wrong = copy.deepcopy(view)
             wrong["host_send_authorized"] = True
             if validator.is_valid(wrong):

@@ -1,12 +1,10 @@
 use std::collections::BTreeMap;
 use std::env;
-use std::ffi::{OsStr, OsString};
+use std::ffi::OsString;
 use std::fs::File;
-use std::io::{Read, Write};
+use std::io::Read;
 use std::path::{Path, PathBuf};
-#[cfg(not(windows))]
-use std::process::{Child, Command, Stdio};
-use std::sync::{Condvar, Mutex, OnceLock};
+#[cfg(test)]
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -19,60 +17,6 @@ const MAX_TOOL_ARGUMENT_BYTES: usize = 1024 * 1024;
 const MAX_TOOL_STDIN_BYTES: usize = 2 * 1024 * 1024;
 const MAX_TOOL_OUTPUT_BYTES: usize = 2 * 1024 * 1024 + 4;
 const MAX_TOOL_TIMEOUT_MS: u64 = 120_000;
-const MAX_ACTIVE_TOOL_JOBS: usize = 2;
-
-struct ProcessAdmission {
-    active: Mutex<usize>,
-    available: Condvar,
-}
-
-struct ProcessPermit {
-    admission: &'static ProcessAdmission,
-}
-
-static PROCESS_ADMISSION: OnceLock<ProcessAdmission> = OnceLock::new();
-
-fn process_admission() -> &'static ProcessAdmission {
-    PROCESS_ADMISSION.get_or_init(|| ProcessAdmission {
-        active: Mutex::new(0),
-        available: Condvar::new(),
-    })
-}
-
-fn acquire_process_permit(deadline: Instant) -> Option<ProcessPermit> {
-    let admission = process_admission();
-    let mut active = admission
-        .active
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    loop {
-        if *active < MAX_ACTIVE_TOOL_JOBS {
-            *active += 1;
-            return Some(ProcessPermit { admission });
-        }
-        let remaining = deadline.checked_duration_since(Instant::now())?;
-        let (next, timeout) = admission
-            .available
-            .wait_timeout(active, remaining)
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        active = next;
-        if timeout.timed_out() && *active >= MAX_ACTIVE_TOOL_JOBS {
-            return None;
-        }
-    }
-}
-
-impl Drop for ProcessPermit {
-    fn drop(&mut self) {
-        let mut active = self
-            .admission
-            .active
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        *active = active.saturating_sub(1);
-        self.admission.available.notify_one();
-    }
-}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -104,6 +48,8 @@ pub struct BoundedToolResult {
     pub stdout_truncated: bool,
     pub stderr_truncated: bool,
     pub process_tree_kill_attempted: bool,
+    /// Verified only within the supervisor's owned Job/process-group scope,
+    /// never an OS-wide or adversarial sandbox guarantee.
     pub process_tree_kill_verified: bool,
     pub orphan_risk: String,
     pub diagnostic: Option<String>,
@@ -121,159 +67,6 @@ pub struct BoundedToolResult {
     pub stderr: Vec<u8>,
 }
 
-struct ProcessHandle {
-    #[cfg(windows)]
-    inner: lc631_process_supervisor::ManagedChild,
-    #[cfg(not(windows))]
-    inner: Child,
-}
-
-struct SpawnedTool {
-    child: ProcessHandle,
-    stdin: Option<Box<dyn Write + Send>>,
-    stdout: Box<dyn Read + Send>,
-    stderr: Box<dyn Read + Send>,
-}
-
-impl ProcessHandle {
-    fn try_wait(&mut self) -> std::io::Result<Option<i32>> {
-        #[cfg(windows)]
-        {
-            self.inner.try_wait()
-        }
-        #[cfg(not(windows))]
-        {
-            self.inner
-                .try_wait()
-                .map(|status| status.map(|status| status.code().unwrap_or(-1)))
-        }
-    }
-
-    fn terminate_tree(&mut self) -> KillReceipt {
-        #[cfg(windows)]
-        {
-            KillReceipt {
-                attempted: true,
-                verified: self
-                    .inner
-                    .terminate_tree(Duration::from_millis(500))
-                    .unwrap_or(false),
-                orphan_risk: if self
-                    .inner
-                    .active_process_count()
-                    .is_ok_and(|count| count == 0)
-                {
-                    "none_observed"
-                } else {
-                    "unknown"
-                },
-            }
-        }
-        #[cfg(not(windows))]
-        {
-            kill_tree(&mut self.inner)
-        }
-    }
-
-    fn kill_root(&mut self) {
-        #[cfg(windows)]
-        {
-            let _ = self.inner.terminate_tree(Duration::from_millis(500));
-        }
-        #[cfg(not(windows))]
-        {
-            let _ = self.inner.kill();
-        }
-    }
-
-    fn wait_for_tree_empty_until(&self, deadline: Instant) -> std::io::Result<Option<bool>> {
-        #[cfg(windows)]
-        {
-            Ok(Some(self.inner.wait_for_tree_empty(
-                deadline.saturating_duration_since(Instant::now()),
-            )?))
-        }
-        #[cfg(not(windows))]
-        {
-            Ok(None)
-        }
-    }
-}
-
-#[cfg(windows)]
-fn spawn_tool(
-    executable: &OsStr,
-    args: &[&str],
-    cwd: &Path,
-    environment: &BTreeMap<OsString, OsString>,
-    input: Option<&[u8]>,
-) -> std::io::Result<SpawnedTool> {
-    let args = args.iter().map(OsString::from).collect::<Vec<_>>();
-    let environment = environment
-        .iter()
-        .map(|(key, value)| (key.clone(), value.clone()))
-        .collect::<Vec<_>>();
-    let launched = lc631_process_supervisor::spawn(lc631_process_supervisor::SpawnRequest {
-        executable,
-        arguments: &args,
-        current_dir: cwd,
-        environment: &environment,
-    })?;
-    let stdin = input.map(|_| Box::new(launched.stdin) as Box<dyn Write + Send>);
-    Ok(SpawnedTool {
-        child: ProcessHandle {
-            inner: launched.child,
-        },
-        stdin,
-        stdout: Box::new(launched.stdout),
-        stderr: Box::new(launched.stderr),
-    })
-}
-
-#[cfg(not(windows))]
-fn spawn_tool(
-    executable: &OsStr,
-    args: &[&str],
-    cwd: &Path,
-    environment: &BTreeMap<OsString, OsString>,
-    input: Option<&[u8]>,
-) -> std::io::Result<SpawnedTool> {
-    let mut command = Command::new(executable);
-    command
-        .args(args)
-        .current_dir(cwd)
-        .env_clear()
-        .envs(environment)
-        .stdin(if input.is_some() {
-            Stdio::piped()
-        } else {
-            Stdio::null()
-        })
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    let mut child = command.spawn()?;
-    let stdin = input.and_then(|_| {
-        child
-            .stdin
-            .take()
-            .map(|writer| Box::new(writer) as Box<dyn Write + Send>)
-    });
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| std::io::Error::other("child stdout unavailable"))?;
-    let stderr = child
-        .stderr
-        .take()
-        .ok_or_else(|| std::io::Error::other("child stderr unavailable"))?;
-    Ok(SpawnedTool {
-        child: ProcessHandle { inner: child },
-        stdin,
-        stdout: Box::new(stdout),
-        stderr: Box::new(stderr),
-    })
-}
-
 pub fn run_bounded_tool(request: BoundedToolRequest<'_>) -> BoundedToolResult {
     if !request_within_budget(&request) {
         return rejected_request(
@@ -282,11 +75,10 @@ pub fn run_bounded_tool(request: BoundedToolRequest<'_>) -> BoundedToolResult {
             "tool_request_budget_exceeded",
         );
     }
-    let start = Instant::now();
+    let started = Instant::now();
     let timeout = Duration::from_millis(request.timeout_ms);
-    let deadline = start + timeout;
     let args_digest = stable_sha256(&request.args.join("\u{1f}"));
-    let provenance = execution_provenance(request.program);
+    let provenance = execution_provenance(request.program, started + timeout);
     let Some(executable) = provenance.resolved_path.as_ref() else {
         return unavailable(
             request.program,
@@ -295,151 +87,73 @@ pub fn run_bounded_tool(request: BoundedToolRequest<'_>) -> BoundedToolResult {
             provenance,
         );
     };
-    let Some(_process_permit) = acquire_process_permit(deadline) else {
+    let Some(remaining) = timeout.checked_sub(started.elapsed()) else {
         return rejected_request(
             request.program,
             ToolRunState::TimedOut,
-            "tool_supervisor_queue_deadline_exceeded",
+            "tool_resolution_deadline_exceeded",
         );
     };
-    let cleanup_grace = Duration::from_millis(100).min(timeout / 4);
-    let work_deadline = deadline.checked_sub(cleanup_grace).unwrap_or(start);
-    let spawned = match spawn_tool(
-        executable.as_os_str(),
-        request.args,
-        &provenance.cwd,
-        &provenance.environment,
-        request.stdin,
-    ) {
-        Ok(spawned) => spawned,
+    let arguments = request.args.iter().map(OsString::from).collect::<Vec<_>>();
+    let environment = provenance
+        .environment
+        .iter()
+        .map(|(key, value)| (key.clone(), value.clone()))
+        .collect::<Vec<_>>();
+    let output = match lc631_process_supervisor::run_bounded(lc631_process_supervisor::RunRequest {
+        executable: executable.as_os_str(),
+        arguments: &arguments,
+        current_dir: &provenance.cwd,
+        environment: &environment,
+        stdin: request.stdin,
+        timeout: remaining,
+        stdout_limit: request.stdout_limit,
+        stderr_limit: request.stderr_limit,
+    }) {
+        Ok(output) => output,
         Err(error) => {
             return unavailable(request.program, args_digest, error.to_string(), provenance);
         }
     };
-    let stdin_writer = request.stdin.and_then(|input| {
-        spawned.stdin.map(|mut stdin| {
-            let input = input.to_vec();
-            thread::spawn(move || stdin.write_all(&input))
-        })
-    });
-    let mut stdout_reader = Some(thread::spawn(move || {
-        let limit = request.stdout_limit;
-        read_limited(spawned.stdout, limit)
-    }));
-    let mut stderr_reader = Some(thread::spawn(move || {
-        let limit = request.stderr_limit;
-        read_limited(spawned.stderr, limit)
-    }));
-    let stdin_requested = request.stdin.is_some();
-    let mut stdin_writer = stdin_writer;
-    let mut child = spawned.child;
-    let mut timed_out = false;
-    let mut kill = KillReceipt::not_needed();
-    let mut status = loop {
-        match child.try_wait() {
-            Ok(Some(status)) => break Some(status),
-            Ok(None) if Instant::now() >= work_deadline => break None,
-            Ok(None) => thread::sleep(Duration::from_millis(10)),
-            Err(error) => {
-                child.kill_root();
-                return unavailable(request.program, args_digest, error.to_string(), provenance);
-            }
-        }
-    };
-    if status.is_none() {
-        timed_out = true;
-        kill = child.terminate_tree();
-        status = wait_for_child_until(&mut child, deadline);
-    }
-
-    let mut stdin_result = if stdin_requested {
-        join_until(&mut stdin_writer, work_deadline)
-    } else {
-        None
-    };
-    let mut stdout_result = join_until(&mut stdout_reader, work_deadline);
-    let mut stderr_result = join_until(&mut stderr_reader, work_deadline);
-    let io_stalled = (stdin_requested && stdin_result.is_none())
-        || stdout_result.is_none()
-        || stderr_result.is_none();
-    if io_stalled {
-        timed_out = true;
-        merge_kill(&mut kill, child.terminate_tree());
-        if status.is_none() {
-            status = wait_for_child_until(&mut child, deadline);
-        }
-        if stdin_requested && stdin_result.is_none() {
-            stdin_result = join_until(&mut stdin_writer, deadline);
-        }
-        if stdout_result.is_none() {
-            stdout_result = join_until(&mut stdout_reader, deadline);
-        }
-        if stderr_result.is_none() {
-            stderr_result = join_until(&mut stderr_reader, deadline);
-        }
-    }
-
-    let mut descendant_outlived_root = false;
-    let mut tree_state_unknown = false;
-    if !timed_out && status.is_some() {
-        match child.wait_for_tree_empty_until(work_deadline) {
-            Ok(Some(true)) | Ok(None) => {}
-            Ok(Some(false)) => {
-                descendant_outlived_root = true;
-                timed_out = true;
-                merge_kill(&mut kill, child.terminate_tree());
-            }
-            Err(_) => {
-                tree_state_unknown = true;
-                merge_kill(&mut kill, child.terminate_tree());
-            }
-        }
-    }
-    if stdin_requested && stdin_result.is_none() {
-        drop(stdin_writer.take());
-    }
-    let stdin_error = stdin_result
-        .and_then(Result::err)
-        .map(|error| error.to_string());
-    let stdout = stdout_result.unwrap_or_else(|| LimitedBytes {
-        bytes: Vec::new(),
-        truncated: true,
-    });
-    let stderr = stderr_result.unwrap_or_else(|| LimitedBytes {
-        bytes: Vec::new(),
-        truncated: true,
-    });
-    let exit_code = status;
-    let state = if timed_out {
+    let state = if output.timed_out {
         ToolRunState::TimedOut
-    } else if descendant_outlived_root || tree_state_unknown {
-        ToolRunState::Failed
-    } else if exit_code == Some(0) && stdin_error.is_none() {
+    } else if output.exit_code == Some(0)
+        && output.io_cleanup_complete
+        && output.process_tree_kill_verified
+        && !output.stdout_truncated
+        && !output.stderr_truncated
+        && output.diagnostic.is_none()
+    {
         ToolRunState::Observed
     } else {
         ToolRunState::Failed
     };
-    let diagnostic = stdin_error
-        .or_else(|| descendant_outlived_root.then(|| "descendant_outlived_root_process".into()))
-        .or_else(|| tree_state_unknown.then(|| "process_tree_state_unavailable".into()))
-        .or_else(|| {
-            (timed_out && kill.attempted && !kill.verified)
-                .then(|| "process_tree_termination_unverified".into())
-        })
-        .or_else(|| (state != ToolRunState::Observed).then(|| bounded_text(&stderr.bytes, 512)));
+    let diagnostic = output
+        .diagnostic
+        .map(str::to_string)
+        .or_else(|| (state != ToolRunState::Observed).then(|| bounded_text(&output.stderr, 512)));
     BoundedToolResult {
         state,
         program: request.program.to_string(),
         args_digest,
-        exit_code,
-        timed_out,
-        stdout_digest: digest_bytes(&stdout.bytes),
-        stderr_digest: digest_bytes(&stderr.bytes),
-        stdout_truncated: stdout.truncated,
-        stderr_truncated: stderr.truncated,
-        process_tree_kill_attempted: kill.attempted,
-        process_tree_kill_verified: kill.verified,
-        orphan_risk: kill.orphan_risk.to_string(),
+        exit_code: output.exit_code,
+        timed_out: output.timed_out,
+        stdout_digest: digest_bytes(&output.stdout),
+        stderr_digest: digest_bytes(&output.stderr),
+        stdout_truncated: output.stdout_truncated,
+        stderr_truncated: output.stderr_truncated,
+        process_tree_kill_attempted: output.process_tree_kill_attempted,
+        process_tree_kill_verified: output.process_tree_kill_verified,
+        orphan_risk: if output.process_tree_kill_verified && output.io_cleanup_complete {
+            match output.containment {
+                "windows_job" => "none_observed_within_windows_job",
+                "unix_process_group" => "none_observed_within_unix_process_group",
+                _ => "unknown",
+            }
+        } else {
+            "unknown"
+        }
+        .into(),
         diagnostic,
         resolved_executable: provenance
             .resolved_path
@@ -452,8 +166,8 @@ pub fn run_bounded_tool(request: BoundedToolRequest<'_>) -> BoundedToolResult {
         network_policy: "environment_offline_hints_without_os_enforcement".into(),
         network_isolation_os_enforced: false,
         hermetic_execution_observed: false,
-        stdout: stdout.bytes,
-        stderr: stderr.bytes,
+        stdout: output.stdout,
+        stderr: output.stderr,
     }
 }
 
@@ -511,59 +225,6 @@ pub(crate) fn not_started_request(
     result
 }
 
-#[derive(Default)]
-struct LimitedBytes {
-    bytes: Vec<u8>,
-    truncated: bool,
-}
-
-fn read_limited(mut reader: impl Read, limit: usize) -> LimitedBytes {
-    let mut output = LimitedBytes::default();
-    let mut buffer = [0_u8; 8192];
-    loop {
-        let read = match reader.read(&mut buffer) {
-            Ok(0) | Err(_) => break,
-            Ok(read) => read,
-        };
-        let remaining = limit.saturating_sub(output.bytes.len());
-        let keep = remaining.min(read);
-        output.bytes.extend_from_slice(&buffer[..keep]);
-        output.truncated |= keep < read || remaining == 0;
-    }
-    output
-}
-
-fn join_until<T>(handle: &mut Option<thread::JoinHandle<T>>, deadline: Instant) -> Option<T> {
-    loop {
-        let worker = handle.as_ref()?;
-        if worker.is_finished() {
-            return handle.take()?.join().ok();
-        }
-        if Instant::now() >= deadline {
-            return None;
-        }
-        thread::sleep(Duration::from_millis(5));
-    }
-}
-
-fn wait_for_child_until(child: &mut ProcessHandle, deadline: Instant) -> Option<i32> {
-    loop {
-        match child.try_wait() {
-            Ok(Some(status)) => return Some(status),
-            Ok(None) if Instant::now() < deadline => thread::sleep(Duration::from_millis(5)),
-            Ok(None) | Err(_) => return None,
-        }
-    }
-}
-
-fn merge_kill(previous: &mut KillReceipt, latest: KillReceipt) {
-    if latest.attempted {
-        previous.attempted = true;
-        previous.verified = latest.verified;
-        previous.orphan_risk = latest.orphan_risk;
-    }
-}
-
 fn digest_bytes(bytes: &[u8]) -> String {
     let digest = Sha256::digest(bytes);
     let mut encoded = String::with_capacity(71);
@@ -598,11 +259,11 @@ struct ExecutionProvenance {
     environment_digest: String,
 }
 
-fn execution_provenance(program: &str) -> ExecutionProvenance {
+fn execution_provenance(program: &str, deadline: Instant) -> ExecutionProvenance {
     let resolved_path = resolve_executable(program);
     let executable_sha256 = resolved_path
         .as_deref()
-        .and_then(|path| digest_file(path).ok());
+        .and_then(|path| digest_file(path, deadline).ok());
     let cwd = env::current_dir()
         .ok()
         .and_then(|path| path.canonicalize().ok())
@@ -687,11 +348,17 @@ fn sanitized_environment() -> BTreeMap<OsString, OsString> {
     output
 }
 
-fn digest_file(path: &Path) -> Result<String, std::io::Error> {
+fn digest_file(path: &Path, deadline: Instant) -> Result<String, std::io::Error> {
     let mut file = File::open(path)?;
     let mut digest = Sha256::new();
     let mut buffer = [0_u8; 64 * 1024];
     loop {
+        if Instant::now() >= deadline {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::TimedOut,
+                "executable_digest_deadline_exceeded",
+            ));
+        }
         let read = file.read(&mut buffer)?;
         if read == 0 {
             break;
@@ -744,56 +411,40 @@ fn unavailable(
     }
 }
 
-struct KillReceipt {
-    attempted: bool,
-    verified: bool,
-    orphan_risk: &'static str,
-}
-
-impl KillReceipt {
-    fn not_needed() -> Self {
-        Self {
-            attempted: false,
-            verified: true,
-            orphan_risk: "none_observed",
-        }
-    }
-}
-
-#[cfg(not(windows))]
-fn kill_tree(child: &mut Child) -> KillReceipt {
-    let verified = Command::new("pkill")
-        .args(["-TERM", "-P", &child.id().to_string()])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .is_ok_and(|status| status.success());
-    KillReceipt {
-        attempted: true,
-        verified,
-        orphan_risk: if verified { "medium" } else { "unknown" },
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(windows)]
+    use std::io::Write;
     use std::process::{Command, Stdio};
+    use std::sync::{Mutex, MutexGuard};
+
+    // These fixtures observe an admitted child, not competition between
+    // unrelated test threads for the shared two-run supervisor. Admission
+    // saturation has its own negative integration test. Helper subprocesses
+    // deliberately do not acquire this process-local fixture lock.
+    static PROCESS_FIXTURE: Mutex<()> = Mutex::new(());
+
+    fn process_fixture() -> MutexGuard<'static, ()> {
+        PROCESS_FIXTURE
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
 
     #[test]
     fn rustc_version_is_bounded_and_observed_when_available() {
+        let _fixture = process_fixture();
+        // Cold Windows CI also fingerprints a large compiler executable. This
+        // positive observation has an explicit budget; it is not a latency gate.
         let output = run_bounded_tool(BoundedToolRequest {
             program: "rustc",
             args: &["--version"],
             stdin: None,
-            timeout_ms: 2_000,
+            timeout_ms: 15_000,
             stdout_limit: 4096,
             stderr_limit: 4096,
         });
-        assert_eq!(output.state, ToolRunState::Observed);
-        assert!(!output.stdout.is_empty());
+        assert_eq!(output.state, ToolRunState::Observed, "{output:?}");
+        assert!(!output.stdout.is_empty(), "{output:?}");
     }
 
     #[test]
@@ -808,6 +459,17 @@ mod tests {
         });
         assert_eq!(output.state, ToolRunState::Unavailable);
         assert!(output.diagnostic.is_some());
+    }
+
+    #[test]
+    fn expired_executable_fingerprint_budget_returns_visible_timeout() {
+        let started = Instant::now();
+        let result = digest_file(
+            &std::env::current_exe().unwrap(),
+            started - Duration::from_millis(1),
+        );
+        assert_eq!(result.unwrap_err().kind(), std::io::ErrorKind::TimedOut);
+        assert!(started.elapsed() < Duration::from_secs(1));
     }
 
     #[test]
@@ -844,31 +506,84 @@ mod tests {
         assert!(output.resolved_executable.is_none());
     }
 
-    #[cfg(windows)]
     #[test]
     fn pipe_drain_is_inside_the_tool_deadline_even_if_a_descendant_holds_a_pipe() {
+        let _fixture = process_fixture();
+        #[cfg(windows)]
+        {
+            let executable = std::env::current_exe().unwrap();
+            let executable = executable.to_str().unwrap();
+            let started = Instant::now();
+            let output = run_bounded_tool(BoundedToolRequest {
+                program: executable,
+                args: &[
+                    "--exact",
+                    "process::tests::deadline_helper_child",
+                    "--nocapture",
+                ],
+                stdin: Some(b"spawn-descendant"),
+                timeout_ms: 500,
+                stdout_limit: 4_096,
+                stderr_limit: 4_096,
+            });
+            assert!(started.elapsed() < Duration::from_secs(2), "{output:?}");
+            assert!(output.timed_out, "{output:?}");
+            assert!(output.process_tree_kill_attempted, "{output:?}");
+            assert!(output.process_tree_kill_verified, "{output:?}");
+        }
+        #[cfg(unix)]
+        {
+            let started = Instant::now();
+            let output = run_bounded_tool(BoundedToolRequest {
+                program: "/bin/sh",
+                args: &["-c", "sleep 4 &"],
+                stdin: None,
+                timeout_ms: 500,
+                stdout_limit: 4_096,
+                stderr_limit: 4_096,
+            });
+            assert!(started.elapsed() < Duration::from_secs(2), "{output:?}");
+            assert!(output.timed_out, "{output:?}");
+            assert!(output.process_tree_kill_attempted, "{output:?}");
+            assert!(output.process_tree_kill_verified, "{output:?}");
+        }
+    }
+
+    #[test]
+    fn lone_root_is_terminated_and_reaped_through_the_production_adapter() {
+        let _fixture = process_fixture();
         let executable = std::env::current_exe().unwrap();
-        let executable = executable.to_str().unwrap();
+        let program = executable.to_str().unwrap();
+        let args: &[&str] = &[
+            "--exact",
+            "process::tests::deadline_helper_child",
+            "--nocapture",
+        ];
         let started = Instant::now();
         let output = run_bounded_tool(BoundedToolRequest {
-            program: executable,
-            args: &[
-                "--exact",
-                "process::tests::deadline_helper_child",
-                "--nocapture",
-            ],
-            stdin: Some(b"spawn-descendant"),
-            timeout_ms: 500,
+            program,
+            args,
+            // This positive cleanup observation has finite scheduling margin.
+            // A 500 ms request may correctly retain Unknown pipe cleanup; the
+            // separate short-deadline negative above remains unchanged.
+            // The owned Rust helper avoids shell/runtime initialization under
+            // the adapter's deliberately sanitized environment and Job limits.
+            stdin: Some(b"sleep"),
+            timeout_ms: 1_500,
             stdout_limit: 4_096,
             stderr_limit: 4_096,
         });
-        assert!(started.elapsed() < Duration::from_secs(2));
-        assert!(output.timed_out);
-        assert!(output.process_tree_kill_attempted);
-        assert!(output.process_tree_kill_verified);
+        assert!(started.elapsed() < Duration::from_secs(3), "{output:?}");
+        assert_eq!(output.state, ToolRunState::TimedOut, "{output:?}");
+        assert!(output.process_tree_kill_attempted, "{output:?}");
+        assert!(output.process_tree_kill_verified, "{output:?}");
+        assert!(
+            output.orphan_risk.starts_with("none_observed_within_"),
+            "{output:?}"
+        );
+        assert!(!output.network_isolation_os_enforced, "{output:?}");
     }
 
-    #[cfg(windows)]
     #[allow(clippy::zombie_processes)] // The helper must exit while its child intentionally retains a pipe.
     #[test]
     fn deadline_helper_child() {

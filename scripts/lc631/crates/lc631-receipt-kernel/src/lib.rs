@@ -54,7 +54,7 @@ impl ReceiptClass {
 
 macro_rules! checked_text {
     ($name:ident, $limit:expr) => {
-        #[derive(Clone, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+        #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
         #[serde(transparent)]
         pub struct $name(String);
 
@@ -72,6 +72,16 @@ macro_rules! checked_text {
 
             pub fn as_str(&self) -> &str {
                 &self.0
+            }
+        }
+
+        impl<'de> Deserialize<'de> for $name {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: serde::Deserializer<'de>,
+            {
+                Self::checked(String::deserialize(deserializer)?)
+                    .map_err(|error| serde::de::Error::custom(format!("{error:?}")))
             }
         }
     };
@@ -158,6 +168,10 @@ pub struct VerifiedReceipt {
 }
 
 impl VerifiedReceipt {
+    pub fn issuer(&self) -> &PrincipalId {
+        self.wire.claims.issuer()
+    }
+
     pub fn class(&self) -> ReceiptClass {
         self.wire.claims.class
     }
@@ -233,8 +247,13 @@ impl ReceiptPolicy {
     }
 }
 
-#[derive(Debug)]
 struct SecretKey(Vec<u8>);
+
+impl std::fmt::Debug for SecretKey {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("[REDACTED]")
+    }
+}
 
 impl SecretKey {
     fn checked(bytes: &[u8]) -> Result<Self, ReceiptError> {
@@ -247,14 +266,24 @@ impl SecretKey {
 
 impl Drop for SecretKey {
     fn drop(&mut self) {
+        // Best-effort cleanup only; this does not claim optimization-resistant erasure.
         self.0.fill(0);
     }
 }
 
-#[derive(Debug)]
 pub struct ReceiptIssuer {
     principal: PrincipalId,
     key: SecretKey,
+}
+
+impl std::fmt::Debug for ReceiptIssuer {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ReceiptIssuer")
+            .field("principal", &self.principal)
+            .field("key_fingerprint", &self.key_fingerprint())
+            .finish_non_exhaustive()
+    }
 }
 
 impl ReceiptIssuer {
@@ -278,7 +307,7 @@ impl ReceiptIssuer {
     ) -> Result<UntrustedReceipt, ReceiptError> {
         let payload_digest = payload_digest.into();
         require_digest(&payload_digest)?;
-        if expires_at_epoch.is_some_and(|expires| expires < issued_at_epoch) {
+        if expires_at_epoch.is_some_and(|expires| expires <= issued_at_epoch) {
             return Err(ReceiptError::InvalidExpiry);
         }
         if let Some(parent) = &parent_receipt_digest {
@@ -311,11 +340,20 @@ impl ReceiptIssuer {
     }
 }
 
-#[derive(Debug)]
 pub struct ReceiptVerifier {
     principal: PrincipalId,
     key: SecretKey,
     key_fingerprint: String,
+}
+
+impl std::fmt::Debug for ReceiptVerifier {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ReceiptVerifier")
+            .field("principal", &self.principal)
+            .field("key_fingerprint", &self.key_fingerprint)
+            .finish_non_exhaustive()
+    }
 }
 
 impl ReceiptVerifier {
@@ -364,7 +402,7 @@ impl ReceiptVerifier {
         }
         if claims
             .expires_at_epoch
-            .is_some_and(|expires| policy.now_epoch > expires)
+            .is_some_and(|expires| policy.now_epoch >= expires)
         {
             return Err(ReceiptError::Expired);
         }
@@ -446,7 +484,7 @@ fn validate_wire(receipt: &UntrustedReceipt) -> Result<(), ReceiptError> {
             .all(|byte| byte.is_ascii_hexdigit())
         || claims
             .expires_at_epoch
-            .is_some_and(|expires| expires < claims.issued_at_epoch)
+            .is_some_and(|expires| expires <= claims.issued_at_epoch)
     {
         return Err(ReceiptError::InvalidWire);
     }

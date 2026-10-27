@@ -224,6 +224,17 @@ pub struct DgclRepairLoopInput<'a> {
     pub max_delta_bytes: u64,
 }
 
+fn sample_repair_epoch(
+    driver: &dyn DgclRepairDriver,
+    initial_epoch: u64,
+    elapsed: Duration,
+) -> u64 {
+    let floor = initial_epoch.saturating_add(elapsed.as_secs());
+    // An adapter can advance current time, but cannot backdate the caller's
+    // authorization context or revive an already expired permission/lease.
+    driver.observation_epoch().unwrap_or(floor).max(floor)
+}
+
 pub fn run_dgcl_repair_loop(
     input: DgclRepairLoopInput<'_>,
     driver: &mut dyn DgclRepairDriver,
@@ -409,12 +420,6 @@ pub fn run_dgcl_repair_loop(
                 DgclRepairStatus::Conflict,
             ));
         }
-        let lifecycle_now = driver.observation_epoch().unwrap_or_else(|| {
-            input
-                .authorization
-                .now_epoch
-                .saturating_add(started.elapsed().as_secs())
-        });
         let Some(target) = snapshot
             .targets
             .iter()
@@ -447,7 +452,8 @@ pub fn run_dgcl_repair_loop(
                 DgclRepairStatus::Hold,
             ));
         }
-        let lifecycle_now = driver.observation_epoch().unwrap_or(lifecycle_now);
+        let lifecycle_now =
+            sample_repair_epoch(driver, input.authorization.now_epoch, started.elapsed());
         if validate_dgcl_target_lease(
             &current_lease,
             &snapshot,
@@ -564,7 +570,11 @@ pub fn run_dgcl_repair_loop(
                 DgclRepairStatus::Conflict,
             ));
         }
-        let lifecycle_now = driver.observation_epoch().unwrap_or(lifecycle_now);
+        // Resample after the effect. Reusing the pre-apply epoch falsely
+        // rejects a lease legitimately issued after crossing a clock second.
+        // Never advance time from the public lease or receipt itself.
+        let lifecycle_now =
+            sample_repair_epoch(driver, input.authorization.now_epoch, started.elapsed());
         if validate_dgcl_target_lease(
             &application.after_lease,
             &application.after_snapshot,
@@ -695,12 +705,8 @@ pub fn run_dgcl_repair_loop(
                 DgclRepairStatus::BudgetExceeded,
             ));
         }
-        let validation_now = driver.observation_epoch().unwrap_or_else(|| {
-            input
-                .authorization
-                .now_epoch
-                .saturating_add(started.elapsed().as_secs())
-        });
+        let validation_now =
+            sample_repair_epoch(driver, input.authorization.now_epoch, started.elapsed());
         if !permit_authorizes_repair(
             &input.authorization,
             request,

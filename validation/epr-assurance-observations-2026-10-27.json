@@ -1,0 +1,219 @@
+{
+  "schema_version": "epistesys-epr-assurance-observations.v1",
+  "date_jst": "2026-10-27",
+  "doctor": "facade_ok_observed_once",
+  "scope": "complete selected source units <=16KiB; intermediate source hashes, not whole-repository or runtime assurance",
+  "observations": [
+    {
+      "path": "scripts/lc631/crates/lc631-process-supervisor/src/bounded.rs",
+      "bytes": 15105,
+      "sha256": "1389301bcfa9423b3ca89e4fc31a3f4ba556d4565b94fbd0ad45e338330bf69a",
+      "result": {
+        "command": "compile",
+        "fields": {
+          "diagnostics": 8,
+          "evidence": "missing_or_unknown",
+          "graph_digest": "1e6661faace4226c0b18cd8f1addfdda4df90a81f5dc416106075e62f50e0fb6",
+          "input_digest": "1bf6604bd175f1743269e4e871f1b59efffdb9dd39bffd84649adeabad6acb37",
+          "nodes": 36,
+          "status": "blocked_with_diagnostics"
+        },
+        "replay_reference": "ASSURANCE-REPLAY-REF-V2\ninput=1bf6604bd175f1743269e4e871f1b59efffdb9dd39bffd84649adeabad6acb37\ngraph=1e6661faace4226c0b18cd8f1addfdda4df90a81f5dc416106075e62f50e0fb6\nstate=1f448b640a5b8b95aec35a5c8e4b0bdedea99a49963f3b26b42e50ecc830b1f4\nplan=249a7610c4cf5c6c14e03b7b5c8e1839ae341bedbc6b9b940b7d6b3166cf60c0\nomission=f4a110bf8c9ec66895c0a9bfd23fb1bbd0e90db6be88e09ba4380aa58f0b246c\npolicy=df28b0a0ed912e9b341053f9c0be5c6f453e771ae233e613de4da2e0e492b5c6\nrendered=065d760b885df3f0a52af8c2c17629afcb6af2047d8656a8838cd3089d391ee4\nsurface=cd943f289fc77ee0ffdc40954bd3de8be1977ddb682ce6974a6de9380ff0fc0e\n",
+        "semantic_digest": "8d20ff7aad489caeba3e0d960b4f740642f317ac29a2df6b5a9a2b5f7563306a"
+      }
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-process-supervisor/src/unix.rs",
+      "bytes": 5779,
+      "sha256": "8271b6ba1f6db124810c09fcc010f7d04884c041fafdd5bfb68e9b53d0a2f5af",
+      "result": {
+        "command": "compile",
+        "fields": {
+          "diagnostics": 6,
+          "evidence": "missing_or_unknown",
+          "graph_digest": "51c5525fa4f6dd1c834a3f005885e71ca0f39005a52f8ecd50d0c4af05a1bfc2",
+          "input_digest": "31a3944fb9e7c63e6a9ecee14b2d467f71bb1f6cef51dd97952b2ca8445f339c",
+          "nodes": 22,
+          "status": "blocked_with_diagnostics"
+        },
+        "replay_reference": "ASSURANCE-REPLAY-REF-V2\ninput=31a3944fb9e7c63e6a9ecee14b2d467f71bb1f6cef51dd97952b2ca8445f339c\ngraph=51c5525fa4f6dd1c834a3f005885e71ca0f39005a52f8ecd50d0c4af05a1bfc2\nstate=53e18942eed05a68cb28aba391d691297ad8d268e40a98f23f61b3c93369e73e\nplan=77303418bcfa0dd9d0bb3f30d539c3297bb00d6dc601d0c7c01ef5c0e18e899d\nomission=9cd5cb52a93c6d08666169ddfa249dcbe29ac05fbdf877757bd0da192fd5efcc\npolicy=df28b0a0ed912e9b341053f9c0be5c6f453e771ae233e613de4da2e0e492b5c6\nrendered=88f6358c117e6fdc86728e82417547b5d6318aa8b9f32a9e4367f7245225b0d6\nsurface=72c695fc87ed92c8935af25954fbc2df6dc3f4363a3a0a32e0e0a0006db6f34e\n",
+        "semantic_digest": "0e2cb433563ff3a724df4fb836d63c119ea7549bd5d5c29197209b8187a6580a"
+      }
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-process-supervisor/src/filesystem.rs",
+      "bytes": 7356,
+      "sha256": "84493c87a89eb6db8a15da2a7223a168e9eed8d8aabb2756cc7c2a4aa52e1cac",
+      "result": {
+        "command": "compile",
+        "fields": {
+          "diagnostics": 13,
+          "evidence": "missing_or_unknown",
+          "graph_digest": "80739660183a4a868bc42c19749df6454425063061debd35ccd688ee972c63ba",
+          "input_digest": "5de8daa35d5abbe4f32b8e55c910b85e40962e3d95c3c4e5976dd89b76210548",
+          "nodes": 28,
+          "status": "blocked_with_diagnostics"
+        },
+        "replay_reference": "ASSURANCE-REPLAY-REF-V2\ninput=5de8daa35d5abbe4f32b8e55c910b85e40962e3d95c3c4e5976dd89b76210548\ngraph=80739660183a4a868bc42c19749df6454425063061debd35ccd688ee972c63ba\nstate=9a410e60f153a2235f43df9f2daf2afce091cbf19d16b070190c2ba64e76c41f\nplan=703c80a3e4c1e0f16cb4ff3395918a9b0276af19707e8eb041853c38d7e55d55\nomission=ac5a29b4323bf13cfb6bde4a2d5e21c050661269de77f0ffdfb4e47a7366fe04\npolicy=df28b0a0ed912e9b341053f9c0be5c6f453e771ae233e613de4da2e0e492b5c6\nrendered=fbfbf9eb1d10ae8c77b387a2be5c4f01f86a3f3f5112ff2dc8f6b29bfe43a27f\nsurface=e0ac0f56eead64c46b68d2d1c5fa51e400792417a7efd95255023199d32ff73a\n",
+        "semantic_digest": "c39a9f906539d34bf774e19a6330ec37943140ef5d4983f2ada5d27bb996b1c6"
+      }
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-analysis/src/production_connection.rs",
+      "bytes": 13779,
+      "sha256": "aed2571fc31245543b56ae5612544abef6d40973309fdfd767d01db38b780dff",
+      "result": {
+        "command": "compile",
+        "fields": {
+          "diagnostics": 0,
+          "evidence": "missing_or_unknown",
+          "graph_digest": "6d3322ce0b96a42a273e0bb0d27def56e394d3429ade8f425c144bc2641677e4",
+          "input_digest": "48035a9f195f8c7fdfc2457fc35f74772fb1818bd2ab1eb7b5d10f7c72cd2f20",
+          "nodes": 18,
+          "status": "needs_evidence"
+        },
+        "replay_reference": "ASSURANCE-REPLAY-REF-V2\ninput=48035a9f195f8c7fdfc2457fc35f74772fb1818bd2ab1eb7b5d10f7c72cd2f20\ngraph=6d3322ce0b96a42a273e0bb0d27def56e394d3429ade8f425c144bc2641677e4\nstate=ad58cef6ee3662ad88d17b364cbfbb70c35e2b3f3c5242b53712e646dd0487fc\nplan=328dc8766efc7cbcc4fe35ec97b54a628275a55d8e54c8479a1b3d605489c5f0\nomission=d84b5a99fd4c9a5f992257a3832da840229d12b71a5526e5335aaea478599341\npolicy=df28b0a0ed912e9b341053f9c0be5c6f453e771ae233e613de4da2e0e492b5c6\nrendered=ce6c74decc882c17cb08524f4e5813e84bfc9835fbe3ece9438f5ab07fc564ff\nsurface=49057fc8c417526c0161d3384193da69a44a2f59189a479a157c2fc1071f04ef\n",
+        "semantic_digest": "e25d820095050fea79a2092a078a3b8915a0ae6197f4970b46453fdf02164d53"
+      }
+    },
+    {
+      "path": "scripts/lc631/crates/lc631-cli/src/effect_error.rs",
+      "bytes": 4796,
+      "sha256": "449d90de9471d6e4f54b37a010e606bca9e6ae7f23c4598b165f7d1b28ac7b3a",
+      "result": {
+        "command": "compile",
+        "fields": {
+          "diagnostics": 8,
+          "evidence": "missing_or_unknown",
+          "graph_digest": "8d77ed2b23d619ecb6fdca4c4dad9aea2b0efd774de8be581fedcea9202a7a16",
+          "input_digest": "e6668fee61357a9aac8adbe072ac3e8fea24d78f7ecd375a8143a07dac4196fa",
+          "nodes": 10,
+          "status": "blocked_with_diagnostics"
+        },
+        "replay_reference": "ASSURANCE-REPLAY-REF-V2\ninput=e6668fee61357a9aac8adbe072ac3e8fea24d78f7ecd375a8143a07dac4196fa\ngraph=8d77ed2b23d619ecb6fdca4c4dad9aea2b0efd774de8be581fedcea9202a7a16\nstate=a3462b94782d3d73793b106c26d4b0f13d422c717d54890838212351a0b9da8a\nplan=6a6f8f2d5028ce8ca3a7007f1c365ddcf9da2f87c39385c730de10d281b3f634\nomission=34e178d3d0bac0472aa4dce50fc3df913a05b7b1b8433e1a9341b8b2b5034d9f\npolicy=df28b0a0ed912e9b341053f9c0be5c6f453e771ae233e613de4da2e0e492b5c6\nrendered=c1092097de6a0515ca48b4d75304d4caacb38a7d335b0559c688e96993a8e15f\nsurface=e8d1d6581cdf560c654f8368cbde4752710092272ca8cb1b03029bf9b5567c3e\n",
+        "semantic_digest": "f33ddbed65dfc6d5a5fead1f810532b4e0087814406af61ed2fa42d236eafbe8"
+      }
+    }
+  ],
+  "current_source_review": {
+    "source_commit": "ea4dfcdfffac90261305b711d374ed2ae383e6a6",
+    "scope": "Complete current selected units, not whole-repository coverage; preserve every evidence gap",
+    "observations": [
+      {
+        "path": "scripts/lc631/crates/lc631-process-supervisor/src/bounded.rs",
+        "bytes": 16346,
+        "sha256": "1526ff154429c162dd40dd7d3d6779f92731b07011841414d54ec321aceb568e",
+        "result": {
+          "command": "compile",
+          "fields": {
+            "diagnostics": 9,
+            "evidence": "missing_or_unknown",
+            "graph_digest": "801fdd455659b539e436d3f6a6b74456ec05011814687369d091702e669a7562",
+            "input_digest": "26eaa13c729254cd518ebafac42a1a158ed6b77fc55a9052e34c7b86495f94e5",
+            "nodes": 40,
+            "status": "blocked_with_diagnostics"
+          },
+          "replay_reference": "ASSURANCE-REPLAY-REF-V2\ninput=26eaa13c729254cd518ebafac42a1a158ed6b77fc55a9052e34c7b86495f94e5\ngraph=801fdd455659b539e436d3f6a6b74456ec05011814687369d091702e669a7562\nstate=3d16a36fee83b1eff2d0a0e0be3e14d4e5d64f2807d8a44838ca3afee60da008\nplan=6e777d37f98cf5669a9f7899fd04f485c084896c0d1018a5ff3f1424fff7e9eb\nomission=b6d19101f5b9ae385cf94683b928661b5f99623ca40d41bcd80dd9ff8d7608e7\npolicy=df28b0a0ed912e9b341053f9c0be5c6f453e771ae233e613de4da2e0e492b5c6\nrendered=d3906713d2f272439b0524ff99be3f6ee133308724e1abad9375459fc1a4e7a2\nsurface=8cd2c93dcfe1c41c9b0f2cbe989a7d728e184caa5f4069c68508a72208792e3d\n",
+          "semantic_digest": "998b01c8fa44163cb01b1ab59b46de6f10781ef987cfd14a86bd4de165f43906"
+        }
+      },
+      {
+        "path": "scripts/lc631/crates/lc631-process-supervisor/src/unix.rs",
+        "bytes": 6017,
+        "sha256": "a5f2805322accb3e3d09ea1a0b4d58aa63044cc0899ae88601884fad0324ee18",
+        "result": {
+          "command": "compile",
+          "fields": {
+            "diagnostics": 6,
+            "evidence": "missing_or_unknown",
+            "graph_digest": "5d3179b50e011f6ab371eb5c3e9d8340b37b43a29c56c3eff7b77b7d2d5e7fb5",
+            "input_digest": "75976f00c5416e1c8d678eb68b4355c87ec5e150c1f04bbb07fa5c70586e7bf2",
+            "nodes": 23,
+            "status": "blocked_with_diagnostics"
+          },
+          "replay_reference": "ASSURANCE-REPLAY-REF-V2\ninput=75976f00c5416e1c8d678eb68b4355c87ec5e150c1f04bbb07fa5c70586e7bf2\ngraph=5d3179b50e011f6ab371eb5c3e9d8340b37b43a29c56c3eff7b77b7d2d5e7fb5\nstate=c52c20f65e26c6e04903cf0d1b661fe1d2a3b00d8044606f21de0b4d8e57596f\nplan=66684cb7ce3417a7c672d48b4288583bb3003df2bf4bbb8ca68cdda24f19f54c\nomission=d66c6bc2e9a7d9ed26af5e85fb65175d9024a7e4a21460005bf344762c9d1ebb\npolicy=df28b0a0ed912e9b341053f9c0be5c6f453e771ae233e613de4da2e0e492b5c6\nrendered=8c80244e73283a1bde857fdb7fb5fa951a4abda22da8407469653f765213e8e6\nsurface=be8178b95edc92c6bb0412f2d9b81009d9b4ad31cea8e036e30be530874750ad\n",
+          "semantic_digest": "0a8bd2d3eb48159caa79c025ec7497dbfd548b733aff462c9e2ed00227414fc1"
+        }
+      },
+      {
+        "path": "scripts/lc631/crates/lc631-process-supervisor/src/filesystem.rs",
+        "bytes": 8463,
+        "sha256": "c3c981db61cc222d8d06e87692b496ab270078450424252faf02463b387622e9",
+        "result": {
+          "command": "compile",
+          "fields": {
+            "diagnostics": 13,
+            "evidence": "missing_or_unknown",
+            "graph_digest": "ae6614bc6c24f7928e5e590076cadccb649465a6ccd4d5f97872da40816de333",
+            "input_digest": "3dbbd5c4e04c957ab203b0691c5cf3dba8c1cb450c59adfd5268fa9b14261fea",
+            "nodes": 31,
+            "status": "blocked_with_diagnostics"
+          },
+          "replay_reference": "ASSURANCE-REPLAY-REF-V2\ninput=3dbbd5c4e04c957ab203b0691c5cf3dba8c1cb450c59adfd5268fa9b14261fea\ngraph=ae6614bc6c24f7928e5e590076cadccb649465a6ccd4d5f97872da40816de333\nstate=0a967444614cffe6f883f3e473ee458b55484980ccc241ddaf9fd3a94040756f\nplan=e1aaa3b2df38ffdedec712ae1393a59b9aa95bf42be176409ac90aad64310698\nomission=becb63121936027a9f32f3a42f5f2657fb648c2255360b5588f051edd42a479a\npolicy=df28b0a0ed912e9b341053f9c0be5c6f453e771ae233e613de4da2e0e492b5c6\nrendered=823d2cfe75e524d1e3eccb4cde8ff0553516ab8a33925926675c145b2990d837\nsurface=0d74b07ffc840e0c002b838ec93d1df860ae17bf6d599e8ee5ce6bc692b3eacb\n",
+          "semantic_digest": "d89d7191cd824660475f908155b8a1714585ae6027eb24a3e452b3e8836495c0"
+        }
+      },
+      {
+        "path": "scripts/lc631/crates/lc631-analysis/src/production_connection.rs",
+        "bytes": 15635,
+        "sha256": "ba70e00e4e008ca1525e4eabda7ad5eb01b2369b20577d48145d3ec2573c78f7",
+        "result": {
+          "command": "compile",
+          "fields": {
+            "diagnostics": 0,
+            "evidence": "missing_or_unknown",
+            "graph_digest": "594888eaf049fabcd3e3ca55c2bb44db770a2d4abaca226c3e75e56d123b9e03",
+            "input_digest": "295376aaffe06f9d8ae3817d2ec0e85092395f6d103c107e3d03b8bd5147480e",
+            "nodes": 20,
+            "status": "needs_evidence"
+          },
+          "replay_reference": "ASSURANCE-REPLAY-REF-V2\ninput=295376aaffe06f9d8ae3817d2ec0e85092395f6d103c107e3d03b8bd5147480e\ngraph=594888eaf049fabcd3e3ca55c2bb44db770a2d4abaca226c3e75e56d123b9e03\nstate=a52d5c9a581a0f5f328699bbd6a6af67dab37b6cee281f4dfc00a35cef87872c\nplan=f005f7322b1f7003dc42308e22d411567d30208bf62b13d3d1094af6826b5a0c\nomission=cce3253476e21997734021751009c775c46dd6068675df86fb08be77826486a0\npolicy=df28b0a0ed912e9b341053f9c0be5c6f453e771ae233e613de4da2e0e492b5c6\nrendered=9465b0551cd63a614bf69a042a1f9a5fa49bc5a3c24ca88f205a57629b44cc8d\nsurface=a5d8697b3959b07845397c20a16ae5b0c63a8ff27b2d6321b05bd01c0c749090\n",
+          "semantic_digest": "1ca8edcb25a040f488462fb95f6158a6ed6594907bfcdb49226963196ee4ed1d"
+        }
+      },
+      {
+        "path": "scripts/lc631/crates/lc631-cli/src/effect_error.rs",
+        "bytes": 5567,
+        "sha256": "8383e1738208aeda351fc6508f1eab776cc108694da9f710156826d8db92d2e6",
+        "result": {
+          "command": "compile",
+          "fields": {
+            "diagnostics": 8,
+            "evidence": "missing_or_unknown",
+            "graph_digest": "a984b39d427811c1e29606028d625c7eb27072cdbf11b3ec693a152972c3407c",
+            "input_digest": "3aed15073b8c605de0ef0ad3384462125db6ebc0d584a88cb26122dfc31a5f11",
+            "nodes": 12,
+            "status": "blocked_with_diagnostics"
+          },
+          "replay_reference": "ASSURANCE-REPLAY-REF-V2\ninput=3aed15073b8c605de0ef0ad3384462125db6ebc0d584a88cb26122dfc31a5f11\ngraph=a984b39d427811c1e29606028d625c7eb27072cdbf11b3ec693a152972c3407c\nstate=9977cd73ec55d29f3d626f5e6cc3490435ae093f55fb4ff8532a66489e5c78a8\nplan=6854b67152cb7794543b942d8122322e84ec10af3c26867269c2ce7dcbc321a3\nomission=58c3f44dbbc374038dfc73ba70f029f3d09eacb17f2ef6ed2f2026261effbe5e\npolicy=df28b0a0ed912e9b341053f9c0be5c6f453e771ae233e613de4da2e0e492b5c6\nrendered=114bfff50ad4ce457b57525eeacd06d38c3d4b62b3908882e3b79d9df3009f4e\nsurface=ca4d7e8f0276ef2b2d017610e8d0ee6b99e6617db88a7bc73574afc4010abeee\n",
+          "semantic_digest": "23fec0bf8b6817896914bec1a6bcf047db3d6720ec285a8d3f9ca8909eb4379a"
+        }
+      }
+    ]
+  },
+  "clock_followup_review": {
+  "source_commit": "4ec1f3f2b41bc3d775f11cc3e84e580d80fa8610",
+    "scope": "Complete file-repair unit only; coordinator and repository remain outside this bounded surface",
+    "observations": [
+      {
+        "path": "scripts/lc631/crates/lc631-analysis/src/file_repair.rs",
+        "bytes": 13817,
+        "sha256": "aa1defd76f3d4b5cf1462e92a349fdaf7a084e679c5a413f5d0d6837d0d861b7",
+        "result": {
+          "command": "compile",
+          "fields": {
+            "diagnostics": 2,
+            "evidence": "missing_or_unknown",
+            "graph_digest": "dc4a1dea62c8c4071bd8d516c1afe595a24eef480e37670d9cc639d527fb651e",
+            "input_digest": "bf3f9c777322d6667c34fc71203e37f24ec15d9bf9810575360c3adb757c8469",
+            "nodes": 15,
+            "status": "blocked_with_diagnostics"
+          },
+          "replay_reference": "ASSURANCE-REPLAY-REF-V2\ninput=bf3f9c777322d6667c34fc71203e37f24ec15d9bf9810575360c3adb757c8469\ngraph=dc4a1dea62c8c4071bd8d516c1afe595a24eef480e37670d9cc639d527fb651e\nstate=312109c9eef45e08a4d12af748870d71ab66e279985163fb214c04d532f9c51e\nplan=8ce33415b58d5239aa7463caad6a5675500b202971ff65e4ef53135fc4c5598c\nomission=545b0583eae3fac225e3c1a96d9ca05fe8203960f4d13deb2549218e4d43c09f\npolicy=df28b0a0ed912e9b341053f9c0be5c6f453e771ae233e613de4da2e0e492b5c6\nrendered=576544f6d25adf6e8602d6a8104175f17eef63f42982a69ac8231531dabd7fd6\nsurface=e0642d27b5d806423bf8036ad1ffdf140118037fe0aab7ef9930f9f50d78d69d\n",
+          "semantic_digest": "c703235175a17029d3b414374265fc3e2a0af7041cdf610d494c1a476601c834"
+        }
+      }
+    ]
+  },
+  "claim_boundary": "Preserve blocked/needs_evidence/unknown; these are advisory parser/review surfaces, not proof, merge approval or execution authority"
+}
