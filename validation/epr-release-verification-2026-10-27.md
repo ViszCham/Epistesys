@@ -8,6 +8,8 @@
 
 この記録は、EPR-00〜19の既知境界欠陥と追加反例に対するsource/build/CLIの観測を扱う。研究仮説の成立、独立semantic gold、未知欠陥ゼロ、OS-wide sandbox、実host activationを認証しない。[個別台帳](epr-remediation-ledger.v1.json)の未完了項目を、[残存条件](epr-residual-risk-ledger.v1.json)へ移して完了にしない。
 
+再開後の固定`1e3de5c`に対する[昇格前観測](epr-prepromotion-observations-2026-10-27.json)は、local Windowsの13 command成功、409件の各feature系test summary、実日英backend、実GPU、CPU ASR候補を保持する。Linux CIは全step成功、Windows CIは500msのcleanup正例で1件失敗したため、昇格許可はfalseのまま。C9のtest-only補正、全CIとfull-helperの後続確認を待つ。package初回の4件失敗を同じpackageの6件再実行成功で消去せず、根因未特定として残す。
+
 ### 昇格前の観測
 
 | 観測 | 状態・範囲 |
@@ -20,7 +22,7 @@
 | 実GPU | RTX 3060/Vulkanで2,048 rows、empty/diagonal/mask/ceilingの限定parityを観測。native completion、summary/mask/finalist/decision digestの範囲。全vector・occupancy・speedupは未成立 |
 | 固定commit配布 | `cfe29f89403f44ed1cd55552cf652c7c11cb3425`のsource-only packageを別の新規一時rootへ展開し、release buildと実CLI 5件成功。214 files、members digest `sha256:5c9295707a7a5c043bf977bfdc0d2c788fa84dc99ddcf46856562cc106fe130f`。最終identityの配布検証ではない |
 | CI負例 | [PR #6](https://github.com/ViszCham/Epistesys/pull/6)でRust-only sentinelを意図的に変更し、Windows/Linuxとも該当testで失敗を観測。負例PRはunmergedでclosed。失敗を成功に読み替えていない |
-| CI正例 | [PR #5](https://github.com/ViszCham/Epistesys/pull/5)で確認中。Windows producerのpath identity差を調査中であり、local passで代用しない |
+| CI正例 | [run 40414261803 attempt 2](https://github.com/ViszCham/Epistesys/actions/runs/40414261803)でLinuxは全step成功。Windowsはcleanup正例の`orphan_risk`検査で1件失敗し、後続stepはskip。local成功で代用せず、C9後の全CIを必要とする |
 
 以前の全体gateの失敗も保持する。初回は長いtest operationで有限receiptを使い回して期限切れとなり、test hostによるoperation別の新規発行へ修正した。cold CIのcompiler fingerprint期限はtest-onlyの正例予算を修正し、期限切れ負例は維持した。別の全体gateでは追加したFaceDetectionに対する古い16-family期待値が失敗し、17-familyの網羅・重複・method ID検査へ修正した。これらの修正後、全体gateの再実行が必要である。
 
@@ -56,6 +58,8 @@
 
 This record covers source/build/CLI observations for known EPR-00–19 boundary findings and related counterexamples. It certifies neither research hypotheses, independent semantic gold, zero unknown defects, OS-wide sandboxing, nor real-host activation. Do not discharge unresolved [individual findings](epr-remediation-ledger.v1.json) by moving them into the [residual ledger](epr-residual-risk-ledger.v1.json).
 
+The resumed fixed-`1e3de5c` [prepromotion observations](epr-prepromotion-observations-2026-10-27.json) retain 13 passing local Windows commands, 409 passing test-summary cases in each feature profile, actual Japanese/English workers, GPU execution, and CPU-ASR candidates. Linux CI passed every step; Windows CI failed one 500ms cleanup positive, so promotion remains false pending C9's test-only fixture correction, complete CI, and full-helper follow-up. Preserve the package's initial four failures separately from the same package's six passing retries; their root cause remains unresolved.
+
 ### Pre-promotion observations
 
 | Observation | State/scope |
@@ -68,7 +72,7 @@ This record covers source/build/CLI observations for known EPR-00–19 boundary 
 | Actual GPU | RTX 3060/Vulkan observations cover 2,048 rows plus empty/diagonal/mask/ceiling cases, native completion, summaries/masks/finalists/decision digests. Full-vector equality/occupancy/speedup remain unestablished |
 | Fixed-commit distribution | Source-only commit `cfe29f89403f44ed1cd55552cf652c7c11cb3425` expanded into a new separate temporary root; release build and five real CLI tests passed. 214 files; members digest `sha256:5c9295707a7a5c043bf977bfdc0d2c788fa84dc99ddcf46856562cc106fe130f`. Not final-identity distribution validation |
 | CI negative | [PR #6](https://github.com/ViszCham/Epistesys/pull/6) deliberately changed a Rust-only sentinel; Windows/Linux failed in that test. Closed unmerged. Intentional failure is not relabeled success |
-| CI positive | In progress in [PR #5](https://github.com/ViszCham/Epistesys/pull/5). Windows producer path identity is under investigation; local passes do not substitute for it |
+| CI positive | [Run 40414261803 attempt 2](https://github.com/ViszCham/Epistesys/actions/runs/40414261803) passed all Linux steps. Windows failed one cleanup-positive `orphan_risk` check; later steps were skipped. Local success does not substitute for complete post-C9 CI |
 
 Retain earlier whole-gate failures. A long fixture reused finite receipts beyond expiry; the test host now issues fresh operation-specific material. Cold compiler fingerprinting required a test-only positive budget correction, preserving expiry negatives. Another gate found a stale 16-family expectation after FaceDetection was added; it now checks all 17 families, duplicates, and method IDs. Complete gates must rerun after these corrections.
 

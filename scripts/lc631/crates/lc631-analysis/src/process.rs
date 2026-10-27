@@ -416,9 +416,23 @@ mod tests {
     use super::*;
     use std::io::Write;
     use std::process::{Command, Stdio};
+    use std::sync::{Mutex, MutexGuard};
+
+    // These fixtures observe an admitted child, not competition between
+    // unrelated test threads for the shared two-run supervisor. Admission
+    // saturation has its own negative integration test. Helper subprocesses
+    // deliberately do not acquire this process-local fixture lock.
+    static PROCESS_FIXTURE: Mutex<()> = Mutex::new(());
+
+    fn process_fixture() -> MutexGuard<'static, ()> {
+        PROCESS_FIXTURE
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
 
     #[test]
     fn rustc_version_is_bounded_and_observed_when_available() {
+        let _fixture = process_fixture();
         // Cold Windows CI also fingerprints a large compiler executable. This
         // positive observation has an explicit budget; it is not a latency gate.
         let output = run_bounded_tool(BoundedToolRequest {
@@ -429,8 +443,8 @@ mod tests {
             stdout_limit: 4096,
             stderr_limit: 4096,
         });
-        assert_eq!(output.state, ToolRunState::Observed);
-        assert!(!output.stdout.is_empty());
+        assert_eq!(output.state, ToolRunState::Observed, "{output:?}");
+        assert!(!output.stdout.is_empty(), "{output:?}");
     }
 
     #[test]
@@ -494,6 +508,7 @@ mod tests {
 
     #[test]
     fn pipe_drain_is_inside_the_tool_deadline_even_if_a_descendant_holds_a_pipe() {
+        let _fixture = process_fixture();
         #[cfg(windows)]
         {
             let executable = std::env::current_exe().unwrap();
@@ -511,10 +526,10 @@ mod tests {
                 stdout_limit: 4_096,
                 stderr_limit: 4_096,
             });
-            assert!(started.elapsed() < Duration::from_secs(2));
-            assert!(output.timed_out);
-            assert!(output.process_tree_kill_attempted);
-            assert!(output.process_tree_kill_verified);
+            assert!(started.elapsed() < Duration::from_secs(2), "{output:?}");
+            assert!(output.timed_out, "{output:?}");
+            assert!(output.process_tree_kill_attempted, "{output:?}");
+            assert!(output.process_tree_kill_verified, "{output:?}");
         }
         #[cfg(unix)]
         {
@@ -527,49 +542,46 @@ mod tests {
                 stdout_limit: 4_096,
                 stderr_limit: 4_096,
             });
-            assert!(started.elapsed() < Duration::from_secs(2));
-            assert!(output.timed_out);
-            assert!(output.process_tree_kill_attempted);
-            assert!(output.process_tree_kill_verified);
+            assert!(started.elapsed() < Duration::from_secs(2), "{output:?}");
+            assert!(output.timed_out, "{output:?}");
+            assert!(output.process_tree_kill_attempted, "{output:?}");
+            assert!(output.process_tree_kill_verified, "{output:?}");
         }
     }
 
     #[test]
     fn lone_root_is_terminated_and_reaped_through_the_production_adapter() {
-        #[cfg(windows)]
-        let executable = std::path::PathBuf::from(
-            std::env::var_os("SystemRoot").expect("Windows requires SystemRoot"),
-        )
-        .join("System32/WindowsPowerShell/v1.0/powershell.exe");
-        #[cfg(windows)]
+        let _fixture = process_fixture();
+        let executable = std::env::current_exe().unwrap();
         let program = executable.to_str().unwrap();
-        #[cfg(unix)]
-        let program = "/bin/sleep";
-        #[cfg(windows)]
         let args: &[&str] = &[
-            "-NoLogo",
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            "[System.Threading.Thread]::Sleep(60000)",
+            "--exact",
+            "process::tests::deadline_helper_child",
+            "--nocapture",
         ];
-        #[cfg(unix)]
-        let args: &[&str] = &["4"];
+        let started = Instant::now();
         let output = run_bounded_tool(BoundedToolRequest {
             program,
             args,
-            // The small system executable keeps this 500 ms test about an
-            // actually started root, not a cold fingerprint of this test binary.
-            stdin: None,
-            timeout_ms: 500,
+            // This positive cleanup observation has finite scheduling margin.
+            // A 500 ms request may correctly retain Unknown pipe cleanup; the
+            // separate short-deadline negative above remains unchanged.
+            // The owned Rust helper avoids shell/runtime initialization under
+            // the adapter's deliberately sanitized environment and Job limits.
+            stdin: Some(b"sleep"),
+            timeout_ms: 1_500,
             stdout_limit: 4_096,
             stderr_limit: 4_096,
         });
-        assert_eq!(output.state, ToolRunState::TimedOut);
-        assert!(output.process_tree_kill_attempted);
-        assert!(output.process_tree_kill_verified);
-        assert!(output.orphan_risk.starts_with("none_observed_within_"));
-        assert!(!output.network_isolation_os_enforced);
+        assert!(started.elapsed() < Duration::from_secs(3), "{output:?}");
+        assert_eq!(output.state, ToolRunState::TimedOut, "{output:?}");
+        assert!(output.process_tree_kill_attempted, "{output:?}");
+        assert!(output.process_tree_kill_verified, "{output:?}");
+        assert!(
+            output.orphan_risk.starts_with("none_observed_within_"),
+            "{output:?}"
+        );
+        assert!(!output.network_isolation_os_enforced, "{output:?}");
     }
 
     #[allow(clippy::zombie_processes)] // The helper must exit while its child intentionally retains a pipe.
