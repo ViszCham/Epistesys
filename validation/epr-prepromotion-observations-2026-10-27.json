@@ -324,7 +324,7 @@
     "evidence": "missing_or_unknown",
     "scope": "Complete selected source units only; no new doctor call, proof, runtime-safety or repository-wide claim."
   },
-  "closure": "Not complete: post-C9 complete CI/full-helper, alpha.3 identity gates, and final audits remain required.",
+  "closure": "Historical 1e3de5c remains non-promotable. Post-C9 alpha.2 gates passed at 91009e6 and permit preparing an alpha.3 source candidate; alpha.3 identity gates and final audits remain pending.",
   "c9_fixture_followup": {
     "scope": "Test-only changes in lc631-analysis/src/process.rs; production prefix unchanged.",
     "source_bytes": 21911,
@@ -340,7 +340,240 @@
     },
     "retained_intermediate_failure": "The 1500ms external-PowerShell fixture exited on .NET ServicePointManager initialization failure before sleep; it was replaced by the owned native helper without widening the product environment or changing success predicates.",
     "assurance_scope": "The complete 21911-byte process unit exceeds the 16KiB source-review limit and was not fragmented or claimed audited.",
-    "current_complete_ci": "Pending",
-    "full_fixed_commit_helper": "Pending"
+    "current_complete_ci": "Passed on Windows and Ubuntu at 91009e667819c8e5bb63073524f49c6c8f2d1452; run40460105619",
+    "full_fixed_commit_helper": "Passed exit0 at 91009e667819c8e5bb63073524f49c6c8f2d1452"
+  },
+  "post_c9_pre_promotion": {
+    "source_commit": "91009e667819c8e5bb63073524f49c6c8f2d1452",
+    "tested_source_version": "6.3.2-alpha.2",
+    "target_source_candidate": "6.3.2-alpha.3",
+    "all_required_pre_promotion_gates_passed": true,
+    "local_windows_commands": [
+      {
+        "exit_code": 0,
+        "arguments": [
+          "fmt",
+          "--all",
+          "--check"
+        ],
+        "elapsed_ms": 1832,
+        "label": "format",
+        "program": "cargo",
+        "output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "exit_code": 0,
+        "arguments": [
+          "check",
+          "--workspace",
+          "--locked",
+          "--offline",
+          "--target-dir",
+          "<owned-build-target>"
+        ],
+        "elapsed_ms": 33279,
+        "label": "check",
+        "program": "cargo",
+        "output_sha256": "458b0e68b9e951e7b236890b367c475b2898445e2d9b28b88831e6135e7519ad"
+      },
+      {
+        "exit_code": 0,
+        "arguments": [
+          "test",
+          "--workspace",
+          "--no-default-features",
+          "--locked",
+          "--offline",
+          "--target-dir",
+          "<owned-build-target>"
+        ],
+        "elapsed_ms": 237287,
+        "label": "no-default-tests",
+        "program": "cargo",
+        "output_sha256": "561c0189e503ecdf49a07bdc7ef1d8563f75903e21db10b1bd3c4b278f1c08ac"
+      },
+      {
+        "exit_code": 0,
+        "arguments": [
+          "test",
+          "--workspace",
+          "--locked",
+          "--offline",
+          "--target-dir",
+          "<owned-build-target>"
+        ],
+        "elapsed_ms": 317715,
+        "label": "default-tests",
+        "program": "cargo",
+        "output_sha256": "c07411f28d2dcce1ae379eb31da664673f21d43001bdf2d50ac14c23a6853a95"
+      },
+      {
+        "exit_code": 0,
+        "arguments": [
+          "clippy",
+          "--workspace",
+          "--all-targets",
+          "--locked",
+          "--offline",
+          "--target-dir",
+          "<owned-build-target>",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "elapsed_ms": 18293,
+        "label": "strict-clippy",
+        "program": "cargo",
+        "output_sha256": "bc173c6c8c39760de23f82a6fa5e53cee27dd1ccfa37444cf7e6fae47c6d4edc"
+      },
+      {
+        "exit_code": 0,
+        "arguments": [
+          "build",
+          "--workspace",
+          "--release",
+          "--locked",
+          "--offline",
+          "--target-dir",
+          "<owned-build-target>"
+        ],
+        "elapsed_ms": 61736,
+        "label": "release",
+        "program": "cargo",
+        "output_sha256": "448258651ef0dba188c5aef386e93ce6f04789b48144bf323b42524a398b24e9"
+      },
+      {
+        "exit_code": 0,
+        "arguments": [
+          "test",
+          "-p",
+          "lc631-analysis",
+          "--test",
+          "epr_parser_progress",
+          "--release",
+          "--locked",
+          "--offline",
+          "--target-dir",
+          "<owned-build-target>",
+          "--",
+          "--test-threads=1"
+        ],
+        "elapsed_ms": 33712,
+        "label": "release-parser",
+        "program": "cargo",
+        "output_sha256": "803e3b5aac1c1624570a28aa0e6a311e68feba66d23ccc58a33818a8314421d5"
+      },
+      {
+        "exit_code": 0,
+        "arguments": [
+          "-B",
+          "workers/test_dgcl_nlp_worker.py"
+        ],
+        "elapsed_ms": 735,
+        "label": "worker-lock-tests",
+        "program": "python",
+        "output_sha256": "7d4980533fb9ded4fe611c54f097468c3583a27125b4c3362d7bfb3a3b399d3c"
+      },
+      {
+        "exit_code": 0,
+        "arguments": [
+          "-B",
+          "workers/test_pinned_bytes.py"
+        ],
+        "elapsed_ms": 321,
+        "label": "pinned-byte-tests",
+        "program": "python",
+        "output_sha256": "5cdbffd31b7242c44d28acfa6df9d4c4c928766eb021c07f23aba7494e68479e"
+      },
+      {
+        "exit_code": 0,
+        "arguments": [
+          "-B",
+          "workers/test_media_backend.py"
+        ],
+        "elapsed_ms": 345,
+        "label": "media-wire-tests",
+        "program": "python",
+        "output_sha256": "43fc49a6bc78a30f15d0ebfa434ee6f3dde09b32ab950e74ce95995f805892bd"
+      },
+      {
+        "exit_code": 0,
+        "arguments": [
+          "-B",
+          "../test_media_resources.py"
+        ],
+        "elapsed_ms": 1390,
+        "label": "media-resource-tests",
+        "program": "python",
+        "output_sha256": "875ed2f62f20f510f85d4691a9f9670d4ae1addc8bd7c3cd2a57356f474d3757"
+      },
+      {
+        "exit_code": 0,
+        "arguments": [
+          "test",
+          "-p",
+          "lc631-cli",
+          "--test",
+          "cli_contract",
+          "dgcl_run_configured_stanza_profile_returns_one_candidate_and_keeps_truth_unclaimed",
+          "--locked",
+          "--offline",
+          "--target-dir",
+          "<owned-build-target>",
+          "--",
+          "--exact"
+        ],
+        "elapsed_ms": 55415,
+        "label": "configured-ja-en",
+        "program": "cargo",
+        "output_sha256": "034f075e077ccf46efeb76c6b6f6ce367c3df7f11293733c8db7d3dd68ba1ae5"
+      },
+      {
+        "exit_code": 0,
+        "arguments": [
+          "test",
+          "-p",
+          "lc631-accelerator",
+          "--test",
+          "epr_numeric_contract",
+          "--release",
+          "--locked",
+          "--offline",
+          "--target-dir",
+          "<owned-build-target>",
+          "epr_06_actual_gpu_parity_including_empty_edges",
+          "--",
+          "--ignored",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "elapsed_ms": 3239,
+        "label": "actual-gpu",
+        "program": "cargo",
+        "output_sha256": "c12828a597aae6fb003a4fc241548e211c4e3cf6a9b3027297d91e07bbc285e4"
+      }
+    ],
+    "remote_ci": {
+      "url": "https://github.com/ViszCham/Epistesys/actions/runs/40460105619",
+      "windows": "success",
+      "ubuntu": "success",
+      "windows_elapsed_seconds": 789,
+      "ubuntu_elapsed_seconds": 413,
+      "windows_normalized_log_sha256": "68e4c12a99c98fa0d37431deaeaecf3971dfcbc12695296f1267a7b565819210",
+      "ubuntu_normalized_log_sha256": "073e507e2fcbe3b14c8f5e284f5a1d9b3fa9a3b7a5d9490415d2348c7cc71382"
+    },
+    "full_fresh_package": {
+      "exit_code": 0,
+      "elapsed_ms": 382033,
+      "built_and_tested": true,
+      "members": 216,
+      "members_digest": "sha256:23e86d8dc64aba22316ef3a2df8d7de3a93ac42ed03bc2f3c6b9edc19e75135a",
+      "real_cli_tests_passed": 6,
+      "all_member_hashes_rechecked": true,
+      "output_sha256": "b214af3da3bcfa00a3e03014564761bccd3792df82ff999c36f95dc483187f23"
+    },
+    "selected_input_currentness": "Media, core/TL/receipt/supervisor, workers, fixtures, schemas, schema validators and packaging scripts unchanged from the separately identified 1e3de5c observations. This is selected-input equality, not whole-repository or alpha.3 evidence.",
+    "authority_boundary": "A source-release engineering decision, not mutation/host authority or research proof.",
+    "post_alpha3_identity_gates": "Pending; do not claim source release readiness from these alpha.2 gates."
   }
 }

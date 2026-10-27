@@ -4,9 +4,9 @@
 
 ### 対象と境界
 
-対象はEpistesys `6.3.2-alpha.2`のsource実装です。本書は、LLMが生成する候補と、要求・操作権限・検証証拠・出力状態を管理する制御系を分離して記述します。モデルweightの変更、任意自然言語の完全理解、全host操作の強制制御は実装範囲に含めません。
+対象はEpistesys `6.3.2-alpha.3`のsource実装です。本書は、LLMが生成する候補と、要求・操作権限・検証証拠・出力状態を管理する制御系を分離して記述します。モデルweightの変更、任意自然言語の完全理解、全host操作の強制制御は実装範囲に含めません。
 
-現在の参照点は[alpha.2 release notes](epistesys-6.3.2-alpha.2-release-notes-2026-10-02.md)と[最終検証](../validation/epia2-alpha2-release-verification-2026-10-02.md)です。実行条件の詳細は[DGCL実行契約](dgcl-operating-profile-and-closure.md)、wireの条件は[互換性文書](dgcl-wire-compatibility.md)に分離しています。
+現在の参照点は[alpha.3 release notes](epistesys-6.3.2-alpha.3-release-notes-2026-10-27.md)と[alpha.3検証記録](../validation/epr-release-verification-2026-10-27.md)です。実行条件の詳細は[DGCL実行契約](dgcl-operating-profile-and-closure.md)、wireの条件は[互換性文書](dgcl-wire-compatibility.md)に分離しています。
 
 <a id="terminology-ja"></a>
 
@@ -50,7 +50,7 @@ DeepGrammarは本プロジェクトの解析module名です。現行は次の構
 
 - pin済みCommonMark event parserによる文書領域と、Rust tree-sitter CST。
 - 日英Stanza dependency workerを利用する構成と、外部モデルなしの構成の区別。worker／model／runtimeのpin不足は診断付き失敗として扱う。
-- 予算付き指示文法。alpha.2の参照記録は`controlled-ja-en-instruction-earley.v2`、EPR候補のsource revisionは`controlled-ja-en-instruction-earley.v3`。否定・条件右辺・scope・参照・依存等を保持し、混在booleanの優先順位や未確定predicate truthを選択しない。
+- 予算付き指示文法。alpha.2の参照記録は`controlled-ja-en-instruction-earley.v2`、alpha.3のsource revisionは`controlled-ja-en-instruction-earley.v3`。否定・条件右辺・scope・参照・依存等を保持し、混在booleanの優先順位や未確定predicate truthを選択しない。
 - 同一source identityからProgram IR、TL、completion plan、candidateまでの追跡。公開reportの成功flagは検証済みconstructorの代わりにならない。
 
 source roundtripは原文byteの保存を表します。意味理解の正確性、一般文法の網羅性、独立goldへの一致率は別の評価対象です。
@@ -69,7 +69,7 @@ Coding Projectorは、Epistesysを明示選択した利用者の依頼をDGCLへ
 
 判定は抽出・登録された要求と計画に束縛されます。要求抽出の漏れ、実装bindingの意味的妥当性、受入oracleの網羅性は、それぞれ評価を要します。登録経路の到達観測を、全呼出し経路や配備済みサービスの検証へ拡張しません。
 
-Codingでは、compiler check、library runtime test、production API接続呼出し、acceptance testを別run／taskの観測として扱います。runの分離だけではoracleの独立性を証明しません。登録tool、外部Authority receipt、独立intent bindingを必要とします。EPR候補の`DgclConnectionSpec`は登録driverの直接public API呼出しとpin済みassertionを扱い、genericな`--lib`成功、推移的なexecutor到達、hermetic buildを保証しません。
+Codingでは、compiler check、library runtime test、production API接続呼出し、acceptance testを別run／taskの観測として扱います。runの分離だけではoracleの独立性を証明しません。登録tool、外部Authority receipt、独立intent bindingを必要とします。alpha.3の`DgclConnectionSpec`は登録driverの直接public API呼出しとpin済みassertionを扱い、genericな`--lib`成功、推移的なexecutor到達、hermetic buildを保証しません。
 
 CLIのpackage finalizerは条件なしRequired要求の限定profileを扱います。repairは呼出側が提供したreplacementを、既存Rust fileとrepository/fileのscopeに束縛して適用し、修復前bytesを非上書きbackupへ保存します。変更後snapshotと新しいreceiptで要求を再検証します。SDK repair coordinatorの予算は最大4回ですが、現在のpackage repair CLIは1件のrequestとreplacementを渡します。NoProgress、cycle、stale/expired evidence、未確認作用を区別します。詳細は[DGCL実行契約](dgcl-operating-profile-and-closure.md)に集約しています。
 
@@ -83,7 +83,7 @@ CLIのpackage finalizerは条件なしRequired要求の限定profileを扱いま
 
 GPUの数値経路、CPUとのparity、readback、device timing、overlap、occupancy、device-loss callbackは個別の観測対象です。実装の存在や短いGPU試験を、全hardwareの飽和・常時高速化・研究効果へ読み替えません。
 
-EPR候補はCPU/GPUのsummaryとtop-16候補の対応を検査します。この比較をfull-vector parityや全候補の意味的等価性へ拡張せず、CPU final validationとhardwareのoccupancy／saturationも別に扱います。
+alpha.3はCPU/GPUのsummaryとtop-16候補の対応を検査します。この比較をfull-vector parityや全候補の意味的等価性へ拡張せず、CPU final validationとhardwareのoccupancy／saturationも別に扱います。
 
 ### Program AnalysisとMedia
 
@@ -91,7 +91,7 @@ RPA-00〜39はRust／Python／Assemblyの解析をtyped stageとして整理し�
 
 Mediaはauthenticated local source、backend、model、license、method、budgetに束縛した計画・candidate・observationを扱い、TranslationEnvelopeへ接続します。YouTube URLや任意JSONだけではValidatedになりません。外部parser、vision、ASR等のbackendやモデルは、個別の条件と観測を必要とします。
 
-EPR候補は入力snapshot、streaming／temp quota、family/method/kindの整合性とmodel manifestのcanonicalizationを扱います。Media→TLのprovenance接続はmethod-level semantic validationを代替しません。人物同定、感情・意図、完全な文字起こし、diarization精度、source-root全体の意味は引き続き未検証です。
+alpha.3は入力snapshot、streaming／temp quota、family/method/kindの整合性とmodel manifestのcanonicalizationを扱います。Media→TLのprovenance接続はmethod-level semantic validationを代替しません。人物同定、感情・意図、完全な文字起こし、diarization精度、source-root全体の意味は引き続き未検証です。
 
 ### 出力・ホスト・互換性
 
@@ -99,9 +99,9 @@ EPR候補は入力snapshot、streaming／temp quota、family/method/kindの整�
 
 public JSON fieldは削除・renameせず、新しいfield/schemaはadditiveです。明示consumer view v1/v2を分け、strict限定v1は未知fieldとtrueのcompletion/send/commitを拒否します。v2のreported stateは表示であり、証拠や権限の発行ではありません。全ての旧consumerの互換性を保証しません。
 
-### EPR候補の実装接続
+### alpha.3の実装接続
 
-以下はsource変更候補の接続であり、alpha.2の履歴的検証や全gate成功の宣言ではありません。
+以下はalpha.3で変更したsource経路です。alpha.2の履歴的検証を更新せず、最終gateの状態は[alpha.3検証記録](../validation/epr-release-verification-2026-10-27.md)で別に確認します。
 
 - 概念上のProgram IR Membraneに対応するDGCLの実装は`dgcl_projection::{build_dgcl_projection, verify_dgcl_projection}`である。この名称から`ProgramIrMembrane`という公開型の存在を推論しない。
 - `TypedConstraintGraph.token_bindings`／`TokenSyntaxBinding`と`validate_source_bindings`がtoken→syntax node→source spanを明示対応させる。token ordinalをsyntax node IDと同一視しない。
@@ -121,9 +121,9 @@ source-only配布とローカル生成binaryの存在は矛盾しません。bui
 
 ### Scope and boundaries
 
-This document covers Epistesys `6.3.2-alpha.2` source implementation. It separates LLM-generated candidates from control of requirements, operation authority, validation evidence, and output states. Model-weight modification, complete arbitrary-language understanding, and enforcement over every host operation are outside scope.
+This document covers Epistesys `6.3.2-alpha.3` source implementation. It separates LLM-generated candidates from control of requirements, operation authority, validation evidence, and output states. Model-weight modification, complete arbitrary-language understanding, and enforcement over every host operation are outside scope.
 
-Current references are the [alpha.2 release notes](epistesys-6.3.2-alpha.2-release-notes-2026-10-02.md) and [final verification](../validation/epia2-alpha2-release-verification-2026-10-02.md). The [DGCL execution contract](dgcl-operating-profile-and-closure.md) defines operating conditions; the [compatibility document](dgcl-wire-compatibility.md) defines wire conditions.
+Current references are the [alpha.3 release notes](epistesys-6.3.2-alpha.3-release-notes-2026-10-27.md) and [alpha.3 verification](../validation/epr-release-verification-2026-10-27.md). The [DGCL execution contract](dgcl-operating-profile-and-closure.md) defines operating conditions; the [compatibility document](dgcl-wire-compatibility.md) defines wire conditions.
 
 <a id="terminology-en"></a>
 
@@ -167,7 +167,7 @@ DeepGrammar is this project's parsing-module name. It currently includes:
 
 - Pinned CommonMark event parsing and Rust tree-sitter CST.
 - Distinct configured Japanese/English Stanza-worker and no-external-model profiles. Missing worker/model/runtime pins produce diagnostic failures.
-- Budgeted instruction grammar: alpha.2's reference record uses `controlled-ja-en-instruction-earley.v2`, while the EPR candidate source revision is `controlled-ja-en-instruction-earley.v3`. Preserve negation, condition RHS, scope, references, and dependencies without selecting ambiguous boolean precedence or unknown predicate truth.
+- Budgeted instruction grammar: alpha.2's reference record uses `controlled-ja-en-instruction-earley.v2`, while the alpha.3 source revision is `controlled-ja-en-instruction-earley.v3`. Preserve negation, condition RHS, scope, references, and dependencies without selecting ambiguous boolean precedence or unknown predicate truth.
 - Same-source identity through Program IR/TL/completion plan/candidate. Public-report success flags cannot replace verified constructors.
 
 Exact source roundtrip preserves bytes, not semantic accuracy, general-grammar coverage, or agreement with independent gold.
@@ -186,7 +186,7 @@ The Coding Projector is a facade routing requests to DGCL when the user explicit
 
 Decisions are bound to extracted/registered requirements and plans. Extraction omissions, semantic validity of implementation bindings, and acceptance-oracle coverage each require evaluation. Observed reachability of a registered route does not establish coverage of every invocation path or a deployed service.
 
-Compiler checks, library runtime tests, production API connection invocations, and acceptance tests are separate run/task observations; run separation alone does not prove oracle independence. Registered tools, external Authority receipts, and independent intent binding are required. The EPR candidate's `DgclConnectionSpec` covers a registered driver's direct public-API call and pinned assertion, not generic `--lib` success, transitive executor reachability, or hermetic builds.
+Compiler checks, library runtime tests, production API connection invocations, and acceptance tests are separate run/task observations; run separation alone does not prove oracle independence. Registered tools, external Authority receipts, and independent intent binding are required. Alpha.3's `DgclConnectionSpec` covers a registered driver's direct public-API call and pinned assertion, not generic `--lib` success, transitive executor reachability, or hermetic builds.
 
 Package finalization uses a bounded profile of unconditional Required requirements. Repair applies a caller-provided replacement within existing-Rust-file and repository/file scopes, preserving preimage bytes in non-overwriting backups. Revalidate changed snapshots with fresh receipts. The SDK repair coordinator permits at most four attempts, while the current package repair CLI supplies one request and replacement. NoProgress, cycles, stale/expired evidence, and unconfirmed effects remain distinct. The [DGCL execution contract](dgcl-operating-profile-and-closure.md) centralizes details.
 
@@ -200,7 +200,7 @@ Discrete/continuous distillation projects the same Instruction AST structure int
 
 Numeric GPU paths, CPU parity, readback, device timing, overlap, occupancy, and device-loss callbacks are separate observations. Implementation presence or short GPU tests are not hardware-saturation, universal-speedup, or research-effect evidence.
 
-The EPR candidate checks CPU/GPU summaries and top-16 candidate correspondence. This is not full-vector parity or semantic equivalence of every candidate; CPU final validation and hardware occupancy/saturation remain separate.
+Alpha.3 checks CPU/GPU summaries and top-16 candidate correspondence. This is not full-vector parity or semantic equivalence of every candidate; CPU final validation and hardware occupancy/saturation remain separate.
 
 ### Program Analysis and Media
 
@@ -208,7 +208,7 @@ RPA-00..39 represents Rust/Python/Assembly analysis as typed stages, separating 
 
 Media handles plans/candidates/observations bound to authenticated local source, backend, model, license, method, and budget, connected to TranslationEnvelope. A YouTube URL or arbitrary JSON cannot become Validated. External parsers/vision/ASR backends and models require individual conditions and observations.
 
-The EPR candidate handles input snapshots, streaming/temporary quotas, family/method/kind consistency, and model-manifest canonicalization. Media→TL provenance does not replace method-level semantic validation. Identity, emotion/intent, perfect transcription, diarization accuracy, and source-root-wide meaning remain unvalidated.
+Alpha.3 handles input snapshots, streaming/temporary quotas, family/method/kind consistency, and model-manifest canonicalization. Media→TL provenance does not replace method-level semantic validation. Identity, emotion/intent, perfect transcription, diarization accuracy, and source-root-wide meaning remain unvalidated.
 
 ### Output, hosts, and compatibility
 
@@ -216,9 +216,9 @@ Separate candidate finalization, host send, sink receipt, and durable replay. So
 
 Public JSON fields are not removed/renamed; added fields/schemas are additive. Explicit consumer views v1/v2 distinguish strict limited v1, which rejects unknown fields and true completion/send/commit flags, from v2 reported-state display. Display does not issue evidence/permissions; compatibility with every legacy consumer is unproven.
 
-### EPR candidate implementation connections
+### Alpha.3 implementation connections
 
-These are source-candidate connections, not an update to historical alpha.2 verification or a declaration that all gates passed.
+These source paths changed in alpha.3. They do not update historical alpha.2 observations; consult the [alpha.3 verification record](../validation/epr-release-verification-2026-10-27.md) separately for final gate state.
 
 - DGCL implements the conceptual Program IR Membrane through `dgcl_projection::{build_dgcl_projection, verify_dgcl_projection}`; the label does not imply an existing public `ProgramIrMembrane` type.
 - `TypedConstraintGraph.token_bindings`/`TokenSyntaxBinding` and `validate_source_bindings` explicitly relate tokens, syntax nodes, and source spans. Token ordinals are not syntax-node IDs.

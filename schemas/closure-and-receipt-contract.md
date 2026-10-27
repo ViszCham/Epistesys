@@ -26,6 +26,12 @@ ARC631経路は256 world×8 projectionを2,048個のrevision-bound evaluationへ
 
 固定64 seed corpusはv6.3.0 full DecisionEnvelopeとv6.3.1 witness routeへ同じseedを渡し、version、full-compute、semantic-parity flag、stage floor、mode、host authority boundary、witness chain、fixed-threshold不使用を検査します。これは固定corpus上の構造的回帰検査であり、普遍的semantic equivalence、回答品質、真理を証明しません。
 
+### alpha.3のadditive境界
+
+既存wire名・fieldを保持し、登録計画`DgclCargoValidationPlan.connection`、source/span/revision付き`TokenSyntaxBinding`、`historical_head_matched`とfresh再検証後のhistory状態、CLIの`effect_state`を追加します。connection specは直接のproduction API呼出しとpinしたassertionの登録契約であり、genericなlibrary成功から接続証拠を発行しません。historical headの認証は現在のTest権限を復元せず、作用後のerrorは作用と永続化を分離して報告します。
+
+JSON構造の適合、receiptの真正性、現在のscope・期限、source functional readinessは別々に検査します。strictな旧consumerが新enumを拒否する可能性は保持します。`assess_alpha2_release`とそのv1 profileはalpha.2専用の履歴契約であり、alpha.3の完成判定へ転用しません。[互換性文書](../docs/dgcl-wire-compatibility.md)、[EPR境界契約](../docs/epr-boundary-contracts.md)、[検証記録](../validation/epr-release-verification-2026-10-27.md)を併読してください。source versionの更新だけではinstall・host pickup・研究効果を成立させません。
+
 ---
 
 ## English
@@ -53,3 +59,9 @@ The 2026-08-25 v1 host probe is historical evidence that observed `exact_binding
 ### Paired regression
 
 The fixed 64-seed corpus sends the same seeds through the v6.3.0 full DecisionEnvelope and the v6.3.1 witness route, checking version, full compute, the semantic-parity flag, stage floor, mode, host authority boundary, witness chain, and absence of a fixed threshold. This is a structural regression check over a fixed corpus, not proof of universal semantic equivalence, answer quality, or truth.
+
+### Alpha.3 additive boundaries
+
+Retain existing wire names/fields while adding registered `DgclCargoValidationPlan.connection`, source/span/revision-bound `TokenSyntaxBinding`, `historical_head_matched` and fresh-revalidated history states, and CLI `effect_state`. Connection specs register direct production-API calls with pinned assertions; generic library success does not issue connection evidence. Historical-head authentication restores no current Test authority, and post-effect errors report source and persistence effects separately.
+
+Check JSON structure, receipt authenticity, current scope/expiry, and source functional readiness separately. Preserve the possibility that strict older consumers reject new enums. `assess_alpha2_release` and its v1 profile remain alpha.2-specific historical contracts, not alpha.3 readiness gates. See [wire compatibility](../docs/dgcl-wire-compatibility.md), [EPR boundary contracts](../docs/epr-boundary-contracts.md), and the [verification record](../validation/epr-release-verification-2026-10-27.md). Changing the source version alone establishes neither installation, host pickup, nor research effects.

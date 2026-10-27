@@ -2,7 +2,7 @@
 
 ## 日本語
 
-この文書は`6.3.2-alpha.2`の未観測・未実証範囲を、次に必要な確認と対応付けます。実装経路の存在、宣言profileの局所検証、研究効果、配布、実host観測は別の状態です。[用語と境界](system-architecture.md)と[最終検証](../validation/epia2-alpha2-release-verification-2026-10-02.md)を参照してください。
+この文書は`6.3.2-alpha.3`の未観測・未実証範囲を、次に必要な確認と対応付けます。実装経路の存在、宣言profileの局所検証、研究効果、配布、実host観測は別の状態です。[用語と境界](system-architecture.md)と[alpha.3検証記録](../validation/epr-release-verification-2026-10-27.md)を参照してください。
 
 ### 残存条件
 
@@ -36,11 +36,11 @@
 
 ResearchEvaluation=`PendingNoCorpus`とhost観測=`PendingHostObservation`を維持します。今後はsource/build条件、schema互換性、receipt/replay分離、独立評価をそれぞれ再確認し、Epistesys-7の計画と現alphaの成果を分離します。
 
-### EPR候補でも残る境界
+### alpha.3でも残る境界
 
-EPRの修正候補は以下の不具合対策と明示的な制限を追加します。局所回帰の成功を全gate成功、研究効果、全host強制制御や欠陥ゼロへ昇格させません。現alphaの履歴的検証記録と候補の検証は別です。
+alpha.3は以下の不具合対策と明示的な制限を追加します。局所回帰の成功を全gate成功、研究効果、全host強制制御や欠陥ゼロへ昇格させません。alpha.2の履歴的検証とalpha.3の検証は別に記録します。
 
-| 対象 | 修正候補の範囲と、なお残る条件 |
+| 対象 | 修正範囲と、なお残る条件 |
 | --- | --- |
 | Authorityとreceipt | 元の検証済みsource/span/parent/issuerを保持し、current receiptを`[issued, expires)`で検査する。caller/clock、key custody、実host origin、失効情報自体の真正性は別契約 |
 | 文書領域 | pin済みCommonMark解析はcode/quote等の権限source化を抑止するeligibility検査。完全な指示意味理解でもGrant発行でもない |
@@ -55,7 +55,7 @@ EPRの修正候補は以下の不具合対策と明示的な制限を追加し�
 
 ## English
 
-This document maps unobserved/unproven scope in `6.3.2-alpha.2` to required checks. Implementation presence, declared-profile local verification, research effects, distribution, and real-host observation are distinct states. See [terms/boundaries](system-architecture.md) and [final verification](../validation/epia2-alpha2-release-verification-2026-10-02.md).
+This document maps unobserved/unproven scope in `6.3.2-alpha.3` to required checks. Implementation presence, declared-profile local verification, research effects, distribution, and real-host observation are distinct states. See [terms/boundaries](system-architecture.md) and [alpha.3 verification](../validation/epr-release-verification-2026-10-27.md).
 
 ### Residual conditions
 
@@ -89,11 +89,11 @@ Initial alpha.1 was a v6.3.1 clone. Alpha.2 adds controlled grammar→Program IR
 
 Retain ResearchEvaluation=`PendingNoCorpus` and host observation=`PendingHostObservation`. Recheck source/build conditions, schemas, receipt/replay separation, and independent evaluation separately; distinguish Epistesys-7 plans from current-alpha results.
 
-### Boundaries remaining in the EPR candidate
+### Boundaries remaining in alpha.3
 
-The EPR candidate adds the following defect mitigations and explicit limits. Passing bounded regressions is not elevated to all-gate success, research effects, host-wide enforcement, or zero defects. Historical current-alpha verification and candidate verification are separate.
+Alpha.3 adds the following defect mitigations and explicit limits. Passing bounded regressions is not elevated to all-gate success, research effects, host-wide enforcement, or zero defects. Historical alpha.2 and alpha.3 verification are recorded separately.
 
-| Subject | Candidate scope and remaining conditions |
+| Subject | Remediation scope and remaining conditions |
 | --- | --- |
 | Authority/receipts | Retain original verified source/span/parent/issuer and check current receipts over `[issued, expires)`. Callers/clocks, key custody, real-host origin, and authenticity of revocation information remain separate contracts |
 | Document regions | Pinned CommonMark parsing checks eligibility against code/quote authority-source promotion; it is neither complete instruction interpretation nor Grant issuance |

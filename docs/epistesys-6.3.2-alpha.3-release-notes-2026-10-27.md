@@ -2,12 +2,12 @@
 
 ## 日本語
 
-状態：**候補。昇格gate確認中**。この文書の作成だけではversion更新やsource release readinessを意味しません。元の実装はLabyrinth-Codex v6.3.1由来で、今回の変更は既存経路の境界・接続・回復の修正です。Epistesys-7やモデルweightの更新ではありません。
+状態：**alpha.3 identityのrelease candidate。最終gate確認中**。昇格前functional gate成功後にversionを更新しましたが、最終source release readinessは昇格後gateで別に確認します。元の実装はLabyrinth-Codex v6.3.1由来で、今回の変更は既存経路の境界・接続・回復の修正です。Epistesys-7やモデルweightの更新ではありません。
 
 ### 実装上の変更
 
 - `controlled-ja-en-instruction-earley.v3`：相対／原文byte offsetを分離し、日本語反復参照・3節以上の列挙を修正。action、scope、参照、条件式、constraint graphへ共有の後処理予算を通し、超過をProgram IR／completionまで明示保持します。
-- Authority：元receiptのsource/parent/issuerを保持。host seedの公開field変更、期限切れ、別source/scope/span、code／quote由来の権限発行、別seedのstage混合を拒否します。現在のreceipt期間は`[issued, expires)`です。秘密鍵のDebugはredactします。
+- Authority：元receiptのsource/parent/issuerを保持。host seedのsource／span／scope等の公開field改変、期限切れ、別source/scope/span、code／quote由来の権限発行、別seedのstage混合を拒否します。現在のreceipt期間は`[issued, expires)`です。秘密鍵のDebugはredactします。
 - Coding：genericなlibrary test成功をProductionConnectionと扱う経路を閉鎖。登録driver・pinしたoracle・実Cargo metadata・exact named runtime testに接続し、`std`のaliasによるassertion差替えも拒否します。範囲は協調的な登録build profileの直接API観測に限定します。
 - 実行・修復：Windows Job／Unix process groupの共通supervisor、有界pipe、所有資源のcleanup状態、anchored filesystem、private backup、作用を保持するCLI errorへ接続します。期限切れheadは履歴としてのみ認証し、新しい権限・独立binding・実検証後に同じheadを明示renewalします。
 - Media：元入力のmutable pathではなくbyte-authenticated private snapshotを処理し、snapshotとdecoderでtemp予算を共有します。frame/PCM/outputをstreaming制限し、UTF-8上限、人物／顔kind、報告methodと観測kind、manifest v3を一致させます。実decoder／OpenCV／CPU ASR候補は独立精度検証とは区別します。
@@ -25,12 +25,12 @@ GPUのnative completionとsummary/mask/finalist/decision parityは、全vector�
 
 ## English
 
-Status: **candidate; promotion gates in progress**. Creating these notes does not change the version or establish source release readiness. The inherited implementation derives from Labyrinth-Codex v6.3.1; this update fixes boundaries, connections, and recovery in existing paths. It is not Epistesys-7 or model-weight training.
+Status: **alpha.3-identity release candidate; final gates in progress**. The version was updated after pre-promotion functional gates passed; final source readiness requires separate post-promotion checks. The inherited implementation derives from Labyrinth-Codex v6.3.1; this update fixes boundaries, connections, and recovery in existing paths. It is not Epistesys-7 or model-weight training.
 
 ### Implementation changes
 
 - `controlled-ja-en-instruction-earley.v3`: separate relative/source byte offsets and fix repeated Japanese references/multi-clause coordination. Share postprocessing budgets across actions, scopes, references, condition expressions, and constraints, retaining exhaustion through Program IR/completion.
-- Authority: retain receipt source/parent/issuer; reject mutable host seeds, expiry, wrong source/scope/span, code/quote Grants, and cross-seed stages. Current validity is `[issued, expires)`; key Debug is redacted.
+- Authority: retain receipt source/parent/issuer; reject tampering with displayed host-seed source/span/scope bindings, expiry, wrong source/scope/span, code/quote Grants, and cross-seed stages. Current validity is `[issued, expires)`; key Debug is redacted.
 - Coding: generic library success no longer becomes ProductionConnection. Bind registered drivers, pinned oracles, observed Cargo metadata, and exact runtime tests; reject `std` alias assertion replacement. Coverage remains direct API observation under a cooperative registered build profile.
 - Execution/repair: connect common Windows Job/Unix process-group supervision, bounded pipes, cleanup observations, anchored filesystems, private backups, and effect-preserving CLI errors. Expired heads authenticate history only; renew the same head explicitly after fresh authority, independent binding, and actual validation.
 - Media: process byte-authenticated private snapshots instead of mutable original paths; share temp quotas between snapshots/decoders. Stream-bound frames/PCM/output and align UTF-8 limits, person/face kinds, reported methods, and manifest v3. Actual decoder/OpenCV/CPU-ASR candidates are separate from accuracy evaluation.

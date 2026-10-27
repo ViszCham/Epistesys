@@ -40,9 +40,11 @@ Host output stageはPreCommitCandidate → PostSendObserved → SinkDeliveryObse
 
 legacy pipeline/connection/checkpoint fixture、新pipeline、repair request/report、standalone candidate、host stage ledgerをDraft 2020-12 schemaで局所検査する。strict Rust decoder、remote CI、実Codex host pickupは別の検証対象であり、未観測ならそのまま記録する。
 
-### EPR候補のadditive変更と厳格consumer
+### alpha.3のadditive変更と厳格consumer
 
-以下はEPR候補の境界強化です。既存JSON fieldを維持しても、従来許可された入力への検査強化や未知enumの追加が全consumerの動作互換を意味するわけではありません。alpha.2の検証記録と新候補のgate結果は分離します。
+以下はalpha.3の境界強化です。既存JSON fieldを維持しても、従来許可された入力への検査強化や未知enumの追加が全consumerの動作互換を意味するわけではありません。alpha.2の検証記録とalpha.3のgate結果は分離します。
+
+`assess_alpha2_release`と`epistesys-alpha2-release-profile.v1`はalpha.2専用の固定履歴契約です。target versionを黙って変更せず、alpha.3のsource readiness判定へ代用しません。
 
 `dgcl_repository_root_digest`は存在するdirectoryのcanonical identityを使い、UTF-8へ厳密に変換できないroot名を拒否します。以前のlexical path／short aliasに束縛したMAC scopeが新identityと一致しない場合、信頼する発行主体によるfreshなbindingが必要です。JSON shapeがadditiveでも、旧署名payloadの書換え、旧Grantの自動移行、旧scopeの暗黙承認は行いません。
 
@@ -93,9 +95,11 @@ The added adapter explicitly selects `epistesys-dgcl-consumer-view.v1/v2`. The s
 
 Legacy pipeline/connection/checkpoint fixtures, the new pipeline, repair request/report, standalone candidate, and host stage ledger are locally checked against the Draft 2020-12 schema. Strict Rust decoder behavior, remote CI, and real Codex host pickup are separate verification targets and remain explicitly unobserved when not run.
 
-### EPR candidate additive changes and strict consumers
+### Alpha.3 additive changes and strict consumers
 
-The following strengthen boundaries in the EPR candidate. Preserving existing JSON fields does not make stronger input checks or additional enum variants behaviorally compatible with every consumer. Historical alpha.2 verification remains separate from the new candidate's gate results.
+The following strengthen boundaries in alpha.3. Preserving existing JSON fields does not make stronger input checks or additional enum variants behaviorally compatible with every consumer. Historical alpha.2 verification remains separate from alpha.3 gate results.
+
+`assess_alpha2_release` and `epistesys-alpha2-release-profile.v1` remain fixed alpha.2-specific historical contracts. Their target version is not silently changed, and they do not substitute for alpha.3 source-readiness assessment.
 
 `dgcl_repository_root_digest` uses the canonical identity of an existing directory and rejects root names that cannot be represented exactly in UTF-8. If a MAC scope bound to an earlier lexical path/short alias differs from the new identity, fresh binding from a trusted issuer is required. An additive JSON shape does not rewrite signed payloads, automatically migrate old Grants, or implicitly accept old scopes.
 

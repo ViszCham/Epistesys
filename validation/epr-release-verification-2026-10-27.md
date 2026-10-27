@@ -4,7 +4,7 @@
 
 ### 状態と判定単位
 
-**候補検証中。alpha.3昇格・最終source release readinessは未成立。** 基線は`75500ed7a33a009f5e1ce813862dc0a7986372c9`、候補branchは`codex/epr-alpha3-20261027`。現段階のsource identityは`6.3.2-alpha.2`であり、最終gate成功前にversionを変更しない。
+**alpha.3 identityの候補検証中。最終source release readinessは未成立。** 基線は`75500ed7a33a009f5e1ce813862dc0a7986372c9`、候補branchは`codex/epr-alpha3-20261027`。`91009e6`の昇格前13 command、Windows／Linux CI、正規full package helperの成功後に限って、source identityを`6.3.2-alpha.3`へ更新した。更新後のgateは別に再実行する。
 
 この記録は、EPR-00〜19の既知境界欠陥と追加反例に対するsource/build/CLIの観測を扱う。研究仮説の成立、独立semantic gold、未知欠陥ゼロ、OS-wide sandbox、実host activationを認証しない。[個別台帳](epr-remediation-ledger.v1.json)の未完了項目を、[残存条件](epr-residual-risk-ledger.v1.json)へ移して完了にしない。
 
@@ -54,7 +54,7 @@
 
 ### Status and unit of judgment
 
-**Candidate verification in progress; alpha.3 promotion/final source readiness are not established.** Baseline: `75500ed7a33a009f5e1ce813862dc0a7986372c9`; candidate branch: `codex/epr-alpha3-20261027`. The current source identity remains `6.3.2-alpha.2`; do not change it before required promotion gates pass.
+**Alpha.3-identity candidate verification is in progress; final source readiness is not established.** Baseline: `75500ed7a33a009f5e1ce813862dc0a7986372c9`; candidate branch: `codex/epr-alpha3-20261027`. The source identity changed to `6.3.2-alpha.3` only after all 13 prepromotion commands, Windows/Linux CI, and the full package helper passed at `91009e6`. Rerun post-change gates separately.
 
 This record covers source/build/CLI observations for known EPR-00–19 boundary findings and related counterexamples. It certifies neither research hypotheses, independent semantic gold, zero unknown defects, OS-wide sandboxing, nor real-host activation. Do not discharge unresolved [individual findings](epr-remediation-ledger.v1.json) by moving them into the [residual ledger](epr-residual-risk-ledger.v1.json).
 

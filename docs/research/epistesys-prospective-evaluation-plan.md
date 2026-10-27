@@ -4,7 +4,7 @@
 
 ### 状態と目的
 
-これは将来の評価案であり、実行済み試験、独立査読、事前登録ではない。Epistesys `6.3.2-alpha.2`の実装検証と、研究効果の実証を分離する。GB-CC75は既知の歴史的／開発用データとして扱い、未使用holdoutとは呼ばない。[五つの研究課題](../research-hypotheses.md)に対して別々の測定を設ける。
+これは将来の評価案であり、実行済み試験、独立査読、事前登録ではない。Epistesys `6.3.2-alpha.3`の実装検証と、研究効果の実証を分離する。GB-CC75は既知の歴史的／開発用データとして扱い、未使用holdoutとは呼ばない。[五つの研究課題](../research-hypotheses.md)に対して別々の測定を設ける。
 
 ### 実行前に固定する項目
 
@@ -39,7 +39,7 @@
 
 ### Status and purpose
 
-This is a future evaluation proposal, not an executed trial, independent peer review, or preregistration. Separate implementation checks for Epistesys `6.3.2-alpha.2` from empirical research effects. Treat GB-CC75 as known historical/development data, not unused holdout. Define separate measurements for the [five research questions](../research-hypotheses.md).
+This is a future evaluation proposal, not an executed trial, independent peer review, or preregistration. Separate implementation checks for Epistesys `6.3.2-alpha.3` from empirical research effects. Treat GB-CC75 as known historical/development data, not unused holdout. Define separate measurements for the [five research questions](../research-hypotheses.md).
 
 ### Freeze before execution
 

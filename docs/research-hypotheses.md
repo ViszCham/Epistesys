@@ -2,7 +2,7 @@
 
 ## 日本語
 
-Epistesysは、AIが定義された信頼性を維持して扱える指示複雑性・状態量・session長の範囲を明らかにし、その拡張可能性を検証する長期研究プロジェクトです。現在の6.3.2-alpha.2はv6.3.1由来のbaselineへDGCL実装・接続を追加した実験版であり、プロジェクトの最終到達点でも、研究仮説を実証した版でもありません。
+Epistesysは、AIが定義された信頼性を維持して扱える指示複雑性・状態量・session長の範囲を明らかにし、その拡張可能性を検証する長期研究プロジェクトです。現在の6.3.2-alpha.3はv6.3.1由来のbaselineへDGCL実装・接続とEPR境界修正を追加した実験版であり、プロジェクトの最終到達点でも、研究仮説を実証した版でもありません。
 
 ### 用語と証拠の段階
 
@@ -45,7 +45,7 @@ Epistesysは、AIが定義された信頼性を維持して扱える指示複雑
 
 ## English
 
-Epistesys is a long-term research project characterizing the instruction complexity, state volume, and session length over which AI can maintain defined reliability, and testing whether that range can expand. Version 6.3.2-alpha.2 is experimental DGCL implementation/connectivity added to the v6.3.1-derived baseline, neither the project's endpoint nor a demonstration of its research hypotheses.
+Epistesys is a long-term research project characterizing the instruction complexity, state volume, and session length over which AI can maintain defined reliability, and testing whether that range can expand. Version 6.3.2-alpha.3 is experimental DGCL implementation/connectivity and EPR boundary remediation added to the v6.3.1-derived baseline, neither the project's endpoint nor a demonstration of its research hypotheses.
 
 ### Terms and evidence levels
 

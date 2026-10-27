@@ -49,7 +49,7 @@ source signature、`--execute`、low loss、tool hash、slot存在はGrantを発
 | `RuntimeValidation` | 登録計画で指定したlibrary runtime test観測 |
 | `AcceptanceTest` | 登録計画の明示acceptance testと、その受入条件の観測 |
 
-kindは自動的に相互代替しません。EPR候補の`DgclConnectionSpec`はdriver・entrypoint・oracle・coverageを登録receiptへ束縛します。genericな`--lib`成功、推移的なexecutor到達、hermetic build、全経路や実サービスの配備検証を意味しません。別runへの分離はoracleの独立性の証明ではなく、受入試験の成功はそのoracleで検査した条件についての観測です。
+kindは自動的に相互代替しません。alpha.3の`DgclConnectionSpec`はdriver・entrypoint・oracle・coverageを登録receiptへ束縛します。genericな`--lib`成功、推移的なexecutor到達、hermetic build、全経路や実サービスの配備検証を意味しません。別runへの分離はoracleの独立性の証明ではなく、受入試験の成功はそのoracleで検査した条件についての観測です。
 
 条件のtruthを推測して要求を解除しません。`contract_ledger_rendered`はledger実現の観測であり、任意回答の意味的正確性ではありません。standalone completion、host send、sink deliveryは別状態です。
 
@@ -74,7 +74,7 @@ SDK coordinatorは最大4回の試行とwall/delta予算を扱い、NoProgress�
 
 - 旧Completed checkpointも、新しいTest receipt・独立binding・Cargo観測を省略できない。
 - crash後のtargetが予定candidateと異なればHold/診断になる。
-- joint rollbackを回避する自動repairや、期限切れの権限・完了状態の復元は行わない。EPR候補のhistorical head経路は、真正な期限切れ履歴の確認と現在の実行許可を分離する。
+- joint rollbackを回避する自動repairや、期限切れの権限・完了状態の復元は行わない。alpha.3のhistorical head経路は、真正な期限切れ履歴の確認と現在の実行許可を分離する。
 - journal rootはcallerが準備する保管契約であり、host全体のpersist権限を生成しない。
 
 ### Journal・head・配信の状態
@@ -104,9 +104,9 @@ portable default testはモデル不足時の失敗経路を検査します。�
 
 独立gold、一般意味精度、ハルシネーション抑制、長期session、performance、実host callback/即時revocation、OS filesystem/network sandbox、opaque build scripts/proc macros、全外部依存build world、Assurance未対応は[残存条件](known-limitations.md)です。ResearchEvaluation=`PendingNoCorpus`、host実観測=`PendingHostObservation`を保持します。
 
-### EPR候補の境界強化と残存条件
+### alpha.3の境界強化と残存条件
 
-本節はEPR変更候補の実装契約であり、上記alpha.2の履歴的検証記録や全release gateの成功を更新するものではありません。
+本節はalpha.3で強化した実装契約です。alpha.2の履歴的検証記録を更新せず、最終release gateの状態は[alpha.3検証記録](../validation/epr-release-verification-2026-10-27.md)で別に確認します。
 
 - `HostSeedEnvelope`は元の検証済みreceiptを内部に保持し、`VerifiedAuthorityEvent`と`ExecutionPermit`はsource・span・artifact/turn・scope・parent・issuer・現在時刻への対応を検査する。public fieldの変更から別sourceの権限を再発行しない。current receiptの有効区間は`[issued, expires)`であり、期限一致時と零長期間は無効。contextなしの`decide_verified_authority`はadvisoryで、現在の判断には`VerifiedAuthorityContext`を要する。
 - Hostのplain-prose eligibilityはpin済みCommonMark offset eventでcode・quote・HTML・link等を除外し、解析予算を持つ。構文上の適格性はGrantでも完全な意図理解でもない。
@@ -165,7 +165,7 @@ Source signatures, `--execute`, low loss, tool hashes, and slot presence do not 
 | `RuntimeValidation` | Library runtime test observation specified in the registered plan |
 | `AcceptanceTest` | Explicit acceptance test and observed acceptance conditions from the registered plan |
 
-Kinds do not automatically substitute for one another. The EPR candidate's `DgclConnectionSpec` binds the driver, entrypoint, oracle, and coverage to a registration receipt. It does not establish generic `--lib` success as connection evidence, transitive executor reachability, hermetic builds, all paths, or deployment of a live service. Separate runs do not prove oracle independence; acceptance success observes the conditions checked by that oracle.
+Kinds do not automatically substitute for one another. Alpha.3's `DgclConnectionSpec` binds the driver, entrypoint, oracle, and coverage to a registration receipt. It does not establish generic `--lib` success as connection evidence, transitive executor reachability, hermetic builds, all paths, or deployment of a live service. Separate runs do not prove oracle independence; acceptance success observes the conditions checked by that oracle.
 
 Do not discharge requirements by guessing condition truth. `contract_ledger_rendered` observes ledger realization, not arbitrary-answer semantic correctness. Standalone completion, host send, and sink delivery remain separate.
 
@@ -190,7 +190,7 @@ The current CLI supplies only one request with `attempt=1` to the coordinator. I
 
 - Old Completed checkpoints cannot omit new Test receipts, independent bindings, or Cargo observations.
 - Targets differing from planned candidates after crashes produce Hold/diagnostics.
-- No automatic repair bypasses joint rollback or restores expired authority/completion. The EPR candidate's historical-head route separates authentic expired history from current execution permission.
+- No automatic repair bypasses joint rollback or restores expired authority/completion. Alpha.3's historical-head route separates authentic expired history from current execution permission.
 - Journal roots are caller-provisioned storage contracts, not host-wide persist permissions.
 
 ### Journals, heads, and delivery states
@@ -220,9 +220,9 @@ Portable default tests cover missing-model failure paths. Actual JA/EN-worker po
 
 Independent gold, general semantic accuracy, hallucination containment, long sessions, performance, real-host callbacks/immediate revocation, OS filesystem/network sandboxes, opaque build scripts/proc macros, complete external-dependency build worlds, and unsupported Assurance scope remain [residual conditions](known-limitations.md). Retain ResearchEvaluation=`PendingNoCorpus` and real-host observation=`PendingHostObservation`.
 
-### EPR candidate boundary strengthening and residual conditions
+### Alpha.3 boundary strengthening and residual conditions
 
-This section specifies implementation contracts of the EPR candidate; it does not update the historical alpha.2 verification record above or assert that all release gates passed.
+This section specifies implementation contracts strengthened in alpha.3. It does not update historical alpha.2 observations; consult the [alpha.3 verification record](../validation/epr-release-verification-2026-10-27.md) separately for final release-gate state.
 
 - `HostSeedEnvelope` retains the original verified receipt internally. `VerifiedAuthorityEvent` and `ExecutionPermit` check source, span, artifact/turn, scope, parent, issuer, and current-time bindings; public-field mutation cannot reissue authority for another source. Current receipts use `[issued, expires)`; exact expiry and zero-duration intervals are invalid. Context-free `decide_verified_authority` is advisory; current decisions require `VerifiedAuthorityContext`.
 - Host plain-prose eligibility uses pinned CommonMark offset events to exclude code, quotes, HTML, links, and related regions under parsing budgets. Syntactic eligibility is neither a Grant nor complete intent interpretation.
