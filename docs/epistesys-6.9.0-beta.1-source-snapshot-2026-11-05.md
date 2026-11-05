@@ -6,7 +6,7 @@
 
 ### この版の目的
 
-ユーザーの明示指示により、現在のTLCX実装を一度Gitへ保存する中間スナップショットです。全機能の完成、release gateの合格、配布準備、host activationを示す版ではありません。Alpha.3は[保守ブランチ `main-alpha.3`](https://github.com/ViszCham/Epistesys/tree/main-alpha.3)に残しています。
+Beta 6.9は、開発途中のTLCX実装を後から参照できるように残したソースのスナップショットです。ここでは、保存した内容、実行した検証、未確認の接続を区別します。全機能の完成、release gateの合格、配布準備、host activationを示す版ではありません。Alpha.3は[保守ブランチ `main-alpha.3`](https://github.com/ViszCham/Epistesys/tree/main-alpha.3)に残しています。
 
 ### 保存するもの
 
@@ -18,28 +18,25 @@ sourceや試験が存在することと、本番経路が最後まで接続・�
 
 [EpiMapLoss：写像保存損失](epimaploss-epirecompscore-formulas.md#map-ja)は、表現を移したときに保存すべき性質がどれだけ失われたかを扱います。[EpiRecompScore：構造再編評価値](epimaploss-epirecompscore-formulas.md#score-ja)は、候補が新しく組み替えたものと、その利得・損失・コストを比較します。
 
-<details>
+**主要式：写像保存損失、再編評価F1・F2**
 
-<summary>主要式：写像保存損失、再編評価F1・F2</summary>
+右辺の各成分は同じ比較範囲の候補 $`z`$ に対する値です。適用軸 $`\mathcal A`$ と正の重み $`\rho_a`$ は比較前に固定します。
 
-右辺の各成分は同じ比較範囲の候補 $z$ に対する値です。適用軸 $\mathcal A$ と正の重み $\rho_a$ は比較前に固定します。
-
-$$
+```math
 \begin{aligned}
 L=\operatorname{EpiMapLoss}(z)
- &=\frac{\sum_{a\in\mathcal A}\rho_a L_a(z)}{\sum_{a\in\mathcal A}\rho_a},\\
-\operatorname{EpiRecompScore}_{F1}(z)
+ &=\frac{\sum_{a\in\mathcal A}\rho_a L_a(z)}{\sum_{a\in\mathcal A}\rho_a},
+\\ \operatorname{EpiRecompScore}_{F1}(z)
  &=\alpha D_{\rm ctx}+\beta D_{\rm sem}-\lambda L
-   +\gamma A_{\rm compat}+\delta C_{\rm match}-\eta N_{\rm known},\\
-\operatorname{EpiRecompScore}_{F2}(z)
- &=w_1T_{\rm nc}+w_2G_{\rm struct}+w_3R_{\rm gain}+w_4U_{\rm gain}\\
- &\quad+w_5Q_{\rm parity}-w_6L-w_7R_{\rm counter}-w_8B_{\rm mem}.
+   +\gamma A_{\rm compat}+\delta C_{\rm match}-\eta N_{\rm known},
+\\ \operatorname{EpiRecompScore}_{F2}(z)
+ &=w_1T_{\rm nc}+w_2G_{\rm struct}+w_3R_{\rm gain}+w_4U_{\rm gain}
+\\ &\quad+w_5Q_{\rm parity}-w_6L-w_7R_{\rm counter}-w_8B_{\rm mem}.
 \end{aligned}
-$$
+```
 
 各記号、下位式、[全40成分の計算法](epimaploss-epirecompscore-formulas.md#catalog-ja)、[区間演算](epimaploss-epirecompscore-formulas.md#kernels-ja)、[選択・探索](epimaploss-epirecompscore-formulas.md#policy-ja)は数式リファレンスをご覧ください。未測定・比較不能を0とはせず、高得点を実行許可や完了判定には使いません。
 
-</details>
 
 ここでの公開名は、保存した数式を読みやすく示すためのものです。固定契約の記号・式ID、以下の検証結果、インストール済みプラグインの状態は変わりません。
 
@@ -79,7 +76,7 @@ Recorded on November 5, 2026 (JST). The display name is **Epistesys Beta 6.9**, 
 
 ### Purpose
 
-This intermediate snapshot preserves the current TLCX implementation in Git at the user's explicit request. It does not establish complete functionality, passing release gates, distribution readiness, or host activation. Alpha.3 remains on the [`main-alpha.3` maintenance branch](https://github.com/ViszCham/Epistesys/tree/main-alpha.3).
+Beta 6.9 preserves the in-progress TLCX source as a point of reference. This record distinguishes what was saved, which checks ran, and which connections remain unverified. It does not establish complete functionality, passing release gates, distribution readiness, or host activation. Alpha.3 remains on its [`main-alpha.3` maintenance branch](https://github.com/ViszCham/Epistesys/tree/main-alpha.3).
 
 ### What is preserved
 
@@ -91,28 +88,25 @@ Source or test presence is not end-to-end production connection and validation. 
 
 [EpiMapLoss: mapping preservation loss](epimaploss-epirecompscore-formulas.md#map-en) tracks what a change of representation fails to preserve. [EpiRecompScore: structural recomposition score](epimaploss-epirecompscore-formulas.md#score-en) evaluates what a candidate reorganizes, together with its gains, losses, and costs.
 
-<details>
+**Main equations: mapping preservation loss and recomposition profiles F1 and F2**
 
-<summary>Main equations: mapping preservation loss and recomposition profiles F1 and F2</summary>
+Components on the right refer to the same candidate $`z`$ and comparison scope. Fix the active axes $`\mathcal A`$ and positive weights $`\rho_a`$ before comparing.
 
-Components on the right refer to the same candidate $z$ and comparison scope. Fix the active axes $\mathcal A$ and positive weights $\rho_a$ before comparing.
-
-$$
+```math
 \begin{aligned}
 L=\operatorname{EpiMapLoss}(z)
- &=\frac{\sum_{a\in\mathcal A}\rho_a L_a(z)}{\sum_{a\in\mathcal A}\rho_a},\\
-\operatorname{EpiRecompScore}_{F1}(z)
+ &=\frac{\sum_{a\in\mathcal A}\rho_a L_a(z)}{\sum_{a\in\mathcal A}\rho_a},
+\\ \operatorname{EpiRecompScore}_{F1}(z)
  &=\alpha D_{\rm ctx}+\beta D_{\rm sem}-\lambda L
-   +\gamma A_{\rm compat}+\delta C_{\rm match}-\eta N_{\rm known},\\
-\operatorname{EpiRecompScore}_{F2}(z)
- &=w_1T_{\rm nc}+w_2G_{\rm struct}+w_3R_{\rm gain}+w_4U_{\rm gain}\\
- &\quad+w_5Q_{\rm parity}-w_6L-w_7R_{\rm counter}-w_8B_{\rm mem}.
+   +\gamma A_{\rm compat}+\delta C_{\rm match}-\eta N_{\rm known},
+\\ \operatorname{EpiRecompScore}_{F2}(z)
+ &=w_1T_{\rm nc}+w_2G_{\rm struct}+w_3R_{\rm gain}+w_4U_{\rm gain}
+\\ &\quad+w_5Q_{\rm parity}-w_6L-w_7R_{\rm counter}-w_8B_{\rm mem}.
 \end{aligned}
-$$
+```
 
 See the formula reference for notation, subformulas, [all 40 component calculations](epimaploss-epirecompscore-formulas.md#catalog-en), [interval arithmetic](epimaploss-epirecompscore-formulas.md#kernels-en), and [selection and search](epimaploss-epirecompscore-formulas.md#policy-en). Unmeasured or incomparable values are not zero, and high scores do not authorize execution or establish completion.
 
-</details>
 
 The public names here make the saved formulas easier to find. They do not change the fixed contract's symbols or formula IDs, the verification results below, or the installed plugin.
 

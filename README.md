@@ -2,7 +2,7 @@
 
 ## 日本語
 
-Epistesys（エピステシス）は、私がソフトウェア開発で使うために作っている**開発支援ツール**です。必要な仕組みは自分で決め、実装にはAIを使っています。AIに変更を頼んだ後で、「元の条件は残っているか」「追加した機能は実際に呼ばれるか」「何を確認して完了としたのか」を、コードと検証結果に戻って確かめたいからです。
+Epistesys（エピステシス）は、コードの変更を元の要求と検証結果に結び付ける**開発支援ツール**です。自分の開発で「依頼した条件は残っているか」「追加した機能は実際に呼ばれるか」「何を確認して完了としたのか」を、後からコードとテストに戻って確かめるために作っています。
 
 たとえば「既存の出力形式を変えずに機能を追加してほしい」という依頼では、ビルドが通ること、新機能が呼び出されること、従来の出力形式が保たれることは別々の確認です。Epistesysはモデルの重みを変更せず、その外側で元の要求、許可された操作、対象となるコードの版、検証結果、未確認の項目を対応づけます。具体的な使い方は[コーディング支援](#coding-assistance-ja)、現時点で何が動き、何が未検証かは以下の表で確認できます。
 
@@ -27,28 +27,25 @@ Epistesys（エピステシス）は、私がソフトウェア開発で使う�
 
 [EpiMapLoss：写像保存損失](docs/epimaploss-epirecompscore-formulas.md#map-ja)は、表現を移したときに保存すべき性質がどれだけ失われたかを扱います。[EpiRecompScore：構造再編評価値](docs/epimaploss-epirecompscore-formulas.md#score-ja)は、候補が新しく組み替えたものと、その利得・損失・コストを比較します。
 
-<details>
+**主要式：写像保存損失、再編評価F1・F2**
 
-<summary>主要式：写像保存損失、再編評価F1・F2</summary>
+右辺の各成分は同じ比較範囲の候補 $`z`$ に対する値です。適用軸 $`\mathcal A`$ と正の重み $`\rho_a`$ は比較前に固定します。
 
-右辺の各成分は同じ比較範囲の候補 $z$ に対する値です。適用軸 $\mathcal A$ と正の重み $\rho_a$ は比較前に固定します。
-
-$$
+```math
 \begin{aligned}
 L=\operatorname{EpiMapLoss}(z)
- &=\frac{\sum_{a\in\mathcal A}\rho_a L_a(z)}{\sum_{a\in\mathcal A}\rho_a},\\
-\operatorname{EpiRecompScore}_{F1}(z)
+ &=\frac{\sum_{a\in\mathcal A}\rho_a L_a(z)}{\sum_{a\in\mathcal A}\rho_a},
+\\ \operatorname{EpiRecompScore}_{F1}(z)
  &=\alpha D_{\rm ctx}+\beta D_{\rm sem}-\lambda L
-   +\gamma A_{\rm compat}+\delta C_{\rm match}-\eta N_{\rm known},\\
-\operatorname{EpiRecompScore}_{F2}(z)
- &=w_1T_{\rm nc}+w_2G_{\rm struct}+w_3R_{\rm gain}+w_4U_{\rm gain}\\
- &\quad+w_5Q_{\rm parity}-w_6L-w_7R_{\rm counter}-w_8B_{\rm mem}.
+   +\gamma A_{\rm compat}+\delta C_{\rm match}-\eta N_{\rm known},
+\\ \operatorname{EpiRecompScore}_{F2}(z)
+ &=w_1T_{\rm nc}+w_2G_{\rm struct}+w_3R_{\rm gain}+w_4U_{\rm gain}
+\\ &\quad+w_5Q_{\rm parity}-w_6L-w_7R_{\rm counter}-w_8B_{\rm mem}.
 \end{aligned}
-$$
+```
 
 各記号、下位式、[全40成分の計算法](docs/epimaploss-epirecompscore-formulas.md#catalog-ja)、[区間演算](docs/epimaploss-epirecompscore-formulas.md#kernels-ja)、[選択・探索](docs/epimaploss-epirecompscore-formulas.md#policy-ja)は数式リファレンスをご覧ください。未測定・比較不能を0とはせず、高得点を実行許可や完了判定には使いません。
 
-</details>
 
 ### 制御対象とアーキテクチャ
 
@@ -156,7 +153,7 @@ launcherは自身の配置からrunnerを解決します。別cwdからの起動
 
 ## English
 
-Epistesys is a **development tool** I’m building for my own software projects. I decide which mechanisms I need and use AI coding tools to implement them. After asking an AI to change some code, I want to be able to check the code and its test results to answer three questions: Did the original constraints survive? Is the new behavior actually called? What was verified before the change was called complete?
+Epistesys is a **development tool** that connects a code change to its original requirements and validation results. I’m building it so I can return to the code and tests in my own projects and answer three questions: Did the requested constraints survive? Is the new behavior actually called? What was verified before the change was called complete?
 
 For example, a request to “add a feature without changing the existing output format” needs three distinct checks: the build passes, the new feature is invoked, and the old format is preserved. Without changing model weights, Epistesys relates the original requirements, permitted operations, code revision, validation results, and outstanding checks. See [Coding assistance](#coding-assistance-en) for the workflow and the table below for what currently works and what remains unverified.
 
@@ -181,28 +178,25 @@ The current source contains context reconstruction, checks across several finite
 
 [EpiMapLoss: mapping preservation loss](docs/epimaploss-epirecompscore-formulas.md#map-en) tracks what a change of representation fails to preserve. [EpiRecompScore: structural recomposition score](docs/epimaploss-epirecompscore-formulas.md#score-en) evaluates what a candidate reorganizes, together with its gains, losses, and costs.
 
-<details>
+**Main equations: mapping preservation loss and recomposition profiles F1 and F2**
 
-<summary>Main equations: mapping preservation loss and recomposition profiles F1 and F2</summary>
+Components on the right refer to the same candidate $`z`$ and comparison scope. Fix the active axes $`\mathcal A`$ and positive weights $`\rho_a`$ before comparing.
 
-Components on the right refer to the same candidate $z$ and comparison scope. Fix the active axes $\mathcal A$ and positive weights $\rho_a$ before comparing.
-
-$$
+```math
 \begin{aligned}
 L=\operatorname{EpiMapLoss}(z)
- &=\frac{\sum_{a\in\mathcal A}\rho_a L_a(z)}{\sum_{a\in\mathcal A}\rho_a},\\
-\operatorname{EpiRecompScore}_{F1}(z)
+ &=\frac{\sum_{a\in\mathcal A}\rho_a L_a(z)}{\sum_{a\in\mathcal A}\rho_a},
+\\ \operatorname{EpiRecompScore}_{F1}(z)
  &=\alpha D_{\rm ctx}+\beta D_{\rm sem}-\lambda L
-   +\gamma A_{\rm compat}+\delta C_{\rm match}-\eta N_{\rm known},\\
-\operatorname{EpiRecompScore}_{F2}(z)
- &=w_1T_{\rm nc}+w_2G_{\rm struct}+w_3R_{\rm gain}+w_4U_{\rm gain}\\
- &\quad+w_5Q_{\rm parity}-w_6L-w_7R_{\rm counter}-w_8B_{\rm mem}.
+   +\gamma A_{\rm compat}+\delta C_{\rm match}-\eta N_{\rm known},
+\\ \operatorname{EpiRecompScore}_{F2}(z)
+ &=w_1T_{\rm nc}+w_2G_{\rm struct}+w_3R_{\rm gain}+w_4U_{\rm gain}
+\\ &\quad+w_5Q_{\rm parity}-w_6L-w_7R_{\rm counter}-w_8B_{\rm mem}.
 \end{aligned}
-$$
+```
 
 See the formula reference for notation, subformulas, [all 40 component calculations](docs/epimaploss-epirecompscore-formulas.md#catalog-en), [interval arithmetic](docs/epimaploss-epirecompscore-formulas.md#kernels-en), and [selection and search](docs/epimaploss-epirecompscore-formulas.md#policy-en). Unmeasured or incomparable values are not zero, and high scores do not authorize execution or establish completion.
 
-</details>
 
 ### Control scope and architecture
 

@@ -8,137 +8,137 @@
 
 `EpiMapLoss`（写像保存損失）と`EpiRecompScore`（構造再編評価値）は、この資料で使う現在の公開名です。元の式ID・数学記号・既存のRust／JSON互換名は変更していません。新しいRust型やwire fieldを追加したという意味ではありません。
 
-**記号：** $z$は候補、$z_0$は同じ比較範囲の基準候補です。$P$は事前に固定した検査課題（probe）の集合、$w_i>0$は重みです。以下の式は、比較範囲、基準、適用軸、単位、検証方法、予算が一致するときに使います。`Exact`は与えられた入力に対する算術上の正確さです。
+**記号：** $`z`$は候補、$`z_0`$は同じ比較範囲の基準候補です。$`P`$は事前に固定した検査課題（probe）の集合、$`w_i\gt 0`$は重みです。以下の式は、比較範囲、基準、適用軸、単位、検証方法、予算が一致するときに使います。`Exact`は与えられた入力に対する算術上の正確さです。
 
 <a id="map-ja"></a>
 
 ### EpiMapLoss：写像で失われたもの
 
-元の入力 $X$ を表現 $Y_i$ に写すとき、保存すべき性質を検査します。再構成・意味・時間・空間が四つの軸です。原案は軸と写像を示していましたが、軸を一つに集約する式は定めていません。以下は現在の操作的測定規約です。
+元の入力 $`X`$ を表現 $`Y_i`$ に写すとき、保存すべき性質を検査します。再構成・意味・時間・空間が四つの軸です。原案は軸と写像を示していましたが、軸を一つに集約する式は定めていません。以下は現在の操作的測定規約です。
 
-$$
+```math
 X\xrightarrow{F_i}Y_i,\qquad \mathcal A\subseteq\{\mathrm{recon},\mathrm{sem},\mathrm{time},\mathrm{space}\}.
-$$
+```
 
-$$
+```math
 \begin{aligned}
 W_a &= \sum_{q\in P_a}w_q,\qquad
-L_a=\left[\frac{\sum_q w_q\underline\ell_q}{W_a},\frac{\sum_q w_q\overline\ell_q}{W_a}\right],\\
-\operatorname{EpiMapLoss}_{\mathcal A,\rho}(z)
+L_a=\left[\frac{\sum_q w_q\underline\ell_q}{W_a},\frac{\sum_q w_q\overline\ell_q}{W_a}\right],
+\\ \operatorname{EpiMapLoss}_{\mathcal A,\rho}(z)
 &=L_{\mathrm{trans}}(z)=\frac{\sum_{a\in\mathcal A}\rho_a L_a(z)}{\sum_{a\in\mathcal A}\rho_a},\qquad \rho_a>0 .
 \end{aligned}
-$$
+```
 
-関係を保ったと確認できればプローブ損失は0、違反を確認すれば1です。測る量と値域が定義され、観測だけが不足する場合には $[0,1]$ を保持できます。定義不能・比較不能・未対応を0で埋めません。軸・分母を候補ごとに変えず、必須条件の違反を平均で埋め合わせません。
+関係を保ったと確認できればプローブ損失は0、違反を確認すれば1です。測る量と値域が定義され、観測だけが不足する場合には $`[0,1]`$ を保持できます。定義不能・比較不能・未対応を0で埋めません。軸・分母を候補ごとに変えず、必須条件の違反を平均で埋め合わせません。
 
-$$
+```math
 e_q=\begin{cases}
-\lvert v_t-F_q(v_s)\rvert&\text{registered scalar},\\
-\lVert v_t-F_q(v_s)\rVert_{\text{registered norm}}&\text{registered vector norm},
+\lvert v_t-F_q(v_s)\rvert&\text{registered scalar},
+\\ \lVert v_t-F_q(v_s)\rVert_{\text{registered norm}}&\text{registered vector norm},
 \end{cases}
 \qquad
 \ell_q=\min\!\left(1,\frac{\max(0,e_q-\epsilon_q)}{r_q}\right).
-$$
+```
 
-許容差 $\epsilon_q\ge0$ と飽和尺度 $r_q>0$ は誤差と同じ単位です。空間では登録された比較器を使います。時間では時点と経過時間を分けます。非空区間は $s<e$ とし、区間内の時点は $s\le t<e$ です。beforeは $e_A<s_B$、meetsは $e_A=s_B$ です。
+許容差 $`\epsilon_q\ge0`$ と飽和尺度 $`r_q\gt 0`$ は誤差と同じ単位です。空間では登録された比較器を使います。時間では時点と経過時間を分けます。非空区間は $`s\lt e`$ とし、区間内の時点は $`s\le t\lt e`$ です。beforeは $`e_A\lt s_B`$、meetsは $`e_A=s_B`$ です。
 
-$$
+```math
 F_{\mathrm{abs}}(t)=at+b,\qquad F_{\mathrm{dur}}(\Delta t)=a\,\Delta t.
-$$
+```
 
 限定された[現行Rust実装](../scripts/lc631/crates/lc631-runtime/src/checked_tl_reduction.rs)の一例は、時間と空間の二軸、重み1:3を固定した有限MODELの比較です。この係数をすべての課題の既定値とみなしません。多段写像の終端損失は元の性質を最終表現で測り直した値であり、経路の損失の単純和ではありません。
 
-$$
+```math
 L_{\mathrm{tuple}}=\frac{L_{\mathrm{time}}+3L_{\mathrm{space}}}{4},\qquad L_{\mathrm{end}}=L(X,Y_{\mathrm{final}};\,P_{\mathrm{root}}).
-$$
+```
 
-一回の変換には四つの記録 $(D,\Delta,U,G)$ を付けます。$D$は確認済みの保存義務違反、$\Delta$は許容した前提変更、$U$は未確定事項、$G$は基準に対する利得の記録です。これらは四つの数を足す式ではありません。意図した前提変更は欠陥と区別し、予測した利得と観測した利得も区別します。
+一回の変換には四つの記録 $`(D,\Delta,U,G)`$ を付けます。$`D`$は確認済みの保存義務違反、$`\Delta`$は許容した前提変更、$`U`$は未確定事項、$`G`$は基準に対する利得の記録です。これらは四つの数を足す式ではありません。意図した前提変更は欠陥と区別し、予測した利得と観測した利得も区別します。
 
 <a id="score-ja"></a>
 
 ### EpiRecompScore：F1・F2と全下位式
 
-**F1**（固定ID `OriginalFormula/F1-v1`）。文脈・意味配置からの距離、既存体系への接続、複雑性の釣り合いを評価し、写像保存損失と既知の繰返しを差し引きます。$\operatorname{EpiRecompScore}_{F1}(z)=S_1(z)$ です。
+**F1**（固定ID `OriginalFormula/F1-v1`）。文脈・意味配置からの距離、既存体系への接続、複雑性の釣り合いを評価し、写像保存損失と既知の繰返しを差し引きます。$`\operatorname{EpiRecompScore}_{F1}(z)=S_1(z)`$ です。
 
-$$
+```math
 \begin{aligned}
-S_1(z)&=\alpha D_{\mathrm{ctx}}(z)+\beta D_{\mathrm{sem}}(z) \\
-&\quad -\lambda L_{\mathrm{trans}}(z)+\gamma A_{\mathrm{compat}}(z) \\
-&\quad +\delta C_{\mathrm{match}}(z)-\eta N_{\mathrm{known}}(z).
+S_1(z)&=\alpha D_{\mathrm{ctx}}(z)+\beta D_{\mathrm{sem}}(z)
+\\ &\quad -\lambda L_{\mathrm{trans}}(z)+\gamma A_{\mathrm{compat}}(z)
+\\ &\quad +\delta C_{\mathrm{match}}(z)-\eta N_{\mathrm{known}}(z).
 \end{aligned}
-$$
+```
 
-**F2**（固定ID `OriginalFormula/F2-v1`）。新規性と接続性、構造利得、再編、実用利得、複雑性の釣り合いを評価し、写像保存損失、反例リスク、接続コストを差し引きます。$\operatorname{EpiRecompScore}_{F2}(z)=S_2(z)$ です。
+**F2**（固定ID `OriginalFormula/F2-v1`）。新規性と接続性、構造利得、再編、実用利得、複雑性の釣り合いを評価し、写像保存損失、反例リスク、接続コストを差し引きます。$`\operatorname{EpiRecompScore}_{F2}(z)=S_2(z)`$ です。
 
-$$
+```math
 \begin{aligned}
-S_2(z)&=w_1T_{\mathrm{nc}}(z)+w_2G_{\mathrm{struct}}(z) \\
-&\quad +w_3R_{\mathrm{gain}}(z)+w_4U_{\mathrm{gain}}(z) \\
-&\quad +w_5Q_{\mathrm{parity}}(z)-w_6L_{\mathrm{trans}}(z) \\
-&\quad -w_7R_{\mathrm{counter}}(z)-w_8B_{\mathrm{mem}}(z).
+S_2(z)&=w_1T_{\mathrm{nc}}(z)+w_2G_{\mathrm{struct}}(z)
+\\ &\quad +w_3R_{\mathrm{gain}}(z)+w_4U_{\mathrm{gain}}(z)
+\\ &\quad +w_5Q_{\mathrm{parity}}(z)-w_6L_{\mathrm{trans}}(z)
+\\ &\quad -w_7R_{\mathrm{counter}}(z)-w_8B_{\mathrm{mem}}(z).
 \end{aligned}
-$$
+```
 
 **新規性と接続性の両立**
 
-$$
+```math
 T_{\mathrm{nc}}(z)=\sqrt{D_{\mathrm{par}}(z)D_{\mathrm{sem}}(z)}
 \,A_{\mathrm{compat}}(z).
-$$
+```
 
 **構造利得**
 
-$$
+```math
 G_{\mathrm{struct}}=
 a_1\Delta coverage+a_2\Delta compression+a_3\Delta bridge
 +a_4\Delta predict-a_5Redundancy.
-$$
+```
 
 **既存構造の保存と再編**
 
-$$
+```math
 R_{\mathrm{gain}}=
 b_1Preserve+b_2Rebind+b_3Reframe-b_4BreakCost.
-$$
+```
 
 **実用利得**
 
-$$
+```math
 U_{\mathrm{gain}}=
 c_1\Delta explain+c_2\Delta design+c_3\Delta transfer+c_4\Delta solve.
-$$
+```
 
 **複雑性の釣り合い**
 
-$$
+```math
 Q_{\mathrm{parity}}(z)=
 \exp\!\left(-\frac{|K(z)-K_0|}{\sigma}\right).
-$$
+```
 
-F1の $D_{\rm ctx}$ とF2の $D_{\rm par}$ は別の量です。$C_{\rm match}$ と $Q_{\rm parity}$ も別です。創造側の $D_{\rm sem}$ は任意の意味配置の差で、必須の意味を失う $L_{\rm sem}$ ではありません。四記録の $U$ と $U_{\rm gain}$、四記録の $G$ と $G_{\rm struct}$ を混同しません。
+F1の $`D_{\rm ctx}`$ とF2の $`D_{\rm par}`$ は別の量です。$`C_{\rm match}`$ と $`Q_{\rm parity}`$ も別です。創造側の $`D_{\rm sem}`$ は任意の意味配置の差で、必須の意味を失う $`L_{\rm sem}`$ ではありません。四記録の $`U`$ と $`U_{\rm gain}`$、四記録の $`G`$ と $`G_{\rm struct}`$ を混同しません。
 
-$$
+```math
 \Delta S_j=S_j(z)-S_j(z_0),\qquad j\in\{1,2\}.
-$$
+```
 
-生の得点と基準からの差は別に報告します。恒等候補でも生の得点は一般に0ではありません。原式の係数は27個（F1: 6、F2: 8、構造: 5、再編: 4、実用: 4）。規約では有限非負有理数を使い、係数和1は原式の要件ではありません。$\sigma,\kappa_M$ は正のbits、$\kappa_B$ は正の接続コスト単位です。均等係数は試験用で、校正済みの本番重みではありません。
+生の得点と基準からの差は別に報告します。恒等候補でも生の得点は一般に0ではありません。原式の係数は27個（F1: 6、F2: 8、構造: 5、再編: 4、実用: 4）。規約では有限非負有理数を使い、係数和1は原式の要件ではありません。$`\sigma,\kappa_M`$ は正のbits、$`\kappa_B`$ は正の接続コスト単位です。均等係数は試験用で、校正済みの本番重みではありません。
 
-以下は係数が非負の場合の外側の値域です。均等係数は `reference-uniform-test-v1` の例で、接続コストの尺度 $\kappa_B$ は試験ごとに指定します。
+以下は係数が非負の場合の外側の値域です。均等係数は `reference-uniform-test-v1` の例で、接続コストの尺度 $`\kappa_B`$ は試験ごとに指定します。
 
-$$
+```math
 \begin{aligned}
-S_1&\in[-(\lambda+\eta),\,\alpha+\beta+\gamma+\delta],\\
-G_{\rm struct}&\in[-\sum_{i=1}^{5}a_i,\,\sum_{i=1}^{4}a_i]=[g_l,g_h],\\
-R_{\rm gain}&\in[-b_4,\,b_1+b_2+b_3]=[r_l,r_h],\qquad
-U_{\rm gain}\in[-\sum_{i=1}^{4}c_i,\,\sum_{i=1}^{4}c_i]=[u_l,u_h],\\
-S_2&\in[w_2g_l+w_3r_l+w_4u_l-w_6-w_7-w_8,\;w_1+w_2g_h+w_3r_h+w_4u_h+w_5].
+S_1&\in[-(\lambda+\eta),\,\alpha+\beta+\gamma+\delta],
+\\ G_{\rm struct}&\in[-\sum_{i=1}^{5}a_i,\,\sum_{i=1}^{4}a_i]=[g_l,g_h],
+\\ R_{\rm gain}&\in[-b_4,\,b_1+b_2+b_3]=[r_l,r_h],\qquad
+U_{\rm gain}\in[-\sum_{i=1}^{4}c_i,\,\sum_{i=1}^{4}c_i]=[u_l,u_h],
+\\ S_2&\in[w_2g_l+w_3r_l+w_4u_l-w_6-w_7-w_8,\;w_1+w_2g_h+w_3r_h+w_4u_h+w_5].
 \end{aligned}
-$$
+```
 
-$$
+```math
 (\alpha,\beta,\lambda,\gamma,\delta,\eta)=(1/6,\ldots,1/6),\qquad
 w_i=1/8,\quad a_i=1/5,\quad b_i=c_i=1/4,\quad \sigma=\kappa_M=K_0.
-$$
+```
 
 [Rustの式評価器](../scripts/lc631/crates/lc631-analysis/src/creativity_measurement/formula/evaluate.rs)は、参照成分が欠けていれば0で補いません。係数が0でも未定義の入力を救済せず、厳密なF1/F2値を作れないときは`NoScalar`です。[実行経路の事前検査](../scripts/lc631/crates/lc631-runtime/src/original_score_pending.rs)は、入力が揃わない場合に評価済みスコアではなくPendingを残します。算術の実装、各成分の生成、通常経路の完了、独立した効果の実証は別です。
 
@@ -146,11 +146,9 @@ $$
 
 ### 全40成分：定義・値域・算出法
 
-以下は同じrevisionの成分カタログです。表記上 $\operatorname{Avg}$ は固定重み平均、$\operatorname{Pair}$ は同じ課題で比較した基準からの差、$d_J$ は重み付き集合距離です。指示関数は条件が確認されたときだけ0または1になり、未観測から0を作りません。記録集合にはスカラー式を捏造しません。各成分の適用条件・独立検証・選択への影響は[規範契約](tlcx-tl-screative-measurement-contract-v1-2026-10-29.md)にあります。
+以下は同じrevisionの成分カタログです。表記上 $`\operatorname{Avg}`$ は固定重み平均、$`\operatorname{Pair}`$ は同じ課題で比較した基準からの差、$`d_J`$ は重み付き集合距離です。指示関数は条件が確認されたときだけ0または1になり、未観測から0を作りません。記録集合にはスカラー式を捏造しません。各成分の適用条件・独立検証・選択への影響は[規範契約](tlcx-tl-screative-measurement-contract-v1-2026-10-29.md)にあります。
 
-<details>
-
-<summary>写像保存損失と補助量 (7)</summary>
+**写像保存損失と補助量 (7)**
 
 #### `TL-RECON` · reconstruction loss
 
@@ -194,11 +192,8 @@ $$
 
 **算出法:** registryの対応宣言と該当revisionの実行probeの両方を照合。宣言のみはunobserved。成功1、確認不対応0、不明[0,1]を固定分母で平均。
 
-</details>
 
-<details>
-
-<summary>変換ごとの四記録 (4)</summary>
+**変換ごとの四記録 (4)**
 
 #### `REC-D` · four-record Defect
 
@@ -224,17 +219,14 @@ $$
 
 **算出法:** 観測gainと予測gainを別tagで登録→shared primitive IDで重複を検出→CR各項へ集計。削除された必須条件をgainにしない。
 
-</details>
 
-<details>
-
-<summary>文脈・新規性・接続性 (7)</summary>
+**文脈・新規性・接続性 (7)**
 
 #### `CR-DCTX` · D_ctx
 
-$$
+```math
 D_{\mathrm{ctx}}=d_J(P_0^{\mathrm{mutable}},P_z^{\mathrm{mutable}})
-$$
+```
 
 **定義・値域・単位:** 元contextと再構成contextの可変premise/fact feature集合のK3距離。[0,1]無次元。logicの公理/推論規則signatureはD_parに分離。
 
@@ -242,9 +234,9 @@ $$
 
 #### `CR-DPAR` · D_par
 
-$$
+```math
 D_{\mathrm{par}}=d_J(\Sigma_0,\Sigma_z)
-$$
+```
 
 **定義・値域・単位:** 元と候補framework signature集合（logic、axiom、ontology sort、inference rule、演算意味）のK3距離。[0,1]無次元、Dctxと別。
 
@@ -252,9 +244,9 @@ $$
 
 #### `CR-DSEM` · D_sem
 
-$$
+```math
 D_{\mathrm{sem}}=\operatorname{Avg}_{P_{\mathrm{optional}}}(\mathbf 1[\text{mapped outcomes differ}])
-$$
+```
 
 **定義・値域・単位:** 固定nonmandatory意味配置queryに対するbaseline/候補のcanonical outcomeが異なる重み割合、[0,1]無次元。必須保存queryはTL-SEMへ。
 
@@ -262,9 +254,9 @@ $$
 
 #### `CR-ACOMP` · A_compat
 
-$$
+```math
 A_{\mathrm{compat}}=\operatorname{Avg}_{P_{\mathrm{integration}}}(\mathbf 1[\text{bridge check passes}])
-$$
+```
 
 **定義・値域・単位:** 固定integration/bridge queryが既存体系と正しく接続する成功重み割合、[0,1]無次元。embedding類似度でない。
 
@@ -272,9 +264,9 @@ $$
 
 #### `CR-CMATCH` · C_match
 
-$$
+```math
 C_{\mathrm{match}}=\left(1+\frac{\lvert K-K_0\rvert}{\kappa_M}\right)^{-1}
-$$
+```
 
 **定義・値域・単位:** C_match=1/(1+|K−K0|/κ_M)、κ_M>0 bits。[0,1]内で正、無次元。原案v1の未定義計算法をこの有理proxyで補完し、Qとaliasしない。
 
@@ -282,9 +274,9 @@ $$
 
 #### `CR-NKNOWN` · N_known
 
-$$
+```math
 N_{\mathrm{known}}=\max_{y\in\mathcal C}\{1-d_J(F_z,F_y)\}
-$$
+```
 
 **定義・値域・単位:** 固定非空archive内の最大construction-feature類似度max_y(1−K3(Fz,Fy))。[0,1]無次元。人類全体の既知性ではない。
 
@@ -296,17 +288,14 @@ $$
 
 **算出法:** 共有metric nodeを参照しK7のsqrt boundとK4積。完全平方以外をf64だけでExactとしない。入力欠落はNoScalar/Bounded方針に従う。
 
-</details>
 
-<details>
-
-<summary>構造利得 (6)</summary>
+**構造利得 (6)**
 
 #### `CR-COVERAGE` · Δcoverage
 
-$$
+```math
 \Delta\mathrm{coverage}=\operatorname{Pair}_{P_{\mathrm{coverage}}}(s_z,s_0)
-$$
+```
 
 **定義・値域・単位:** 固定coverage-validation query集合で説明/解決可能と確認された割合のpaired改善K2、[-1,1]無次元。
 
@@ -314,9 +303,9 @@ $$
 
 #### `CR-COMPRESSION` · Δcompression
 
-$$
+```math
 \Delta\mathrm{compression}=\frac{K_0-K_z}{\max(K_0,K_z)}
-$$
+```
 
 **定義・値域・単位:** (K0−Kz)/max(K0,Kz)∈[-1,1]無次元、Kはbits。必須意味同値/保存が検査済みの場合だけ有効な圧縮利得。
 
@@ -324,9 +313,9 @@ $$
 
 #### `CR-BRIDGE` · Δbridge
 
-$$
+```math
 \Delta\mathrm{bridge}=\operatorname{Pair}_{P_{\mathrm{bridge}}}(s_z,s_0)
-$$
+```
 
 **定義・値域・単位:** 固定cross-domain queryが検証済bridgeで利用可能となる割合のK2改善、[-1,1]無次元。edge数でない。
 
@@ -334,9 +323,9 @@ $$
 
 #### `CR-PREDICT` · Δpredict
 
-$$
+```math
 \mathrm{Brier}(z)=\frac{\sum_i w_i(p_{z,i}-y_i)^2}{\sum_i w_i},\qquad \Delta\mathrm{predict}=\mathrm{Brier}(z_0)-\mathrm{Brier}(z)
-$$
+```
 
 **定義・値域・単位:** Brier(z0)−Brier(z)、Brier=Σwi(pi−yi)^2/W、pi∈[0,1],yi∈{0,1}。[-1,1]無次元。多classは別revision。
 
@@ -344,9 +333,9 @@ $$
 
 #### `CR-REDUNDANCY` · Redundancy
 
-$$
+```math
 \mathrm{Redundancy}=\frac{\sum_j\max(0,n_j-1)}{\sum_j n_j}
-$$
+```
 
 **定義・値域・単位:** 固定役割別semantic unit multisetでΣ_class max(0,n_class−1)/Σ_class n_class、[0,1]無次元。必須反復はrole別unitなので別class。
 
@@ -358,17 +347,14 @@ $$
 
 **算出法:** 5子nodeと係数をpinしK4で評価。全gainを[0,1]へclipしない。shared evidence dependency groupを表示。
 
-</details>
 
-<details>
-
-<summary>既存構造の再編 (5)</summary>
+**既存構造の再編 (5)**
 
 #### `CR-PRESERVE` · Preserve
 
-$$
+```math
 \mathrm{Preserve}=\operatorname{Avg}_{P_{\mathrm{struct}}}(\mathbf 1[\text{preserved}])
-$$
+```
 
 **定義・値域・単位:** 固定source structural propertyの保存成功重み割合K1、[0,1]無次元。差分でなく絶対値、恒等で通常1。
 
@@ -376,9 +362,9 @@ $$
 
 #### `CR-REBIND` · Rebind
 
-$$
+```math
 \mathrm{Rebind}=\operatorname{Avg}_{P_{\mathrm{units}}}(\mathbf 1[\text{changed binding and verified useful map-back/use}])
-$$
+```
 
 **定義・値域・単位:** 固定source unitのうち結合先/役割が実際に変わり、有用なmap-backと使用probeが成立した割合、[0,1]無次元。
 
@@ -386,9 +372,9 @@ $$
 
 #### `CR-REFRAME` · Reframe
 
-$$
+```math
 \mathrm{Reframe}=\operatorname{Avg}_{P_{\mathrm{perspective}}}(\mathbf 1[\text{baseline fails and reframed mapped candidate passes}])
-$$
+```
 
 **定義・値域・単位:** 固定perspective queryのうちbaselineで不成立、明示frame変更＋検証済map-backで候補が説明可能になった重み割合、[0,1]無次元。
 
@@ -396,9 +382,9 @@ $$
 
 #### `CR-BREAK` · BreakCost
 
-$$
+```math
 \mathrm{BreakCost}=\operatorname{Avg}_{P_{\mathrm{optional\ legacy}}}(\mathbf 1[\text{confirmed break}])
-$$
+```
 
 **定義・値域・単位:** 固定optional legacy compatibility/propertyの確認破壊率K1、[0,1]無次元。hard義務や操作権限はcost外のgate。
 
@@ -410,17 +396,14 @@ $$
 
 **算出法:** 4子nodeを同一scopeから取得しK4。Preserveが絶対値であることを保ち、名前gainだからと自動中心化しない。
 
-</details>
 
-<details>
-
-<summary>実用利得 (5)</summary>
+**実用利得 (5)**
 
 #### `CR-EXPLAIN` · Δexplain
 
-$$
+```math
 \Delta\mathrm{explain}=\operatorname{Pair}_{P_{\mathrm{explain}}}(s_z,s_0)
-$$
+```
 
 **定義・値域・単位:** 固定explanation-validation queryの正しい導出/説明成立scoreのpaired gain K2、[-1,1]無次元。
 
@@ -428,9 +411,9 @@ $$
 
 #### `CR-DESIGN` · Δdesign
 
-$$
+```math
 g_{\uparrow}(x)=\operatorname{clip}_{[0,1]}\left(\frac{x-m}{M-m}\right),\quad g_{\downarrow}(x)=1-g_{\uparrow}(x),\quad \Delta\mathrm{design}=\operatorname{Pair}_{P_{\mathrm{design}}}(s_z,s_0)
-$$
+```
 
 **定義・値域・単位:** 固定design acceptance suiteのscore改善K2、[-1,1]無次元。各scoreはbinaryか、事前固定m<MとAcceptedInputRangeを持つquantityをnormalizeし、large-is-betterはclip((x−m)/(M−m),0,1)、small-is-betterは1−clip((x−m)/(M−m),0,1)。m/Mはsaturation scaleでAcceptedInputRangeそのものではない。
 
@@ -438,9 +421,9 @@ $$
 
 #### `CR-TRANSFER` · Δtransfer
 
-$$
+```math
 \Delta\mathrm{transfer}=\operatorname{Pair}_{P_{\mathrm{transfer}}}(s_z,s_0)
-$$
+```
 
 **定義・値域・単位:** 事前分離したtransfer-validation familyのscore改善K2、[-1,1]無次元。scoreはbinaryまたはCR-DESIGNの固定量正規化。
 
@@ -448,9 +431,9 @@ $$
 
 #### `CR-SOLVE` · Δsolve
 
-$$
+```math
 \Delta\mathrm{solve}=\operatorname{Pair}_{P_{\mathrm{solve}}}(s_z,s_0)
-$$
+```
 
 **定義・値域・単位:** 固定root-goal solution suiteで正解/実行可能性/目的品質scoreの改善K2、[-1,1]無次元。各probeのbinaryまたはCR-DESIGN正規化を固定。
 
@@ -462,17 +445,14 @@ $$
 
 **算出法:** 4子nodeをK4で評価、各dataset roleとevidence basisを保存。REC-Uと型を共有しない。
 
-</details>
 
-<details>
-
-<summary>記述長・リスク・F1/F2の値域 (6)</summary>
+**記述長・リスク・F1/F2の値域 (6)**
 
 #### `CR-K` · K, K0
 
-$$
+```math
 K(z)=8\,\operatorname{len}_{\mathrm{bytes}}\!\left(E(\mathrm{Bundle}(z))\right)\ \mathrm{bits},\qquad K_0=K(z_0)>0
-$$
+```
 
 **定義・値域・単位:** K(z)=8 len(E(z)) bits、K0=K(z0)>0、整数。実用記述長proxyであり最小program長/計算不能なKolmogorov complexityではない。
 
@@ -486,9 +466,9 @@ $$
 
 #### `CR-RCOUNTER` · R_counter
 
-$$
+```math
 R_{\mathrm{counter}}=\operatorname{Avg}_{P_{\mathrm{adversarial}}}(\mathbf 1[\text{confirmed failure}])
-$$
+```
 
 **定義・値域・単位:** 固定非空adversarial probe suiteでの確認failure重み割合K1、[0,1]無次元。反例の発見件数でも一般的反例確率でもない。
 
@@ -496,9 +476,9 @@ $$
 
 #### `CR-BMEM` · B_mem
 
-$$
+```math
 C\in\left[\min_p\sum_{e\in p}\underline c_e,\ \min_p\sum_{e\in p}\overline c_e\right],\qquad B_{\mathrm{mem}}=\frac{C}{C+\kappa_B}
-$$
+```
 
 **定義・値域・単位:** 全admissible nonsecurity conversionを列挙した閉じた有限graph上のminimum bridge cost Cを`B_mem=C/(C+κ_B)`で正規化する。κ_B>0は同じtyped cost unit。C∈[0,∞]、B_mem∈[0,1]。Cが区間なら単調mapを両endpointへ適用する。完全な閉グラフでpathなしの場合だけ1とDisconnectedを併記。
 
@@ -516,7 +496,6 @@ $$
 
 **算出法:** 全8項と子nodeを同一DAGで評価。raw baselineとdelta S2を別計算。identity Redundancy0、Preserve1、Q1、他0ならS2(z0)=w3b1+w5。Redundancy0>0なら−w2a5Redundancy0も残す。
 
-</details>
 
 <a id="kernels-ja"></a>
 
@@ -524,121 +503,121 @@ $$
 
 **K1・K2・K3。** 重みは比較前に固定します。ペア差は項ごとに求め、丸めた平均同士を引きません。集合は固定universe内で同じ意味のfeatureを対応づけます。有効と確認済みの空集合対だけを距離0とします。
 
-$$
+```math
 \begin{aligned}
-\operatorname{Avg}_{P}(v)&=\frac{\sum_{i\in P}w_i v_i}{W},\quad W=\sum_{i\in P}w_i>0,\\
-\operatorname{Pair}_{P}(s_z,s_0)&=\frac{\sum_i w_i(s_z(i)-s_0(i))}{W},\\
-d_J(A,B)&=\frac{\sum_{i\in A\triangle B}v_i}{\sum_{i\in A\cup B}v_i}\quad(A\cup B\ne\varnothing).
+\operatorname{Avg}_{P}(v)&=\frac{\sum_{i\in P}w_i v_i}{W},\quad W=\sum_{i\in P}w_i>0,
+\\ \operatorname{Pair}_{P}(s_z,s_0)&=\frac{\sum_i w_i(s_z(i)-s_0(i))}{W},
+\\ d_J(A,B)&=\frac{\sum_{i\in A\triangle B}v_i}{\sum_{i\in A\cup B}v_i}\quad(A\cup B\ne\varnothing).
 \end{aligned}
-$$
+```
 
-**K4：有界区間。** $A=[a,b]$, $B=[c,d]$。ゼロを含む除数では未定義です。同じ有効観測ノードの自己差はExact 0ですが、同じ数値区間を持つ別ノードは通常の区間演算のままです。
+**K4：有界区間。** $`A=[a,b]`$, $`B=[c,d]`$。ゼロを含む除数では未定義です。同じ有効観測ノードの自己差はExact 0ですが、同じ数値区間を持つ別ノードは通常の区間演算のままです。
 
-$$
+```math
 \begin{aligned}
-A+B&=[a+c,b+d],& A-B&=[a-d,b-c],& -A&=[-b,-a],\\
-AB&=[\min(ac,ad,bc,bd),\max(ac,ad,bc,bd)],&
-A/B&=A[1/d,1/c]\quad (0\notin B),\\
-\operatorname{square}(A)&=\begin{cases}[0,\max(a^2,b^2)]&a\le0\le b\\\left[\min(a^2,b^2),\max(a^2,b^2)\right]&\text{otherwise},\end{cases}\\
-\operatorname{abs}(A)&=\begin{cases}[0,\max(-a,b)]&a\le0\le b\\\left[\min(|a|,|b|),\max(|a|,|b|)\right]&\text{otherwise}.\end{cases}
+A+B&=[a+c,b+d],& A-B&=[a-d,b-c],& -A&=[-b,-a],
+\\ AB&=[\min(ac,ad,bc,bd),\max(ac,ad,bc,bd)],&
+A/B&=A[1/d,1/c]\quad (0\notin B),
+\\ \operatorname{square}(A)&=\begin{cases}[0,\max(a^2,b^2)]&a\le0\le b\\\left[\min(a^2,b^2),\max(a^2,b^2)\right]&\text{otherwise},\end{cases}
+\\ \operatorname{abs}(A)&=\begin{cases}[0,\max(-a,b)]&a\le0\le b\\\left[\min(|a|,|b|),\max(|a|,|b|)\right]&\text{otherwise}.\end{cases}
 \end{aligned}
-$$
+```
 
-$$
+```math
 \{\min_i x_i:x_i\in[\ell_i,u_i]\}\subseteq[\min_i\ell_i,\min_i u_i],\qquad
 \{\max_i x_i:x_i\in[\ell_i,u_i]\}\subseteq[\max_i\ell_i,\max_i u_i].
-$$
+```
 
 最後の二式は有限で空でない族の外側包含です。空族は未定義です。平方根は非負領域で外向きに評価します。
 
-**K5：古典論理における検査。** まず $\Gamma$ の充足可能性を確かめます。不整合なら古典的な採点を止めます。整合する場合に限り次を使い、両側がSATなら未決定です。solverの報告、再検査したモデル、検査した証明、有限全列挙は別の証拠です。ASP・時相・四値はそれぞれの意味論を使います。
+**K5：古典論理における検査。** まず $`\Gamma`$ の充足可能性を確かめます。不整合なら古典的な採点を止めます。整合する場合に限り次を使い、両側がSATなら未決定です。solverの報告、再検査したモデル、検査した証明、有限全列挙は別の証拠です。ASP・時相・四値はそれぞれの意味論を使います。
 
-$$
+```math
 \Gamma\models\varphi\iff\operatorname{UNSAT}(\Gamma\land\neg\varphi),\qquad
 \Gamma\models\neg\varphi\iff\operatorname{UNSAT}(\Gamma\land\varphi).
-$$
+```
 
-**K6・K7：記述長と数値精度。** K6は自己完結する型付き項・decoder・dictionaryの符号長で、Kolmogorov complexityではありません。K7はGCD正規化された有理数と外向きの区間を使います。$1\le p\le256$、参照精度は64です。下の $q$ は平方根の格子下限を決めます。有理完全平方はExact、それ以外は包含であり、資源超過はResourceExhaustedです。
+**K6・K7：記述長と数値精度。** K6は自己完結する型付き項・decoder・dictionaryの符号長で、Kolmogorov complexityではありません。K7はGCD正規化された有理数と外向きの区間を使います。$`1\le p\le256`$、参照精度は64です。下の $`q`$ は平方根の格子下限を決めます。有理完全平方はExact、それ以外は包含であり、資源超過はResourceExhaustedです。
 
-$$
+```math
 x=n/d\ge0,\quad q=\operatorname{isqrt}\!\left(\left\lfloor n2^{2p}/d\right\rfloor\right),\quad
 \sqrt{x}\in[q/2^p,(q+1)/2^p].
-$$
+```
 
-$$
+```math
 \begin{aligned}
-r&=\min\{r\in\mathbb Z_{\ge0}:x/2^r\le1/2\},\quad y=x/2^r,\quad P=p+r+16,\\
-T_m(y)&=\sum_{k=0}^{m}(-y)^k/k!,\quad T_{2j+1}(y)\le e^{-y}\le T_{2j}(y),\\
-\operatorname{down}_P(v)&=\lfloor v2^P\rfloor/2^P,\quad \operatorname{up}_P(v)=\lceil v2^P\rceil/2^P.
+r&=\min\{r\in\mathbb Z_{\ge0}:x/2^r\le1/2\},\quad y=x/2^r,\quad P=p+r+16,
+\\ T_m(y)&=\sum_{k=0}^{m}(-y)^k/k!,\quad T_{2j+1}(y)\le e^{-y}\le T_{2j}(y),
+\\ \operatorname{down}_P(v)&=\lfloor v2^P\rfloor/2^P,\quad \operatorname{up}_P(v)=\lceil v2^P\rceil/2^P.
 \end{aligned}
-$$
+```
 
-Taylor上下界の差を $2^{-P}$ 以下にして外向きに丸めます。$r$ 回、$[l,u]\mapsto[\operatorname{down}_P(l^2),\operatorname{up}_P(u^2)]$ を適用し、最終幅が $2^{-p}$ 以下かを検査します。未達なら元の有理Taylor境界から $P$ を32増やして最大3回再計算します。参照上限は $r\le64$、256項です。不確かな小値をExact 0にしません。
+Taylor上下界の差を $`2^{-P}`$ 以下にして外向きに丸めます。$`r`$ 回、$`[l,u]\mapsto[\operatorname{down}_P(l^2),\operatorname{up}_P(u^2)]`$ を適用し、最終幅が $`2^{-p}`$ 以下かを検査します。未達なら元の有理Taylor境界から $`P`$ を32増やして最大3回再計算します。参照上限は $`r\le64`$、256項です。不確かな小値をExact 0にしません。
 
-$$
+```math
 \begin{aligned}
-d_{\min}&=\begin{cases}0&k_L\le K_0\le k_U\\\min(|k_L-K_0|,|k_U-K_0|)&\text{otherwise},\end{cases}\\
-d_{\max}&=\max(|k_L-K_0|,|k_U-K_0|),\\
-e^{-[x,y]}&\subseteq [\operatorname{lowerExp}(y),\operatorname{upperExp}(x)]\quad (0\le x\le y),\\
-Q_{\rm parity}&\in [\operatorname{lowerExp}(d_{\max}/\sigma),\operatorname{upperExp}(d_{\min}/\sigma)],\\
-\overline Q&=\min(\operatorname{upperExp}(x),1/(1+x))<1\quad(x=d_{\min}/\sigma>0).
+d_{\min}&=\begin{cases}0&k_L\le K_0\le k_U\\\min(|k_L-K_0|,|k_U-K_0|)&\text{otherwise},\end{cases}
+\\ d_{\max}&=\max(|k_L-K_0|,|k_U-K_0|),
+\\ e^{-[x,y]}&\subseteq [\operatorname{lowerExp}(y),\operatorname{upperExp}(x)]\quad (0\le x\le y),
+\\ Q_{\rm parity}&\in [\operatorname{lowerExp}(d_{\max}/\sigma),\operatorname{upperExp}(d_{\min}/\sigma)],
+\\ \overline Q&=\min(\operatorname{upperExp}(x),1/(1+x))<1\quad(x=d_{\min}/\sigma>0).
 \end{aligned}
-$$
+```
 
-写像後の値が無効なら自動clipしません。正規化・飽和が登録された設計成分だけが例外です。基準を含む $K$ 区間の上界1はExact 1ではありません。
+写像後の値が無効なら自動clipしません。正規化・飽和が登録された設計成分だけが例外です。基準を含む $`K`$ 区間の上界1はExact 1ではありません。
 
 <a id="policy-ja"></a>
 
 ### 候補選択と探索配分（得点とは別）
 
-RootGoalのraw範囲は $m<M$、方向を固定します。有効範囲を外れたExact入力をclipせず拒否し、境界を跨ぐ区間はNeedsEvidenceです。一方、CR-DESIGNの飽和はAcceptedInputRange検査後にのみ適用します。
+RootGoalのraw範囲は $`m\lt M`$、方向を固定します。有効範囲を外れたExact入力をclipせず拒否し、境界を跨ぐ区間はNeedsEvidenceです。一方、CR-DESIGNの飽和はAcceptedInputRange検査後にのみ適用します。
 
-$$
+```math
 g_{\max}(x)=(x-m)/(M-m),\qquad g_{\min}(x)=(M-x)/(M-m).
-$$
+```
 
-必須条件を先に検査します。上限型の損失gateは $u\le\tau$ でPass、$l>\tau$ でFail。下限型の利得gateは $l\ge\tau$ でPass、$u<\tau$ でFail。他はNeedsEvidenceです。必須保存の $\tau=0$。標準のJointParetoは目標・個別損失・primitive利得・soft costを比較し、F1/F2や複合利得をさらに足しません。
+必須条件を先に検査します。上限型の損失gateは $`u\le\tau`$ でPass、$`l\gt \tau`$ でFail。下限型の利得gateは $`l\ge\tau`$ でPass、$`u\lt \tau`$ でFail。他はNeedsEvidenceです。必須保存の $`\tau=0`$。標準のJointParetoは目標・個別損失・primitive利得・soft costを比較し、F1/F2や複合利得をさらに足しません。
 
-$$
+```math
 \forall i\in I_{\max}:\ \underline A_i\ge\overline B_i,\qquad
 \forall j\in I_{\min}:\ \overline A_j\le\underline B_j.
-$$
+```
 
 上の全条件と少なくとも一つの厳密不等号が保守的な支配の条件です。重なる区間から勝者を決めません。strict original scoreで単独の勝者とするのは、他のすべての適格候補に対して得点下界が相手の上界より大きい場合だけです。目標や代表順序が未定義ならNoRecommendation。比較可能なら推奨解一つと重要な代替を残します。
 
-$$
+```math
 J=aL_{\rm trans}-bS_j:\qquad
 [L_{\rm trans}]J=\begin{cases}a+b\lambda&j=1\\a+bw_6&j=2.\end{cases}
-$$
+```
 
 これは同じ損失の二重計上を検出するための展開で、標準の選択関数ではありません。
 
-**探索の優先度。** $u$ は適用軸の区間幅／宣言値域幅の最大（固定幅0の軸の寄与は0）。$B>0$ は問い合わせ枠、$\hat c$ は登録した推定slot costです。最初から固定したnovelty policyを使い、不明な場合はcanonical round-robinに戻ります。$\lceil B/8\rceil$ 枠を公平な巡回に取り、残りは優先度下界の降順です。
+**探索の優先度。** $`u`$ は適用軸の区間幅／宣言値域幅の最大（固定幅0の軸の寄与は0）。$`B\gt 0`$ は問い合わせ枠、$`\hat c`$ は登録した推定slot costです。最初から固定したnovelty policyを使い、不明な場合はcanonical round-robinに戻ります。$`\lceil B/8\rceil`$ 枠を公平な巡回に取り、残りは優先度下界の降順です。
 
-$$
+```math
 c=\min(1,\hat c/B),\qquad \pi=\frac{(1+u)(1+n)}{1+c},\qquad
 n_{\cup}=d_J(F_x,\bigcup_{y\in\mathcal F}F_y),\quad n_{\rm near}=\min_{y\in\mathcal F}d_J(F_x,F_y).
-$$
+```
 
 和集合との距離が参照方針です。最近傍との距離は別方針で、順位は逆転し得ます。以下のK8は幾何を登録した場合だけの別の探索提案です。物理距離、意味の真値、採用や実行の許可ではありません。
 
-$$
+```math
 \begin{aligned}
-\mathbb B_\kappa&=\{x:\kappa\lVert x\rVert_2^2<1\},\qquad \kappa>0,\quad \kappa\lVert x\rVert_2^2\le1-\mu,\quad 0<\mu<1,\\
-t&=\frac{\kappa\lVert x-y\rVert_2^2}{(1-\kappa\lVert x\rVert_2^2)(1-\kappa\lVert y\rVert_2^2)},\qquad q=\sqrt{t/(1+t)},\\
-d_\kappa(x,y)&=\frac{\operatorname{acosh}(1+2t)}{\sqrt\kappa}
-=\frac{2\operatorname{atanh}(q)}{\sqrt\kappa},\\
-T_N(q)&=\sum_{k=0}^{N}\frac{q^{2k+1}}{2k+1},\qquad
+\mathbb B_\kappa&=\{x:\kappa\lVert x\rVert_2^2<1\},\qquad \kappa>0,\quad \kappa\lVert x\rVert_2^2\le1-\mu,\quad 0<\mu<1,
+\\ t&=\frac{\kappa\lVert x-y\rVert_2^2}{(1-\kappa\lVert x\rVert_2^2)(1-\kappa\lVert y\rVert_2^2)},\qquad q=\sqrt{t/(1+t)},
+\\ d_\kappa(x,y)&=\frac{\operatorname{acosh}(1+2t)}{\sqrt\kappa}
+=\frac{2\operatorname{atanh}(q)}{\sqrt\kappa},
+\\ T_N(q)&=\sum_{k=0}^{N}\frac{q^{2k+1}}{2k+1},\qquad
 \operatorname{atanh}(q)\in\left[T_N(q_L),\,T_N(q_U)+\frac{q_U^{2N+3}}{(2N+3)(1-q_U^2)}\right].
 \end{aligned}
-$$
+```
 
-座標box全体を境界内と確認し、ノルム二乗は成分ごとにK4の専用squareを使います。$t_L,t_U$ の各端点で数値幅 $\le2^{-64}$ を検査します。内側精度80から32ずつ最大256まで、$N=0\ldots256$。$q_U=1$ または未収束なら精度を上げ、上限ではResourceExhausted（有効boundがなければNoScalar）。入力の不確実性による区間幅は数値丸め誤差ではありません。
+座標box全体を境界内と確認し、ノルム二乗は成分ごとにK4の専用squareを使います。$`t_L,t_U`$ の各端点で数値幅 $`\le2^{-64}`$ を検査します。内側精度80から32ずつ最大256まで、$`N=0\ldots256`$。$`q_U=1`$ または未収束なら精度を上げ、上限ではResourceExhausted（有効boundがなければNoScalar）。入力の不確実性による区間幅は数値丸め誤差ではありません。
 
-$$
+```math
 d_{\rm near}=\min_{y\in\mathcal F}d_\kappa(x,y)\in[d_L,d_U],\qquad
 n_{\rm geo}\in[1-\operatorname{upperExp}(d_L/s_{\rm geo}),\,1-\operatorname{lowerExp}(d_U/s_{\rm geo})],\quad s_{\rm geo}>0.
-$$
+```
 
 登録embeddingや検証済frontierがなければ、この値を作りません。幾何や蒸留の提案は、離散検証と再測定なしに指標を書き換えません。
 
@@ -646,11 +625,9 @@ $$
 
 ### 数値例と確認先
 
-重み1と3の二つの検査で損失が0と1ならEpiMapLossは $3/4$ です。二つ目が定義済みだが未観測なら $[0,3/4]$ で、0にも $3/4$ にも確定しません。均等係数の合成恒等例ではF1が $1/6$、F2が $5/32$ で、どちらも自分自身との差は0です。これは算術の試験例であり、開発上の効果を測った数値ではありません。
+重み1と3の二つの検査で損失が0と1ならEpiMapLossは $`3/4`$ です。二つ目が定義済みだが未観測なら $`[0,3/4]`$ で、0にも $`3/4`$ にも確定しません。均等係数の合成恒等例ではF1が $`1/6`$、F2が $`5/32`$ で、どちらも自分自身との差は0です。これは算術の試験例であり、開発上の効果を測った数値ではありません。
 
-<details>
-
-<summary>固定契約の全37数値例・境界例（G01〜G37）</summary>
+**固定契約の全37数値例・境界例（G01〜G37）**
 
 | ID | 入力と期待値（試験用） |
 | --- | --- |
@@ -692,7 +669,6 @@ $$
 | G36 | New feature outside the fixed K3 universe remains `InvalidInput/UniverseMismatch`; a new ComparisonScope revision is required to compare it |
 | G37 | Missing/unverified EmbeddingPolicy remains `Unsupported`; search proposal generation cannot create authority or exact semantic novelty |
 
-</details>
 
 [README](../README.md) · [固定測定契約](tlcx-tl-screative-measurement-contract-v1-2026-10-29.md) · [Beta 6.9保存記録](epistesys-6.9.0-beta.1-source-snapshot-2026-11-05.md)
 
@@ -706,137 +682,137 @@ This page explains how Epistesys represents what is lost in a transformation and
 
 `EpiMapLoss` (mapping preservation loss) and `EpiRecompScore` (structural recomposition score) are the current public names used here. Formula IDs, mathematical notation, and existing Rust/JSON compatibility names are unchanged. These names do not introduce new Rust types or wire fields.
 
-**Notation:** $z$ is the candidate and $z_0$ the baseline in the same comparison scope. $P$ is a fixed set of probes; $w_i>0$ is a probe weight. The equations require compatible scope, baseline, applicability, units, verification method and budget. `Exact` describes arithmetic on the supplied inputs.
+**Notation:** $`z`$ is the candidate and $`z_0`$ the baseline in the same comparison scope. $`P`$ is a fixed set of probes; $`w_i\gt 0`$ is a probe weight. The equations require compatible scope, baseline, applicability, units, verification method and budget. `Exact` describes arithmetic on the supplied inputs.
 
 <a id="map-en"></a>
 
 ### EpiMapLoss: what was lost in a mapping
 
-For a mapping from input $X$ to representation $Y_i$, test properties that should survive. The four axes are reconstruction, semantics, time and space. The original concept specified the mappings and axes but not a scalar reduction; the following aggregation is the current operational convention.
+For a mapping from input $`X`$ to representation $`Y_i`$, test properties that should survive. The four axes are reconstruction, semantics, time and space. The original concept specified the mappings and axes but not a scalar reduction; the following aggregation is the current operational convention.
 
-$$
+```math
 X\xrightarrow{F_i}Y_i,\qquad \mathcal A\subseteq\{\mathrm{recon},\mathrm{sem},\mathrm{time},\mathrm{space}\}.
-$$
+```
 
-$$
+```math
 \begin{aligned}
 W_a &= \sum_{q\in P_a}w_q,\qquad
-L_a=\left[\frac{\sum_q w_q\underline\ell_q}{W_a},\frac{\sum_q w_q\overline\ell_q}{W_a}\right],\\
-\operatorname{EpiMapLoss}_{\mathcal A,\rho}(z)
+L_a=\left[\frac{\sum_q w_q\underline\ell_q}{W_a},\frac{\sum_q w_q\overline\ell_q}{W_a}\right],
+\\ \operatorname{EpiMapLoss}_{\mathcal A,\rho}(z)
 &=L_{\mathrm{trans}}(z)=\frac{\sum_{a\in\mathcal A}\rho_a L_a(z)}{\sum_{a\in\mathcal A}\rho_a},\qquad \rho_a>0 .
 \end{aligned}
-$$
+```
 
-A confirmed preserved relation has probe loss 0; a confirmed violation has loss 1. Use $[0,1]$ only when the quantity and range are defined but observation is missing. Undefined, incomparable, or unsupported inputs are not zero. Do not change the mask or denominator per candidate or average away hard violations.
+A confirmed preserved relation has probe loss 0; a confirmed violation has loss 1. Use $`[0,1]`$ only when the quantity and range are defined but observation is missing. Undefined, incomparable, or unsupported inputs are not zero. Do not change the mask or denominator per candidate or average away hard violations.
 
-$$
+```math
 e_q=\begin{cases}
-\lvert v_t-F_q(v_s)\rvert&\text{registered scalar},\\
-\lVert v_t-F_q(v_s)\rVert_{\text{registered norm}}&\text{registered vector norm},
+\lvert v_t-F_q(v_s)\rvert&\text{registered scalar},
+\\ \lVert v_t-F_q(v_s)\rVert_{\text{registered norm}}&\text{registered vector norm},
 \end{cases}
 \qquad
 \ell_q=\min\!\left(1,\frac{\max(0,e_q-\epsilon_q)}{r_q}\right).
-$$
+```
 
-Tolerance $\epsilon_q\ge0$ and saturation scale $r_q>0$ have the same units as the error. Spatial probes use a registered comparator. For time, distinguish instants from durations. A nonempty interval requires $s<e$ and contains instants $s\le t<e$; before means $e_A<s_B$ and meets means $e_A=s_B$.
+Tolerance $`\epsilon_q\ge0`$ and saturation scale $`r_q\gt 0`$ have the same units as the error. Spatial probes use a registered comparator. For time, distinguish instants from durations. A nonempty interval requires $`s\lt e`$ and contains instants $`s\le t\lt e`$; before means $`e_A\lt s_B`$ and meets means $`e_A=s_B`$.
 
-$$
+```math
 F_{\mathrm{abs}}(t)=at+b,\qquad F_{\mathrm{dur}}(\Delta t)=a\,\Delta t.
-$$
+```
 
 One [current Rust profile](../scripts/lc631/crates/lc631-runtime/src/checked_tl_reduction.rs) is a finite-MODEL comparison with temporal and spatial axes fixed at weights 1:3. Those weights are not defaults for all tasks. End-to-end loss rechecks the original properties at the final representation; it is not defined as a sum over edges.
 
-$$
+```math
 L_{\mathrm{tuple}}=\frac{L_{\mathrm{time}}+3L_{\mathrm{space}}}{4},\qquad L_{\mathrm{end}}=L(X,Y_{\mathrm{final}};\,P_{\mathrm{root}}).
-$$
+```
 
-Each transformation has four records $(D,\Delta,U,G)$: confirmed preservation defects, permitted premise changes, unresolved items, and baseline-relative gain records. These are not four numbers to add. Distinguish an intentional premise change from a defect, and predicted from observed gains.
+Each transformation has four records $`(D,\Delta,U,G)`$: confirmed preservation defects, permitted premise changes, unresolved items, and baseline-relative gain records. These are not four numbers to add. Distinguish an intentional premise change from a defect, and predicted from observed gains.
 
 <a id="score-en"></a>
 
 ### EpiRecompScore: F1, F2, and all subformulas
 
-**F1** (fixed ID `OriginalFormula/F1-v1`). This profile evaluates contextual and semantic distance, compatibility, and complexity balance, subtracting mapping preservation loss and knownness. $\operatorname{EpiRecompScore}_{F1}(z)=S_1(z)$.
+**F1** (fixed ID `OriginalFormula/F1-v1`). This profile evaluates contextual and semantic distance, compatibility, and complexity balance, subtracting mapping preservation loss and knownness. $`\operatorname{EpiRecompScore}_{F1}(z)=S_1(z)`$.
 
-$$
+```math
 \begin{aligned}
-S_1(z)&=\alpha D_{\mathrm{ctx}}(z)+\beta D_{\mathrm{sem}}(z) \\
-&\quad -\lambda L_{\mathrm{trans}}(z)+\gamma A_{\mathrm{compat}}(z) \\
-&\quad +\delta C_{\mathrm{match}}(z)-\eta N_{\mathrm{known}}(z).
+S_1(z)&=\alpha D_{\mathrm{ctx}}(z)+\beta D_{\mathrm{sem}}(z)
+\\ &\quad -\lambda L_{\mathrm{trans}}(z)+\gamma A_{\mathrm{compat}}(z)
+\\ &\quad +\delta C_{\mathrm{match}}(z)-\eta N_{\mathrm{known}}(z).
 \end{aligned}
-$$
+```
 
-**F2** (fixed ID `OriginalFormula/F2-v1`). This profile evaluates novelty with compatibility, structural gain, reorganization, utility, and complexity parity, subtracting mapping preservation loss, counterexample risk, and bridging cost. $\operatorname{EpiRecompScore}_{F2}(z)=S_2(z)$.
+**F2** (fixed ID `OriginalFormula/F2-v1`). This profile evaluates novelty with compatibility, structural gain, reorganization, utility, and complexity parity, subtracting mapping preservation loss, counterexample risk, and bridging cost. $`\operatorname{EpiRecompScore}_{F2}(z)=S_2(z)`$.
 
-$$
+```math
 \begin{aligned}
-S_2(z)&=w_1T_{\mathrm{nc}}(z)+w_2G_{\mathrm{struct}}(z) \\
-&\quad +w_3R_{\mathrm{gain}}(z)+w_4U_{\mathrm{gain}}(z) \\
-&\quad +w_5Q_{\mathrm{parity}}(z)-w_6L_{\mathrm{trans}}(z) \\
-&\quad -w_7R_{\mathrm{counter}}(z)-w_8B_{\mathrm{mem}}(z).
+S_2(z)&=w_1T_{\mathrm{nc}}(z)+w_2G_{\mathrm{struct}}(z)
+\\ &\quad +w_3R_{\mathrm{gain}}(z)+w_4U_{\mathrm{gain}}(z)
+\\ &\quad +w_5Q_{\mathrm{parity}}(z)-w_6L_{\mathrm{trans}}(z)
+\\ &\quad -w_7R_{\mathrm{counter}}(z)-w_8B_{\mathrm{mem}}(z).
 \end{aligned}
-$$
+```
 
 **Novelty–compatibility tension**
 
-$$
+```math
 T_{\mathrm{nc}}(z)=\sqrt{D_{\mathrm{par}}(z)D_{\mathrm{sem}}(z)}
 \,A_{\mathrm{compat}}(z).
-$$
+```
 
 **Structural gain**
 
-$$
+```math
 G_{\mathrm{struct}}=
 a_1\Delta coverage+a_2\Delta compression+a_3\Delta bridge
 +a_4\Delta predict-a_5Redundancy.
-$$
+```
 
 **Preservation and reorganization**
 
-$$
+```math
 R_{\mathrm{gain}}=
 b_1Preserve+b_2Rebind+b_3Reframe-b_4BreakCost.
-$$
+```
 
 **Utility gain**
 
-$$
+```math
 U_{\mathrm{gain}}=
 c_1\Delta explain+c_2\Delta design+c_3\Delta transfer+c_4\Delta solve.
-$$
+```
 
 **Complexity parity**
 
-$$
+```math
 Q_{\mathrm{parity}}(z)=
 \exp\!\left(-\frac{|K(z)-K_0|}{\sigma}\right).
-$$
+```
 
-$D_{\rm ctx}$ in F1 and $D_{\rm par}$ in F2 are distinct; so are $C_{\rm match}$ and $Q_{\rm parity}$. $D_{\rm sem}$ measures differences in nonmandatory semantic configuration, not the required-preservation loss $L_{\rm sem}$. Record $U$ is not $U_{\rm gain}$, and record $G$ is not $G_{\rm struct}$.
+$`D_{\rm ctx}`$ in F1 and $`D_{\rm par}`$ in F2 are distinct; so are $`C_{\rm match}`$ and $`Q_{\rm parity}`$. $`D_{\rm sem}`$ measures differences in nonmandatory semantic configuration, not the required-preservation loss $`L_{\rm sem}`$. Record $`U`$ is not $`U_{\rm gain}`$, and record $`G`$ is not $`G_{\rm struct}`$.
 
-$$
+```math
 \Delta S_j=S_j(z)-S_j(z_0),\qquad j\in\{1,2\}.
-$$
+```
 
-Report the raw score separately from its change relative to baseline. Even an identity candidate need not have raw score zero. There are 27 original coefficients (F1: 6; F2: 8; structural: 5; reorganization: 4; utility: 4). The convention uses finite nonnegative rationals; the original does not require unit-sum coefficients. $\sigma,\kappa_M$ are positive in bits; $\kappa_B$ is positive in bridge-cost units. Uniform coefficients are test preferences, not calibrated production weights.
+Report the raw score separately from its change relative to baseline. Even an identity candidate need not have raw score zero. There are 27 original coefficients (F1: 6; F2: 8; structural: 5; reorganization: 4; utility: 4). The convention uses finite nonnegative rationals; the original does not require unit-sum coefficients. $`\sigma,\kappa_M`$ are positive in bits; $`\kappa_B`$ is positive in bridge-cost units. Uniform coefficients are test preferences, not calibrated production weights.
 
-These are outer ranges for nonnegative coefficients. The uniform values belong only to `reference-uniform-test-v1`; the fixture specifies the bridge-cost scale $\kappa_B$.
+These are outer ranges for nonnegative coefficients. The uniform values belong only to `reference-uniform-test-v1`; the fixture specifies the bridge-cost scale $`\kappa_B`$.
 
-$$
+```math
 \begin{aligned}
-S_1&\in[-(\lambda+\eta),\,\alpha+\beta+\gamma+\delta],\\
-G_{\rm struct}&\in[-\sum_{i=1}^{5}a_i,\,\sum_{i=1}^{4}a_i]=[g_l,g_h],\\
-R_{\rm gain}&\in[-b_4,\,b_1+b_2+b_3]=[r_l,r_h],\qquad
-U_{\rm gain}\in[-\sum_{i=1}^{4}c_i,\,\sum_{i=1}^{4}c_i]=[u_l,u_h],\\
-S_2&\in[w_2g_l+w_3r_l+w_4u_l-w_6-w_7-w_8,\;w_1+w_2g_h+w_3r_h+w_4u_h+w_5].
+S_1&\in[-(\lambda+\eta),\,\alpha+\beta+\gamma+\delta],
+\\ G_{\rm struct}&\in[-\sum_{i=1}^{5}a_i,\,\sum_{i=1}^{4}a_i]=[g_l,g_h],
+\\ R_{\rm gain}&\in[-b_4,\,b_1+b_2+b_3]=[r_l,r_h],\qquad
+U_{\rm gain}\in[-\sum_{i=1}^{4}c_i,\,\sum_{i=1}^{4}c_i]=[u_l,u_h],
+\\ S_2&\in[w_2g_l+w_3r_l+w_4u_l-w_6-w_7-w_8,\;w_1+w_2g_h+w_3r_h+w_4u_h+w_5].
 \end{aligned}
-$$
+```
 
-$$
+```math
 (\alpha,\beta,\lambda,\gamma,\delta,\eta)=(1/6,\ldots,1/6),\qquad
 w_i=1/8,\quad a_i=1/5,\quad b_i=c_i=1/4,\quad \sigma=\kappa_M=K_0.
-$$
+```
 
 The [Rust formula evaluator](../scripts/lc631/crates/lc631-analysis/src/creativity_measurement/formula/evaluate.rs) does not fill missing components with zero. A zero coefficient does not rescue an undefined input: when strict F1/F2 cannot be evaluated, the result is `NoScalar`. The [runtime preflight](../scripts/lc631/crates/lc631-runtime/src/original_score_pending.rs) retains Pending rather than producing an evaluated score when inputs are unavailable. Arithmetic implementation, component production, end-to-end closure, and independent effects are separate.
 
@@ -844,11 +820,9 @@ The [Rust formula evaluator](../scripts/lc631/crates/lc631-analysis/src/creativi
 
 ### All 40 components: definitions, ranges, and calculations
 
-This is the component catalogue for the same revision. $\operatorname{Avg}$ denotes the fixed weighted mean, $\operatorname{Pair}$ a paired difference against baseline, and $d_J$ weighted set distance. Indicator values are 0 or 1 only when checked; missing observations do not become zero. Record sets are not assigned invented scalar formulas. See the [normative contract](tlcx-tl-screative-measurement-contract-v1-2026-10-29.md) for applicability, independent checks, and effects on selection.
+This is the component catalogue for the same revision. $`\operatorname{Avg}`$ denotes the fixed weighted mean, $`\operatorname{Pair}`$ a paired difference against baseline, and $`d_J`$ weighted set distance. Indicator values are 0 or 1 only when checked; missing observations do not become zero. Record sets are not assigned invented scalar formulas. See the [normative contract](tlcx-tl-screative-measurement-contract-v1-2026-10-29.md) for applicability, independent checks, and effects on selection.
 
-<details>
-
-<summary>Mapping preservation loss and auxiliary quantities (7)</summary>
+**Mapping preservation loss and auxiliary quantities (7)**
 
 #### `TL-RECON` · reconstruction loss
 
@@ -892,11 +866,8 @@ This is the component catalogue for the same revision. $\operatorname{Avg}$ deno
 
 **Calculation:** Require both registry declarations and revision-bound execution probes. Declaration alone is unobserved. Average success 1, confirmed unsupported 0 and unknown [0,1] over a fixed denominator.
 
-</details>
 
-<details>
-
-<summary>Four records per transformation (4)</summary>
+**Four records per transformation (4)**
 
 #### `REC-D` · four-record Defect
 
@@ -922,17 +893,14 @@ This is the component catalogue for the same revision. $\operatorname{Avg}$ deno
 
 **Calculation:** Tag observed and predicted gains separately; detect duplicates through shared primitive IDs; aggregate into creative components. Removing hard conditions is not gain.
 
-</details>
 
-<details>
-
-<summary>Context, novelty, and compatibility (7)</summary>
+**Context, novelty, and compatibility (7)**
 
 #### `CR-DCTX` · D_ctx
 
-$$
+```math
 D_{\mathrm{ctx}}=d_J(P_0^{\mathrm{mutable}},P_z^{\mathrm{mutable}})
-$$
+```
 
 **Definition, range, and units:** K3 distance between mutable premise/fact feature sets of original and reconstructed contexts; dimensionless [0,1]. Axiom/inference-rule signatures belong separately to D_par.
 
@@ -940,9 +908,9 @@ $$
 
 #### `CR-DPAR` · D_par
 
-$$
+```math
 D_{\mathrm{par}}=d_J(\Sigma_0,\Sigma_z)
-$$
+```
 
 **Definition, range, and units:** K3 distance between framework signatures: logic, axioms, ontology sorts, inference rules and operator meanings. Dimensionless [0,1], separate from Dctx.
 
@@ -950,9 +918,9 @@ $$
 
 #### `CR-DSEM` · D_sem
 
-$$
+```math
 D_{\mathrm{sem}}=\operatorname{Avg}_{P_{\mathrm{optional}}}(\mathbf 1[\text{mapped outcomes differ}])
-$$
+```
 
 **Definition, range, and units:** Weighted fraction of fixed nonmandatory meaning-configuration queries whose canonical outcomes differ between baseline and candidate, dimensionless [0,1]. Required preservation belongs to TL-SEM.
 
@@ -960,9 +928,9 @@ $$
 
 #### `CR-ACOMP` · A_compat
 
-$$
+```math
 A_{\mathrm{compat}}=\operatorname{Avg}_{P_{\mathrm{integration}}}(\mathbf 1[\text{bridge check passes}])
-$$
+```
 
 **Definition, range, and units:** Weighted success fraction of fixed integration/bridge queries connecting correctly to the existing system; dimensionless [0,1], not embedding similarity.
 
@@ -970,9 +938,9 @@ $$
 
 #### `CR-CMATCH` · C_match
 
-$$
+```math
 C_{\mathrm{match}}=\left(1+\frac{\lvert K-K_0\rvert}{\kappa_M}\right)^{-1}
-$$
+```
 
 **Definition, range, and units:** C_match=1/(1+|K−K0|/κ_M), with positive κ_M in bits. Positive dimensionless value up to 1. This rational proxy completes an unspecified v1 algorithm; it is not Q.
 
@@ -980,9 +948,9 @@ $$
 
 #### `CR-NKNOWN` · N_known
 
-$$
+```math
 N_{\mathrm{known}}=\max_{y\in\mathcal C}\{1-d_J(F_z,F_y)\}
-$$
+```
 
 **Definition, range, and units:** Maximum construction-feature similarity max_y(1−K3(Fz,Fy)) in a fixed nonempty archive; dimensionless [0,1], not universal human knownness.
 
@@ -994,17 +962,14 @@ $$
 
 **Calculation:** Reference shared metric nodes; use K7 square-root bounds and K4 multiplication. Non-square f64 results are not Exact. Missing inputs follow NoScalar/bounding rules.
 
-</details>
 
-<details>
-
-<summary>Structural gain (6)</summary>
+**Structural gain (6)**
 
 #### `CR-COVERAGE` · Δcoverage
 
-$$
+```math
 \Delta\mathrm{coverage}=\operatorname{Pair}_{P_{\mathrm{coverage}}}(s_z,s_0)
-$$
+```
 
 **Definition, range, and units:** Paired K2 improvement in the confirmed fraction of fixed coverage-validation queries explained/solved, dimensionless [-1,1].
 
@@ -1012,9 +977,9 @@ $$
 
 #### `CR-COMPRESSION` · Δcompression
 
-$$
+```math
 \Delta\mathrm{compression}=\frac{K_0-K_z}{\max(K_0,K_z)}
-$$
+```
 
 **Definition, range, and units:** (K0−Kz)/max(K0,Kz), dimensionless [-1,1], with K in bits. Valid compression gain requires checked required equivalence/preservation.
 
@@ -1022,9 +987,9 @@ $$
 
 #### `CR-BRIDGE` · Δbridge
 
-$$
+```math
 \Delta\mathrm{bridge}=\operatorname{Pair}_{P_{\mathrm{bridge}}}(s_z,s_0)
-$$
+```
 
 **Definition, range, and units:** K2 improvement in fixed cross-domain queries usable through checked bridges; dimensionless [-1,1], not edge count.
 
@@ -1032,9 +997,9 @@ $$
 
 #### `CR-PREDICT` · Δpredict
 
-$$
+```math
 \mathrm{Brier}(z)=\frac{\sum_i w_i(p_{z,i}-y_i)^2}{\sum_i w_i},\qquad \Delta\mathrm{predict}=\mathrm{Brier}(z_0)-\mathrm{Brier}(z)
-$$
+```
 
 **Definition, range, and units:** Brier(z0)−Brier(z), where Brier=Σwi(pi−yi)^2/W, pi∈[0,1], yi∈{0,1}. Dimensionless [-1,1]; multiclass requires another revision.
 
@@ -1042,9 +1007,9 @@ $$
 
 #### `CR-REDUNDANCY` · Redundancy
 
-$$
+```math
 \mathrm{Redundancy}=\frac{\sum_j\max(0,n_j-1)}{\sum_j n_j}
-$$
+```
 
 **Definition, range, and units:** Σ_class max(0,n_class−1)/Σ_class n_class over role-specific semantic-unit multisets; dimensionless [0,1]. Required repetitions occupy distinct role classes.
 
@@ -1056,17 +1021,14 @@ $$
 
 **Calculation:** Pin five child nodes and weights; evaluate by K4 without clipping signed gains. Expose shared evidence-dependency groups.
 
-</details>
 
-<details>
-
-<summary>Reorganization (5)</summary>
+**Reorganization (5)**
 
 #### `CR-PRESERVE` · Preserve
 
-$$
+```math
 \mathrm{Preserve}=\operatorname{Avg}_{P_{\mathrm{struct}}}(\mathbf 1[\text{preserved}])
-$$
+```
 
 **Definition, range, and units:** K1 weighted fraction of fixed source structural properties preserved, dimensionless [0,1]. Absolute, not a delta; identity usually gives 1.
 
@@ -1074,9 +1036,9 @@ $$
 
 #### `CR-REBIND` · Rebind
 
-$$
+```math
 \mathrm{Rebind}=\operatorname{Avg}_{P_{\mathrm{units}}}(\mathbf 1[\text{changed binding and verified useful map-back/use}])
-$$
+```
 
 **Definition, range, and units:** Fraction of fixed source units genuinely rebound to changed roles/targets with useful map-back and passing use probes; dimensionless [0,1].
 
@@ -1084,9 +1046,9 @@ $$
 
 #### `CR-REFRAME` · Reframe
 
-$$
+```math
 \mathrm{Reframe}=\operatorname{Avg}_{P_{\mathrm{perspective}}}(\mathbf 1[\text{baseline fails and reframed mapped candidate passes}])
-$$
+```
 
 **Definition, range, and units:** Weighted fraction of fixed perspective queries failing at baseline but explained after explicit reframing and checked map-back; dimensionless [0,1].
 
@@ -1094,9 +1056,9 @@ $$
 
 #### `CR-BREAK` · BreakCost
 
-$$
+```math
 \mathrm{BreakCost}=\operatorname{Avg}_{P_{\mathrm{optional\ legacy}}}(\mathbf 1[\text{confirmed break}])
-$$
+```
 
 **Definition, range, and units:** K1 failure fraction of fixed optional legacy compatibility/properties, dimensionless [0,1]. Hard duties and authority remain separate gates.
 
@@ -1108,17 +1070,14 @@ $$
 
 **Calculation:** Read four same-scope child nodes and apply K4. Preserve is absolute; the word gain does not authorize automatic recentering.
 
-</details>
 
-<details>
-
-<summary>Utility gain (5)</summary>
+**Utility gain (5)**
 
 #### `CR-EXPLAIN` · Δexplain
 
-$$
+```math
 \Delta\mathrm{explain}=\operatorname{Pair}_{P_{\mathrm{explain}}}(s_z,s_0)
-$$
+```
 
 **Definition, range, and units:** Paired K2 gain in correct derivation/explanation scores on fixed explanation-validation queries, dimensionless [-1,1].
 
@@ -1126,9 +1085,9 @@ $$
 
 #### `CR-DESIGN` · Δdesign
 
-$$
+```math
 g_{\uparrow}(x)=\operatorname{clip}_{[0,1]}\left(\frac{x-m}{M-m}\right),\quad g_{\downarrow}(x)=1-g_{\uparrow}(x),\quad \Delta\mathrm{design}=\operatorname{Pair}_{P_{\mathrm{design}}}(s_z,s_0)
-$$
+```
 
 **Definition, range, and units:** K2 improvement on a fixed design-acceptance suite, dimensionless [-1,1]. Per-probe scores are binary or a quantity with fixed m<M normalization bounds and a separate AcceptedInputRange: large-is-better uses clip((x−m)/(M−m),0,1); small-is-better uses 1−clip((x−m)/(M−m),0,1). m/M are saturation bounds, not the accepted input domain.
 
@@ -1136,9 +1095,9 @@ $$
 
 #### `CR-TRANSFER` · Δtransfer
 
-$$
+```math
 \Delta\mathrm{transfer}=\operatorname{Pair}_{P_{\mathrm{transfer}}}(s_z,s_0)
-$$
+```
 
 **Definition, range, and units:** K2 gain on a pre-separated transfer-validation family, dimensionless [-1,1]. Scores use binary checks or CR-DESIGN's fixed normalization.
 
@@ -1146,9 +1105,9 @@ $$
 
 #### `CR-SOLVE` · Δsolve
 
-$$
+```math
 \Delta\mathrm{solve}=\operatorname{Pair}_{P_{\mathrm{solve}}}(s_z,s_0)
-$$
+```
 
 **Definition, range, and units:** K2 improvement in correctness, feasibility or objective-quality scores on fixed root-goal solution queries, dimensionless [-1,1]. Pin binary or CR-DESIGN normalization per probe.
 
@@ -1160,17 +1119,14 @@ $$
 
 **Calculation:** Evaluate four child nodes by K4, retaining dataset roles and evidence bases. Do not share its type with REC-U.
 
-</details>
 
-<details>
-
-<summary>Description length, risk, and bounds of F1/F2 (6)</summary>
+**Description length, risk, and bounds of F1/F2 (6)**
 
 #### `CR-K` · K, K0
 
-$$
+```math
 K(z)=8\,\operatorname{len}_{\mathrm{bytes}}\!\left(E(\mathrm{Bundle}(z))\right)\ \mathrm{bits},\qquad K_0=K(z_0)>0
-$$
+```
 
 **Definition, range, and units:** K(z)=8 len(E(z)) bits with positive integer K0=K(z0). This practical description-length proxy is not minimal program length or Kolmogorov complexity.
 
@@ -1184,9 +1140,9 @@ $$
 
 #### `CR-RCOUNTER` · R_counter
 
-$$
+```math
 R_{\mathrm{counter}}=\operatorname{Avg}_{P_{\mathrm{adversarial}}}(\mathbf 1[\text{confirmed failure}])
-$$
+```
 
 **Definition, range, and units:** K1 confirmed-failure fraction on a fixed nonempty adversarial suite; dimensionless [0,1], neither number of discovered counterexamples nor universal risk probability.
 
@@ -1194,9 +1150,9 @@ $$
 
 #### `CR-BMEM` · B_mem
 
-$$
+```math
 C\in\left[\min_p\sum_{e\in p}\underline c_e,\ \min_p\sum_{e\in p}\overline c_e\right],\qquad B_{\mathrm{mem}}=\frac{C}{C+\kappa_B}
-$$
+```
 
 **Definition, range, and units:** Normalize minimum bridge cost C in a closed finite registry of admissible nonsecurity conversions as C/(C+κ_B), with positive same-unit κ_B, yielding [0,1]. Map cost intervals through this monotone function endpointwise. Only proven path absence in the closed graph gives 1 plus Disconnected.
 
@@ -1214,7 +1170,6 @@ $$
 
 **Calculation:** Evaluate eight terms and their children in one DAG. Compute raw baseline and delta S2 separately. Identity with zero redundancy, Preserve=1, Q=1 and others zero gives w3b1+w5; retain −w2a5Redundancy0 for nonzero baseline redundancy.
 
-</details>
 
 <a id="kernels-en"></a>
 
@@ -1222,121 +1177,121 @@ $$
 
 **K1, K2, K3.** Fix weights before comparing. Subtract paired item scores before aggregating, not rounded means. Identify features in the pinned universe. Only a confirmed valid empty/empty pair has set distance zero by convention.
 
-$$
+```math
 \begin{aligned}
-\operatorname{Avg}_{P}(v)&=\frac{\sum_{i\in P}w_i v_i}{W},\quad W=\sum_{i\in P}w_i>0,\\
-\operatorname{Pair}_{P}(s_z,s_0)&=\frac{\sum_i w_i(s_z(i)-s_0(i))}{W},\\
-d_J(A,B)&=\frac{\sum_{i\in A\triangle B}v_i}{\sum_{i\in A\cup B}v_i}\quad(A\cup B\ne\varnothing).
+\operatorname{Avg}_{P}(v)&=\frac{\sum_{i\in P}w_i v_i}{W},\quad W=\sum_{i\in P}w_i>0,
+\\ \operatorname{Pair}_{P}(s_z,s_0)&=\frac{\sum_i w_i(s_z(i)-s_0(i))}{W},
+\\ d_J(A,B)&=\frac{\sum_{i\in A\triangle B}v_i}{\sum_{i\in A\cup B}v_i}\quad(A\cup B\ne\varnothing).
 \end{aligned}
-$$
+```
 
-**K4: bounded intervals.** Let $A=[a,b]$, $B=[c,d]$. Division is undefined for a divisor containing zero. A valid observation node minus itself is exactly zero; distinct nodes with identical bounds still use interval subtraction.
+**K4: bounded intervals.** Let $`A=[a,b]`$, $`B=[c,d]`$. Division is undefined for a divisor containing zero. A valid observation node minus itself is exactly zero; distinct nodes with identical bounds still use interval subtraction.
 
-$$
+```math
 \begin{aligned}
-A+B&=[a+c,b+d],& A-B&=[a-d,b-c],& -A&=[-b,-a],\\
-AB&=[\min(ac,ad,bc,bd),\max(ac,ad,bc,bd)],&
-A/B&=A[1/d,1/c]\quad (0\notin B),\\
-\operatorname{square}(A)&=\begin{cases}[0,\max(a^2,b^2)]&a\le0\le b\\\left[\min(a^2,b^2),\max(a^2,b^2)\right]&\text{otherwise},\end{cases}\\
-\operatorname{abs}(A)&=\begin{cases}[0,\max(-a,b)]&a\le0\le b\\\left[\min(|a|,|b|),\max(|a|,|b|)\right]&\text{otherwise}.\end{cases}
+A+B&=[a+c,b+d],& A-B&=[a-d,b-c],& -A&=[-b,-a],
+\\ AB&=[\min(ac,ad,bc,bd),\max(ac,ad,bc,bd)],&
+A/B&=A[1/d,1/c]\quad (0\notin B),
+\\ \operatorname{square}(A)&=\begin{cases}[0,\max(a^2,b^2)]&a\le0\le b\\\left[\min(a^2,b^2),\max(a^2,b^2)\right]&\text{otherwise},\end{cases}
+\\ \operatorname{abs}(A)&=\begin{cases}[0,\max(-a,b)]&a\le0\le b\\\left[\min(|a|,|b|),\max(|a|,|b|)\right]&\text{otherwise}.\end{cases}
 \end{aligned}
-$$
+```
 
-$$
+```math
 \{\min_i x_i:x_i\in[\ell_i,u_i]\}\subseteq[\min_i\ell_i,\min_i u_i],\qquad
 \{\max_i x_i:x_i\in[\ell_i,u_i]\}\subseteq[\max_i\ell_i,\max_i u_i].
-$$
+```
 
 The last two formulas are outer enclosures for a finite nonempty family. Empty families are undefined. Take square roots only over the nonnegative domain, rounding outwards.
 
-**K5: classical probes.** Check satisfiability of $\Gamma$ first; do not score an inconsistent classical context. Only for a consistent context use the following tests; if both sides are SAT the outcome is undetermined. Solver reports, rechecked models, checked proofs, and finite enumeration have different evidentiary status. ASP, temporal, and four-valued probes retain their own semantics.
+**K5: classical probes.** Check satisfiability of $`\Gamma`$ first; do not score an inconsistent classical context. Only for a consistent context use the following tests; if both sides are SAT the outcome is undetermined. Solver reports, rechecked models, checked proofs, and finite enumeration have different evidentiary status. ASP, temporal, and four-valued probes retain their own semantics.
 
-$$
+```math
 \Gamma\models\varphi\iff\operatorname{UNSAT}(\Gamma\land\neg\varphi),\qquad
 \Gamma\models\neg\varphi\iff\operatorname{UNSAT}(\Gamma\land\varphi).
-$$
+```
 
-**K6, K7: description length and precision.** K6 counts the encoded bits of a self-contained typed term, decoder, and dictionary, not Kolmogorov complexity. K7 uses reduced rationals and outward intervals; $1\le p\le256$ with reference precision 64. The integer $q$ below sets the grid lower bound for a square root. Perfect rational squares can be Exact; otherwise retain an enclosure, or ResourceExhausted on budget failure.
+**K6, K7: description length and precision.** K6 counts the encoded bits of a self-contained typed term, decoder, and dictionary, not Kolmogorov complexity. K7 uses reduced rationals and outward intervals; $`1\le p\le256`$ with reference precision 64. The integer $`q`$ below sets the grid lower bound for a square root. Perfect rational squares can be Exact; otherwise retain an enclosure, or ResourceExhausted on budget failure.
 
-$$
+```math
 x=n/d\ge0,\quad q=\operatorname{isqrt}\!\left(\left\lfloor n2^{2p}/d\right\rfloor\right),\quad
 \sqrt{x}\in[q/2^p,(q+1)/2^p].
-$$
+```
 
-$$
+```math
 \begin{aligned}
-r&=\min\{r\in\mathbb Z_{\ge0}:x/2^r\le1/2\},\quad y=x/2^r,\quad P=p+r+16,\\
-T_m(y)&=\sum_{k=0}^{m}(-y)^k/k!,\quad T_{2j+1}(y)\le e^{-y}\le T_{2j}(y),\\
-\operatorname{down}_P(v)&=\lfloor v2^P\rfloor/2^P,\quad \operatorname{up}_P(v)=\lceil v2^P\rceil/2^P.
+r&=\min\{r\in\mathbb Z_{\ge0}:x/2^r\le1/2\},\quad y=x/2^r,\quad P=p+r+16,
+\\ T_m(y)&=\sum_{k=0}^{m}(-y)^k/k!,\quad T_{2j+1}(y)\le e^{-y}\le T_{2j}(y),
+\\ \operatorname{down}_P(v)&=\lfloor v2^P\rfloor/2^P,\quad \operatorname{up}_P(v)=\lceil v2^P\rceil/2^P.
 \end{aligned}
-$$
+```
 
-Reduce the Taylor-bound gap to $2^{-P}$ or less and round outwards. Square $r$ times using $[l,u]\mapsto[\operatorname{down}_P(l^2),\operatorname{up}_P(u^2)]$ and check for final width at most $2^{-p}$. If necessary, increase $P$ by 32 and recompute from the rational Taylor bounds up to three times. Reference limits are $r\le64$ and 256 terms. An uncertain small value is never Exact 0.
+Reduce the Taylor-bound gap to $`2^{-P}`$ or less and round outwards. Square $`r`$ times using $`[l,u]\mapsto[\operatorname{down}_P(l^2),\operatorname{up}_P(u^2)]`$ and check for final width at most $`2^{-p}`$. If necessary, increase $`P`$ by 32 and recompute from the rational Taylor bounds up to three times. Reference limits are $`r\le64`$ and 256 terms. An uncertain small value is never Exact 0.
 
-$$
+```math
 \begin{aligned}
-d_{\min}&=\begin{cases}0&k_L\le K_0\le k_U\\\min(|k_L-K_0|,|k_U-K_0|)&\text{otherwise},\end{cases}\\
-d_{\max}&=\max(|k_L-K_0|,|k_U-K_0|),\\
-e^{-[x,y]}&\subseteq [\operatorname{lowerExp}(y),\operatorname{upperExp}(x)]\quad (0\le x\le y),\\
-Q_{\rm parity}&\in [\operatorname{lowerExp}(d_{\max}/\sigma),\operatorname{upperExp}(d_{\min}/\sigma)],\\
-\overline Q&=\min(\operatorname{upperExp}(x),1/(1+x))<1\quad(x=d_{\min}/\sigma>0).
+d_{\min}&=\begin{cases}0&k_L\le K_0\le k_U\\\min(|k_L-K_0|,|k_U-K_0|)&\text{otherwise},\end{cases}
+\\ d_{\max}&=\max(|k_L-K_0|,|k_U-K_0|),
+\\ e^{-[x,y]}&\subseteq [\operatorname{lowerExp}(y),\operatorname{upperExp}(x)]\quad (0\le x\le y),
+\\ Q_{\rm parity}&\in [\operatorname{lowerExp}(d_{\max}/\sigma),\operatorname{upperExp}(d_{\min}/\sigma)],
+\\ \overline Q&=\min(\operatorname{upperExp}(x),1/(1+x))<1\quad(x=d_{\min}/\sigma>0).
 \end{aligned}
-$$
+```
 
-Do not automatically clip invalid normalized values. Explicitly registered saturation for a design component is a different rule. An upper bound of one when a $K$ interval includes the baseline is not Exact 1.
+Do not automatically clip invalid normalized values. Explicitly registered saturation for a design component is a different rule. An upper bound of one when a $`K`$ interval includes the baseline is not Exact 1.
 
 <a id="policy-en"></a>
 
 ### Selection and search allocation (separate from the scores)
 
-Fix $m<M$ and the direction of each raw RootGoal. Reject an out-of-range exact value instead of clipping; an interval straddling the boundary needs evidence. CR-DESIGN saturation, by contrast, applies only after its AcceptedInputRange check.
+Fix $`m\lt M`$ and the direction of each raw RootGoal. Reject an out-of-range exact value instead of clipping; an interval straddling the boundary needs evidence. CR-DESIGN saturation, by contrast, applies only after its AcceptedInputRange check.
 
-$$
+```math
 g_{\max}(x)=(x-m)/(M-m),\qquad g_{\min}(x)=(M-x)/(M-m).
-$$
+```
 
-Check hard conditions first. A maximum-loss gate passes if $u\le\tau$, fails if $l>\tau$; a minimum-gain gate passes if $l\ge\tau$, fails if $u<\tau$. Other cases need evidence. Required preservation uses $\tau=0$. Default JointPareto compares goals, individual losses, primitive gains, and soft costs. It does not add F1/F2 or composite gains on top.
+Check hard conditions first. A maximum-loss gate passes if $`u\le\tau`$, fails if $`l\gt \tau`$; a minimum-gain gate passes if $`l\ge\tau`$, fails if $`u\lt \tau`$. Other cases need evidence. Required preservation uses $`\tau=0`$. Default JointPareto compares goals, individual losses, primitive gains, and soft costs. It does not add F1/F2 or composite gains on top.
 
-$$
+```math
 \forall i\in I_{\max}:\ \underline A_i\ge\overline B_i,\qquad
 \forall j\in I_{\min}:\ \overline A_j\le\underline B_j.
-$$
+```
 
 Conservative dominance requires all these conditions and at least one strict inequality. Overlap does not determine a winner. An original-score winner needs a score lower bound strictly above the upper bound of every other eligible candidate. Missing goals or required representative ordering give NoRecommendation; where comparable, retain one recommendation plus material alternatives.
 
-$$
+```math
 J=aL_{\rm trans}-bS_j:\qquad
 [L_{\rm trans}]J=\begin{cases}a+b\lambda&j=1\\a+bw_6&j=2.\end{cases}
-$$
+```
 
 This expansion detects double-counting of the same loss; it is not the default selector.
 
-**Search priority.** $u$ is the maximum active bound width divided by its declared range width (zero contribution for a fixed zero-width range). $B>0$ counts query slots; $\hat c$ is the registered estimated slot cost. Pin the novelty policy first; undefined inputs use canonical round-robin. Reserve $\lceil B/8\rceil$ slots for fair rotation and rank the remainder by descending priority lower bound.
+**Search priority.** $`u`$ is the maximum active bound width divided by its declared range width (zero contribution for a fixed zero-width range). $`B\gt 0`$ counts query slots; $`\hat c`$ is the registered estimated slot cost. Pin the novelty policy first; undefined inputs use canonical round-robin. Reserve $`\lceil B/8\rceil`$ slots for fair rotation and rank the remainder by descending priority lower bound.
 
-$$
+```math
 c=\min(1,\hat c/B),\qquad \pi=\frac{(1+u)(1+n)}{1+c},\qquad
 n_{\cup}=d_J(F_x,\bigcup_{y\in\mathcal F}F_y),\quad n_{\rm near}=\min_{y\in\mathcal F}d_J(F_x,F_y).
-$$
+```
 
 Distance to the union is the reference policy. Nearest-candidate distance is a separate policy that can reverse ordering. K8 below is an alternative exploration proposal only when geometry is registered; it is not physical distance, semantic truth, acceptance or execution authority.
 
-$$
+```math
 \begin{aligned}
-\mathbb B_\kappa&=\{x:\kappa\lVert x\rVert_2^2<1\},\qquad \kappa>0,\quad \kappa\lVert x\rVert_2^2\le1-\mu,\quad 0<\mu<1,\\
-t&=\frac{\kappa\lVert x-y\rVert_2^2}{(1-\kappa\lVert x\rVert_2^2)(1-\kappa\lVert y\rVert_2^2)},\qquad q=\sqrt{t/(1+t)},\\
-d_\kappa(x,y)&=\frac{\operatorname{acosh}(1+2t)}{\sqrt\kappa}
-=\frac{2\operatorname{atanh}(q)}{\sqrt\kappa},\\
-T_N(q)&=\sum_{k=0}^{N}\frac{q^{2k+1}}{2k+1},\qquad
+\mathbb B_\kappa&=\{x:\kappa\lVert x\rVert_2^2<1\},\qquad \kappa>0,\quad \kappa\lVert x\rVert_2^2\le1-\mu,\quad 0<\mu<1,
+\\ t&=\frac{\kappa\lVert x-y\rVert_2^2}{(1-\kappa\lVert x\rVert_2^2)(1-\kappa\lVert y\rVert_2^2)},\qquad q=\sqrt{t/(1+t)},
+\\ d_\kappa(x,y)&=\frac{\operatorname{acosh}(1+2t)}{\sqrt\kappa}
+=\frac{2\operatorname{atanh}(q)}{\sqrt\kappa},
+\\ T_N(q)&=\sum_{k=0}^{N}\frac{q^{2k+1}}{2k+1},\qquad
 \operatorname{atanh}(q)\in\left[T_N(q_L),\,T_N(q_U)+\frac{q_U^{2N+3}}{(2N+3)(1-q_U^2)}\right].
 \end{aligned}
-$$
+```
 
-Verify the whole coordinate box stays inside the margin; use K4's dedicated square for each term of a squared norm. Require numerical slack $\le2^{-64}$ separately at endpoints $t_L,t_U$. Start internal precision at 80, increase by 32 to at most 256, and use $N=0\ldots256$. If $q_U=1$ or slack fails, refine; at the cap retain ResourceExhausted with a valid bound, otherwise NoScalar. Width due to input uncertainty is not numerical rounding error.
+Verify the whole coordinate box stays inside the margin; use K4's dedicated square for each term of a squared norm. Require numerical slack $`\le2^{-64}`$ separately at endpoints $`t_L,t_U`$. Start internal precision at 80, increase by 32 to at most 256, and use $`N=0\ldots256`$. If $`q_U=1`$ or slack fails, refine; at the cap retain ResourceExhausted with a valid bound, otherwise NoScalar. Width due to input uncertainty is not numerical rounding error.
 
-$$
+```math
 d_{\rm near}=\min_{y\in\mathcal F}d_\kappa(x,y)\in[d_L,d_U],\qquad
 n_{\rm geo}\in[1-\operatorname{upperExp}(d_L/s_{\rm geo}),\,1-\operatorname{lowerExp}(d_U/s_{\rm geo})],\quad s_{\rm geo}>0.
-$$
+```
 
 Without a registered embedding and a verified frontier, do not manufacture this value. Geometry and distillation proposals cannot change a metric without discrete validation and remeasurement.
 
@@ -1344,11 +1299,9 @@ Without a registered embedding and a verified frontier, do not manufacture this 
 
 ### Numerical examples and verification references
 
-Two probes with weights 1 and 3 and losses 0 and 1 give EpiMapLoss $3/4$. If the second is defined but unobserved, the result is $[0,3/4]$, not a definite 0 or $3/4$. With uniform coefficients the synthetic identity examples give F1 $1/6$ and F2 $5/32$; each differs from itself by zero. These are arithmetic fixtures, not measurements of development effectiveness.
+Two probes with weights 1 and 3 and losses 0 and 1 give EpiMapLoss $`3/4`$. If the second is defined but unobserved, the result is $`[0,3/4]`$, not a definite 0 or $`3/4`$. With uniform coefficients the synthetic identity examples give F1 $`1/6`$ and F2 $`5/32`$; each differs from itself by zero. These are arithmetic fixtures, not measurements of development effectiveness.
 
-<details>
-
-<summary>All 37 numerical and boundary examples in the fixed contract (G01–G37)</summary>
+**All 37 numerical and boundary examples in the fixed contract (G01–G37)**
 
 | ID | Inputs and expected values (fixtures) |
 | --- | --- |
@@ -1390,6 +1343,5 @@ Two probes with weights 1 and 3 and losses 0 and 1 give EpiMapLoss $3/4$. If the
 | G36 | A new feature outside the fixed K3 universe remains InvalidInput/UniverseMismatch until a new ComparisonScope is established |
 | G37 | Missing/unverified EmbeddingPolicy remains Unsupported; a search proposal cannot create authority or exact semantic novelty |
 
-</details>
 
 [README](../README.md) · [Fixed measurement contract](tlcx-tl-screative-measurement-contract-v1-2026-10-29.md) · [Beta 6.9 snapshot record](epistesys-6.9.0-beta.1-source-snapshot-2026-11-05.md)
