@@ -2,9 +2,11 @@
 
 ## 日本語
 
-Epistesys（エピステシス）は、AIシステムの**要求管理、実行権限、証拠の由来、状態更新、出力検証**を一つの処理系として扱う、実験的なAI制御・信頼性研究プロジェクトです。生成モデルを改変するのではなく、その外部に構造化された制御状態と検証手続きを配置します。
+Epistesys（エピステシス）は、私がソフトウェア開発で使うために作っている**開発支援ツール**です。必要な仕組みは自分で決め、実装にはAIを使っています。AIに変更を頼んだ後で、「元の条件は残っているか」「追加した機能は実際に呼ばれるか」「何を確認して完了としたのか」を、コードと検証結果に戻って確かめたいからです。
 
-対象とする問題は、裏付けのない生成の確定、複雑な指示に含まれる制約の脱落、長期対話での状態・権限・証拠の失効、未解決事項を残したままの実行です。研究上の評価対象は、所定の信頼性を維持できる**指示複雑性・依存深度・状態量・対話長の運用範囲**です。以下では、実装された機構、その局所検証、今後検証する効果を区別します。
+たとえば「既存の出力形式を変えずに機能を追加してほしい」という依頼では、ビルドが通ること、新機能が呼び出されること、従来の出力形式が保たれることは別々の確認です。Epistesysはモデルの重みを変更せず、その外側で元の要求、許可された操作、対象となるコードの版、検証結果、未確認の項目を対応づけます。具体的な使い方は[コーディング支援](#coding-assistance-ja)、現時点で何が動き、何が未検証かは以下の表で確認できます。
+
+[使い方](docs/execution-guide.md) · [EpiMapLossの式](docs/epimaploss-epirecompscore-formulas.md#map-ja) · [EpiRecompScoreの式](docs/epimaploss-epirecompscore-formulas.md#score-ja) · [現在の検証範囲](docs/epistesys-6.9.0-beta.1-source-snapshot-2026-11-05.md)
 
 ### 現在の位置付け
 
@@ -15,13 +17,38 @@ Epistesys（エピステシス）は、AIシステムの**要求管理、実行�
 | ソース検証 | 今回の状態は[Beta 6.9保存記録](docs/epistesys-6.9.0-beta.1-source-snapshot-2026-11-05.md)をご覧ください。全体監査とrelease gateは未完了です。[alpha.3検証記録](validation/epr-release-verification-2026-10-27.md)と[alpha.2の最終検証](validation/epia2-alpha2-release-verification-2026-10-02.md)は履歴であり、この版の合格結果には読み替えません |
 | 配布 | source-only。モデルweight、秘密鍵、個人設定、未監査の配布binaryを同梱しない |
 | ホスト接続 | adapter・receipt・replayの実装を含む。実ホストのcallback／delivery観測は`PendingHostObservation` |
-| 研究評価 | Epistesys固有の効果と独立評価は未実施。独立gold corpusは`PendingNoCorpus` |
+| 開発上の効果 | Epistesys自体が作業の失敗をどれだけ減らすかは未検証です。独立評価に使う正解データは`PendingNoCorpus`です |
 
 ソース経路の局所検証は、任意指示の意味的正確性、ハルシネーション抑制、長期対話の性能を実証するものではありません。Beta 6.9は、現在の実装を一度保存するための中間スナップショットです。完成・配布準備・host activationを示す版ではありません。Alpha.3は[独立した保守ブランチ](https://github.com/ViszCham/Epistesys/tree/main-alpha.3)に残し、全接続の監査と修復は後続のBeta-7.0に向けて続けます。
 
 ### TLCXで追加中の実装
 
-現在のsourceには、型付き文脈の再構成、複数の有限論理profile、四記録のTranslationLoss、原案F1/F2に対応するS_Creative算術、バイナリ状態・journal、資源所有権、Coding・Media・hostへの接続作業を含めています。これらは単なる設計名の追加ではなく、sourceと試験コードを伴う変更です。ただし、未登録・未接続の経路や未確定の試験も残っています。数式と完了条件は[測定契約](docs/tlcx-tl-screative-measurement-contract-v1-2026-10-29.md)、依存順は[実装ロードマップ](docs/epistesys-tlcx-contextual-multilogic-loss-creativity-roadmap-2026-10-28.md)で確認できます。
+現在のソースには、文脈の再構成、複数の有限論理による検査、変換ごとの四記録、再編候補の評価、バイナリ状態・journal、資源所有権、Coding・Media・hostへの接続作業があります。ソースと試験コードがある一方、まだ呼び出し経路につながっていない機能や未確定の試験もあります。[測定契約](docs/tlcx-tl-screative-measurement-contract-v1-2026-10-29.md)に適用条件、[実装ロードマップ](docs/epistesys-tlcx-contextual-multilogic-loss-creativity-roadmap-2026-10-28.md)に依存順と完了条件を記載しています。
+
+[EpiMapLoss：写像保存損失](docs/epimaploss-epirecompscore-formulas.md#map-ja)は、表現を移したときに保存すべき性質がどれだけ失われたかを扱います。[EpiRecompScore：構造再編評価値](docs/epimaploss-epirecompscore-formulas.md#score-ja)は、候補が新しく組み替えたものと、その利得・損失・コストを比較します。
+
+<details>
+
+<summary>主要式：写像保存損失、再編評価F1・F2</summary>
+
+右辺の各成分は同じ比較範囲の候補 $z$ に対する値です。適用軸 $\mathcal A$ と正の重み $\rho_a$ は比較前に固定します。
+
+$$
+\begin{aligned}
+L=\operatorname{EpiMapLoss}(z)
+ &=\frac{\sum_{a\in\mathcal A}\rho_a L_a(z)}{\sum_{a\in\mathcal A}\rho_a},\\
+\operatorname{EpiRecompScore}_{F1}(z)
+ &=\alpha D_{\rm ctx}+\beta D_{\rm sem}-\lambda L
+   +\gamma A_{\rm compat}+\delta C_{\rm match}-\eta N_{\rm known},\\
+\operatorname{EpiRecompScore}_{F2}(z)
+ &=w_1T_{\rm nc}+w_2G_{\rm struct}+w_3R_{\rm gain}+w_4U_{\rm gain}\\
+ &\quad+w_5Q_{\rm parity}-w_6L-w_7R_{\rm counter}-w_8B_{\rm mem}.
+\end{aligned}
+$$
+
+各記号、下位式、[全40成分の計算法](docs/epimaploss-epirecompscore-formulas.md#catalog-ja)、[区間演算](docs/epimaploss-epirecompscore-formulas.md#kernels-ja)、[選択・探索](docs/epimaploss-epirecompscore-formulas.md#policy-ja)は数式リファレンスをご覧ください。未測定・比較不能を0とはせず、高得点を実行許可や完了判定には使いません。
+
+</details>
 
 ### 制御対象とアーキテクチャ
 
@@ -48,7 +75,7 @@ alpha.3はEPR監査に基づき、既存経路の次の境界を強化します�
 - **実行・回復**：登録direct driverの接続証拠、共通process監督、handle基準のfile修復、private Media snapshot。
 - **数値・配布**：数値／graphの入場検査、固定inventory配布、Rust変更を捕捉するWindows／Linux CI。
 
-[変更一覧](docs/epistesys-6.3.2-alpha.3-release-notes-2026-10-27.md)と[境界契約](docs/epr-boundary-contracts.md)に実装範囲を示し、研究効果や実host activationとは区別します。
+[変更一覧](docs/epistesys-6.3.2-alpha.3-release-notes-2026-10-27.md)と[境界契約](docs/epr-boundary-contracts.md)は、この版で追加された実装の範囲を示します。開発での効果や、実ホストでの有効化を示す記録ではありません。
 
 <a id="coding-assistance-ja"></a>
 
@@ -65,13 +92,13 @@ Epistesysを明示的に選択した場合、Coding Projectorが設計・実装�
 - **候補と検証済み状態**：`candidate`は生成・解析された候補です。`Validated`等の状態には、対象revisionに対応する所定の証拠が必要です。
 - **証拠と権限**：テスト成功、低いloss、hash一致、schema適合は、操作の許可を生成しません。
 - **出力確定と配信**：standalone candidateの確定、hostへの送信、sinkの受領、durable replayは別々に観測します。
-- **実装検証と研究効果**：build／test／CLIの成功から、一般性能、形式証明、完全な文法理解、host全体の強制を推論しません。
+- **個別の検証と一般的な効果**：build／test／CLIの成功は、調べた条件での結果です。一般性能、形式証明、完全な文法理解、host全体での強制を示すものではありません。
 
 本書の「出力確定」はアプリケーション内のoutput commitmentを指し、Git commitや事実の真理性とは異なります。用語の操作的定義と検証項目は[アーキテクチャの用語表](docs/system-architecture.md#terminology-ja)、未観測範囲は[既知の制約](docs/known-limitations.md)を参照してください。
 
-### 研究課題と評価方針
+### 開発で確かめたいこと
 
-| 研究課題 | 評価する失敗・指標 |
+| 開発上の関心 | 評価する失敗・指標 |
 | --- | --- |
 | 裏付けのない生成の確定 | unsupported claim、誤ったcommit、検出漏れ、回答coverage |
 | 複雑指示の制約保持 | 条件別適合、全条件達成、例外・依存・意図の保持、回帰 |
@@ -79,7 +106,7 @@ Epistesysを明示的に選択した場合、Coding Projectorが設計・実装�
 | 失敗の可観測性 | 不整合検出、適切な保留、過剰な保留、risk–coverage |
 | 信頼性を維持できる運用範囲 | 入力長、条件数、依存深度、状態量、対話長、総計算予算ごとの信頼性 |
 
-これらは**研究目標**です。制約・権限・状態・証拠の明示保持は**設計目標**であり、その機構が同じモデル・課題・総予算で失敗を減らすかは**検証対象の仮説**です。モデル、system instruction、tool、出力上限、retry、controller costを含む比較条件を記録します。[研究仮説と評価方針](docs/research-hypotheses.md)に測定項目、[前向き評価案](docs/research/epistesys-prospective-evaluation-plan.md)に未実行・未登録の計画を記載しています。
+制約・権限・状態・証拠を明示的に残すことは**設計目標**です。それが実際に失敗を減らすか、どの程度複雑な依頼や長い対話まで役立つかは、別途確かめる必要があります。[設計仮説と評価項目](docs/research-hypotheses.md)には、同じモデル・課題・総予算で比較する方法を整理しています。[前向き評価案](docs/research/epistesys-prospective-evaluation-plan.md)は未実行・未登録の計画です。
 
 ### 前身システムの探索的評価：GB-CC75
 
@@ -92,9 +119,9 @@ Epistesysを明示的に選択した場合、Coding Projectorが設計・実装�
 
 主要差の記録されたQID bootstrap 95%区間は+12.20〜+27.83ポイントで、差は丸め前に計算しています。主要65 QIDでは32勝・20同点・13敗でした。選択は75→67→65 QID、225→171→167ペアです。平均適合度は完全遵守や正答率ではなく、区間は取得選択やJudgeの系統誤差を含みません。
 
-これは**前身の限定観測**で、Epistesys alpha.2／alpha.3の改善、公式ComplexConstraintsスコア、独立human gold、TLの因果効果、ハルシネーション削減、長期保持の実証ではありません。経路ラベル等を非提示とするJudge設計ですが、Labyrinthを含む評価系の独立性は未確立です。既知の75問を新しいholdoutとして扱いません。
+これは**前身の限定観測**です。EpistesysのAlpha各版やBeta 6.9の改善、公式ComplexConstraintsスコア、独立した人手の正解データ、TLの因果効果、ハルシネーション削減、長期保持を実証したものではありません。経路ラベル等を非提示とするJudge設計ですが、Labyrinthを含む評価系の独立性は未確立です。既知の75問を新しいholdoutとして扱いません。
 
-[研究本文](docs/research/gb-cc75-study.md)・[方法と由来](docs/research/gb-cc75-methods-and-provenance.md)・[統計仕様](docs/research/gb-cc75-statistical-analysis.md)・[方法論監査](docs/research/gb-cc75-adversarial-audit.md)・[再計算可能な集計](benchmarks/gb-cc75/2026-08-18/README.md)を提供しています。
+[前身の評価報告](docs/research/gb-cc75-study.md)・[方法と由来](docs/research/gb-cc75-methods-and-provenance.md)・[統計仕様](docs/research/gb-cc75-statistical-analysis.md)・[方法論監査](docs/research/gb-cc75-adversarial-audit.md)・[再計算可能な集計](benchmarks/gb-cc75/2026-08-18/README.md)を提供しています。
 
 ### 実行例
 
@@ -118,8 +145,9 @@ launcherは自身の配置からrunnerを解決します。別cwdからの起動
 | システム境界・データフロー・用語 | [システムアーキテクチャ](docs/system-architecture.md) |
 | 実行条件・修復・再開 | [実行ガイド](docs/execution-guide.md) → [DGCL実行契約](docs/dgcl-operating-profile-and-closure.md) |
 | wire形式・互換性 | [DGCL wire互換性](docs/dgcl-wire-compatibility.md) → [schema契約](schemas/closure-and-receipt-contract.md) |
-| 評価設計・経験的結果 | [研究仮説](docs/research-hypotheses.md) → [GB-CC75研究本文](docs/research/gb-cc75-study.md) |
-| 現行の検証・残存条件 | [alpha.3検証](validation/epr-release-verification-2026-10-27.md) → [既知の制約](docs/known-limitations.md) |
+| 指標の数式・適用条件 | [EpiMapLoss](docs/epimaploss-epirecompscore-formulas.md#map-ja) → [EpiRecompScore F1・F2](docs/epimaploss-epirecompscore-formulas.md#score-ja) → [全40成分](docs/epimaploss-epirecompscore-formulas.md#catalog-ja) |
+| 設計の評価・前身の測定結果 | [設計仮説と評価項目](docs/research-hypotheses.md) → [GB-CC75の評価報告](docs/research/gb-cc75-study.md) |
+| 現行の検証・残存条件 | [Beta 6.9保存記録](docs/epistesys-6.9.0-beta.1-source-snapshot-2026-11-05.md) → [既知の制約](docs/known-limitations.md) |
 | sourceの由来・除外・履歴 | [移行契約](docs/migration-contract.md) → [文書索引](docs/README.md) |
 
 初期cloneは独立したGit履歴で保存され、個人状態、credentials、cache、receipt root、replay ledgerを継承していません。`lc631-*`は挙動差を抑える互換識別子です。詳細な実装記録と継承元の設計・監査文書は[文書索引](docs/README.md)で現行仕様から区別しています。
@@ -128,9 +156,11 @@ launcherは自身の配置からrunnerを解決します。別cwdからの起動
 
 ## English
 
-Epistesys is an experimental **AI control and reliability research project** that treats requirements, execution authority, evidence provenance, state updates, and output validation as one processing system. It places structured control state and verification procedures outside a generative model rather than modifying that model.
+Epistesys is a **development tool** I’m building for my own software projects. I decide which mechanisms I need and use AI coding tools to implement them. After asking an AI to change some code, I want to be able to check the code and its test results to answer three questions: Did the original constraints survive? Is the new behavior actually called? What was verified before the change was called complete?
 
-The failure model includes commitment of unsupported generation, omitted constraints in complex instructions, expired or drifting state/authority/evidence during long interactions, and execution with unresolved obligations. Its research target is the **operating range of instruction complexity, dependency depth, retained state, and session length at a defined reliability level**. Implemented mechanisms, local verification, and effects awaiting evaluation are distinguished below.
+For example, a request to “add a feature without changing the existing output format” needs three distinct checks: the build passes, the new feature is invoked, and the old format is preserved. Without changing model weights, Epistesys relates the original requirements, permitted operations, code revision, validation results, and outstanding checks. See [Coding assistance](#coding-assistance-en) for the workflow and the table below for what currently works and what remains unverified.
+
+[How to use it](docs/execution-guide.md) · [EpiMapLoss equations](docs/epimaploss-epirecompscore-formulas.md#map-en) · [EpiRecompScore equations](docs/epimaploss-epirecompscore-formulas.md#score-en) · [Current verification scope](docs/epistesys-6.9.0-beta.1-source-snapshot-2026-11-05.md)
 
 ### Current status
 
@@ -141,13 +171,38 @@ The failure model includes commitment of unsupported generation, omitted constra
 | Source verification | See the [Beta 6.9 snapshot record](docs/epistesys-6.9.0-beta.1-source-snapshot-2026-11-05.md) for this checkpoint. Whole-system audit and release gates are incomplete. The [alpha.3 record](validation/epr-release-verification-2026-10-27.md) and [alpha.2 final verification](validation/epia2-alpha2-release-verification-2026-10-02.md) are historical, not passing results for this version |
 | Distribution | Source-only; excludes model weights, private keys, personal settings, and unaudited distribution binaries |
 | Host integration | Includes adapter/receipt/replay implementations; real-host callback/delivery observations remain `PendingHostObservation` |
-| Research evaluation | Epistesys-specific effects and independent evaluation are pending; independent gold corpus remains `PendingNoCorpus` |
+| Effect on development work | How much Epistesys itself reduces development failures is unverified. The independent reference corpus remains `PendingNoCorpus` |
 
 Local source-path verification does not establish arbitrary-instruction semantic accuracy, hallucination containment, or long-session performance. Beta 6.9 is an intermediate checkpoint of the current implementation, not completion, distribution readiness, or host activation. Alpha.3 remains on its [independent maintenance branch](https://github.com/ViszCham/Epistesys/tree/main-alpha.3), while end-to-end audit and repairs continue toward Beta-7.0.
 
 ### Implementation being added through TLCX
 
-The current source includes typed context reconstruction, multiple finite-logic profiles, four-record TranslationLoss, S_Creative arithmetic matching the original F1/F2 definitions, binary state and journals, resource ownership, and Coding/Media/host integration work. These changes include source and test code rather than design labels alone. However, unregistered or disconnected paths and unresolved tests remain. The [measurement contract](docs/tlcx-tl-screative-measurement-contract-v1-2026-10-29.md) defines formulas and completion criteria; the [implementation roadmap](docs/epistesys-tlcx-contextual-multilogic-loss-creativity-roadmap-2026-10-28.md) records dependency order.
+The current source contains context reconstruction, checks across several finite logics, four records per transformation, evaluation of recomposed candidates, binary state and journals, resource ownership, and Coding/Media/host integration work. There is source and test code, but some features still lack a caller and some tests are unresolved. The [measurement contract](docs/tlcx-tl-screative-measurement-contract-v1-2026-10-29.md) defines applicability; the [implementation roadmap](docs/epistesys-tlcx-contextual-multilogic-loss-creativity-roadmap-2026-10-28.md) gives dependency order and completion criteria.
+
+[EpiMapLoss: mapping preservation loss](docs/epimaploss-epirecompscore-formulas.md#map-en) tracks what a change of representation fails to preserve. [EpiRecompScore: structural recomposition score](docs/epimaploss-epirecompscore-formulas.md#score-en) evaluates what a candidate reorganizes, together with its gains, losses, and costs.
+
+<details>
+
+<summary>Main equations: mapping preservation loss and recomposition profiles F1 and F2</summary>
+
+Components on the right refer to the same candidate $z$ and comparison scope. Fix the active axes $\mathcal A$ and positive weights $\rho_a$ before comparing.
+
+$$
+\begin{aligned}
+L=\operatorname{EpiMapLoss}(z)
+ &=\frac{\sum_{a\in\mathcal A}\rho_a L_a(z)}{\sum_{a\in\mathcal A}\rho_a},\\
+\operatorname{EpiRecompScore}_{F1}(z)
+ &=\alpha D_{\rm ctx}+\beta D_{\rm sem}-\lambda L
+   +\gamma A_{\rm compat}+\delta C_{\rm match}-\eta N_{\rm known},\\
+\operatorname{EpiRecompScore}_{F2}(z)
+ &=w_1T_{\rm nc}+w_2G_{\rm struct}+w_3R_{\rm gain}+w_4U_{\rm gain}\\
+ &\quad+w_5Q_{\rm parity}-w_6L-w_7R_{\rm counter}-w_8B_{\rm mem}.
+\end{aligned}
+$$
+
+See the formula reference for notation, subformulas, [all 40 component calculations](docs/epimaploss-epirecompscore-formulas.md#catalog-en), [interval arithmetic](docs/epimaploss-epirecompscore-formulas.md#kernels-en), and [selection and search](docs/epimaploss-epirecompscore-formulas.md#policy-en). Unmeasured or incomparable values are not zero, and high scores do not authorize execution or establish completion.
+
+</details>
 
 ### Control scope and architecture
 
@@ -174,7 +229,7 @@ Following the EPR audit, alpha.3 strengthens these boundaries in existing paths:
 - **Execution and recovery:** registered direct-driver connection evidence, shared process supervision, handle-based file repair, and private Media snapshots.
 - **Numerics and distribution:** numeric/graph admission, fixed-inventory packaging, and Windows/Linux CI that captures Rust changes.
 
-The [change notes](docs/epistesys-6.3.2-alpha.3-release-notes-2026-10-27.md) and [boundary contracts](docs/epr-boundary-contracts.md) define implementation coverage, separate from research effects or real-host activation.
+The [change notes](docs/epistesys-6.3.2-alpha.3-release-notes-2026-10-27.md) and [boundary contracts](docs/epr-boundary-contracts.md) describe the implementation added in that version. They do not establish its effect on development work or activation on a real host.
 
 <a id="coding-assistance-en"></a>
 
@@ -191,13 +246,13 @@ The repair path applies a caller-provided candidate to an authorized existing Ru
 - **Candidate versus validated state:** a `candidate` is a generated or parsed proposal. States such as `Validated` require the specified evidence for the relevant revision.
 - **Evidence versus authority:** test success, low loss, matching hashes, and schema validity do not grant operation permissions.
 - **Finalization versus delivery:** standalone candidate finalization, host send, sink receipt, and durable replay are separately observed.
-- **Implementation verification versus research effects:** build/test/CLI success does not establish general performance, formal proof, complete grammar understanding, or host-wide enforcement.
+- **Individual checks versus general effectiveness:** build/test/CLI success reports a result under the conditions tested. It does not establish general performance, formal proof, complete grammar understanding, or host-wide enforcement.
 
 “Output commitment” here means application-level finalization, not a Git commit or truth of a claim. See the [operational terminology](docs/system-architecture.md#terminology-en) and [known limitations](docs/known-limitations.md).
 
-### Research questions and evaluation policy
+### What we want to check in development
 
-| Research question | Failures/metrics to evaluate |
+| Development concern | Failures/metrics to evaluate |
 | --- | --- |
 | Commitment of unsupported generation | Unsupported claims, erroneous commitments, missed detections, response coverage |
 | Constraint preservation | Per-criterion and all-criteria adherence, exception/dependency/intent retention, regressions |
@@ -205,7 +260,7 @@ The repair path applies a caller-provided candidate to an authorized existing Ru
 | Failure observability | Defect detection, appropriate and excessive holds, risk–coverage |
 | Reliable operating range | Reliability by input length, condition count, dependency depth, state volume, session length, and total compute |
 
-These are **research goals**. Explicit retention of constraints, authority, state, and evidence is a **design objective**; whether those mechanisms reduce failures under the same model, tasks, and total budget is a **testable hypothesis**. Comparisons record model, system instructions, tools, output limits, retries, and controller cost. The [research hypotheses](docs/research-hypotheses.md) define measurements; the [prospective evaluation plan](docs/research/epistesys-prospective-evaluation-plan.md) remains unexecuted and unregistered.
+Explicitly retaining constraints, authority, state, and evidence is a **design objective**. Whether this reduces failures in practice, and how useful it remains as requests get more complex or sessions get longer, requires separate evaluation. The [design hypotheses and evaluation criteria](docs/research-hypotheses.md) describe how to compare runs using the same model, tasks, and total budget. The [prospective evaluation plan](docs/research/epistesys-prospective-evaluation-plan.md) has not been run or preregistered.
 
 ### Exploratory predecessor evaluation: GB-CC75
 
@@ -218,9 +273,9 @@ A retrospective exploratory paired evaluation of predecessor Labyrinth-Codex, da
 
 The recorded QID-bootstrap 95% interval is +12.20 to +27.83 points; differences use unrounded values. The primary 65 QIDs show 32 wins, 20 ties, and 13 losses. Selection is 75→67→65 QIDs and 225→171→167 pairs. Mean adherence is neither complete compliance nor task accuracy; the interval excludes acquisition selection and systematic Judge error.
 
-These are **bounded predecessor observations**, not evidence of alpha.2/alpha.3 improvement, official ComplexConstraints scores, independent human gold, causal TL effects, hallucination reduction, or long retention. The Judge design withholds route labels and other identifiers, but independence of the Labyrinth-based evaluator is unestablished. Known tasks are not a new holdout.
+These are **bounded predecessor observations**. They do not establish improvements in the Epistesys alphas or Beta 6.9, official ComplexConstraints scores, independent human gold, causal TL effects, hallucination reduction, or long-session retention. The Judge design withholds route labels and other identifiers, but independence of the Labyrinth-based evaluator is unestablished. Known tasks are not a new holdout.
 
-See the [study](docs/research/gb-cc75-study.md), [methods/provenance](docs/research/gb-cc75-methods-and-provenance.md), [statistical specification](docs/research/gb-cc75-statistical-analysis.md), [methodological audit](docs/research/gb-cc75-adversarial-audit.md), and [recomputable aggregates](benchmarks/gb-cc75/2026-08-18/README.md).
+See the [predecessor evaluation report](docs/research/gb-cc75-study.md), [methods/provenance](docs/research/gb-cc75-methods-and-provenance.md), [statistical specification](docs/research/gb-cc75-statistical-analysis.md), [methodological audit](docs/research/gb-cc75-adversarial-audit.md), and [recomputable aggregates](benchmarks/gb-cc75/2026-08-18/README.md).
 
 ### Execution examples
 
@@ -244,8 +299,9 @@ The launcher resolves its runner relative to its installation. See the [executio
 | System boundaries, dataflow, terminology | [System architecture](docs/system-architecture.md) |
 | Execution, repair, resume | [Execution guide](docs/execution-guide.md) → [DGCL execution contract](docs/dgcl-operating-profile-and-closure.md) |
 | Wire formats and compatibility | [DGCL wire compatibility](docs/dgcl-wire-compatibility.md) → [schema contract](schemas/closure-and-receipt-contract.md) |
-| Evaluation design and observations | [Research hypotheses](docs/research-hypotheses.md) → [GB-CC75 study](docs/research/gb-cc75-study.md) |
-| Current verification and residual conditions | [Alpha.3 verification](validation/epr-release-verification-2026-10-27.md) → [Known limitations](docs/known-limitations.md) |
+| Measurement equations and applicability | [EpiMapLoss](docs/epimaploss-epirecompscore-formulas.md#map-en) → [EpiRecompScore F1/F2](docs/epimaploss-epirecompscore-formulas.md#score-en) → [all 40 components](docs/epimaploss-epirecompscore-formulas.md#catalog-en) |
+| Design evaluation and predecessor results | [Design hypotheses and evaluation criteria](docs/research-hypotheses.md) → [GB-CC75 evaluation report](docs/research/gb-cc75-study.md) |
+| Current verification and residual conditions | [Beta 6.9 snapshot record](docs/epistesys-6.9.0-beta.1-source-snapshot-2026-11-05.md) → [Known limitations](docs/known-limitations.md) |
 | Source provenance, exclusions, history | [Migration contract](docs/migration-contract.md) → [Documentation index](docs/README.md) |
 
 The initial clone uses independent Git history and excludes personal state, credentials, caches, receipt roots, and replay ledgers. `lc631-*` names are compatibility identifiers retained to limit behavior changes. The [documentation index](docs/README.md) separates detailed implementation records and inherited design/audit history from the current specification.
