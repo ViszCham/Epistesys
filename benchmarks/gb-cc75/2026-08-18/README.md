@@ -2,7 +2,9 @@
 
 ## 日本語
 
-2026-08-18の前身Labyrinth-Codexによる派生ベンチマークの選択済み公開集計である。Epistesys `6.3.2-alpha.2`の性能評価ではない。公式ComplexConstraints scorer／leaderboardと同等でもない。[研究本文](../../../docs/research/gb-cc75-study.md)と[方法](../../../docs/research/gb-cc75-methods-and-provenance.md)を先に読む。
+これは、2026-08-18に前身のLabyrinth-Codexで実施した派生ベンチマークの公開集計です。測ったのは回答のルーブリック適合度と全基準達成率で、EpistesysのAlpha各版やBeta 6.9の性能ではありません。公式ComplexConstraintsのscorer／leaderboardとも異なります。結果を読む前に[評価報告](../../../docs/research/gb-cc75-study.md)と[方法](../../../docs/research/gb-cc75-methods-and-provenance.md)をご覧ください。
+
+開発ツールの現行仕様で定義する[EpiMapLoss](../../../docs/epimaploss-epirecompscore-formulas.md#map-ja)・[EpiRecompScore](../../../docs/epimaploss-epirecompscore-formulas.md#score-ja)については数式リファレンスを参照してください。この集計は両指標を測定したものではありません。以下のファイル名にあるF1・F2はベンチマークの成果物ラベルで、再編評価の式F1・F2とは別です。
 
 ### 数値と単位
 
@@ -28,7 +30,9 @@ repository rootで`python scripts/research/verify-gb-cc75.py`と`python scripts/
 
 ## English
 
-This is the selected published aggregate bundle for the predecessor Labyrinth-Codex adapted benchmark dated 2026-08-18, not a performance evaluation of Epistesys `6.3.2-alpha.2`. It is not equivalent to the official ComplexConstraints scorer/leaderboard. Read the [study](../../../docs/research/gb-cc75-study.md) and [methods](../../../docs/research/gb-cc75-methods-and-provenance.md) first.
+These are published aggregates from an adapted benchmark run on the predecessor Labyrinth-Codex on 2026-08-18. The outcomes are rubric adherence and all-criteria pass rate, not performance measurements for any Epistesys alpha or Beta 6.9. They are not equivalent to the official ComplexConstraints scorer or leaderboard. See the [evaluation report](../../../docs/research/gb-cc75-study.md) and [methods](../../../docs/research/gb-cc75-methods-and-provenance.md) before interpreting the results.
+
+For the development tool's current [EpiMapLoss](../../../docs/epimaploss-epirecompscore-formulas.md#map-en) and [EpiRecompScore](../../../docs/epimaploss-epirecompscore-formulas.md#score-en), see the formula reference. This benchmark did not measure either quantity. F1 and F2 in the filenames below are benchmark artifact labels, not recomposition formulas F1 and F2.
 
 ### Values and units
 

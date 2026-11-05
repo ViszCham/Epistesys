@@ -2,7 +2,9 @@
 
 ## 日本語
 
-この索引は、仕様、実行条件、検証証跡、評価設計、歴史的な設計記録を区別します。現在の保存版はBeta 6.9（`6.9.0-beta.1`）です。まず[今回の保存記録](epistesys-6.9.0-beta.1-source-snapshot-2026-11-05.md)で未完了点と検証範囲をご確認ください。以下のAlpha.3資料は継承基線の説明・履歴として保持しています。日本語説明の後に、同内容の英語説明を置きます。
+開発でEpistesysを使いたい方は、[コーディング支援の概要](../README.md#coding-assistance-ja)から[実行ガイド](execution-guide.md)へお進みください。要求を確認する方法、テスト結果の読み方、修復や再開に必要な条件を順にたどれます。
+
+現在の保存版はBeta 6.9（`6.9.0-beta.1`）です。[今回の保存記録](epistesys-6.9.0-beta.1-source-snapshot-2026-11-05.md)に、検証済みの範囲と未完了点をまとめています。Alpha.3の記録は以前の版の履歴です。設計の評価案や前身のベンチマークは、日常の利用手順とは分けて下に掲載しています。
 
 TLCXの数式・適用条件は[測定契約](tlcx-tl-screative-measurement-contract-v1-2026-10-29.md)、依存順と完成条件は[ロードマップ](epistesys-tlcx-contextual-multilogic-loss-creativity-roadmap-2026-10-28.md)にまとめています。計画に項目があることを、その実装・配布・host接続の完了とは扱いません。
 
@@ -10,12 +12,13 @@ TLCXの数式・適用条件は[測定契約](tlcx-tl-screative-measurement-cont
 
 | 目的 | 読む順序 | 確認できる内容 |
 | --- | --- | --- |
-| システム工学・情報科学の観点で構造を把握する | [README](../README.md) → [アーキテクチャ](system-architecture.md) | 対象とする失敗、用語、データフロー、信頼境界 |
 | Coding支援を利用・統合する | [Coding概要](../README.md#coding-assistance-ja) → [実行ガイド](execution-guide.md) → [DGCL実行契約](dgcl-operating-profile-and-closure.md) | 明示選択、要求追跡、検証、候補適用、再開、判定範囲 |
 | sourceを実行・検査する | [実行ガイド](execution-guide.md) → [DGCL実行契約](dgcl-operating-profile-and-closure.md) | 診断、権限・tool条件、修復、再開、適用範囲 |
+| 全体の構造を把握する | [README](../README.md) → [アーキテクチャ](system-architecture.md) | 対象とする失敗、用語、データフロー、信頼境界 |
+| 測定式を確認する | [EpiMapLoss](epimaploss-epirecompscore-formulas.md#map-ja) → [EpiRecompScore F1・F2](epimaploss-epirecompscore-formulas.md#score-ja) → [全40成分](epimaploss-epirecompscore-formulas.md#catalog-ja) | 記号、計算法、値を出せない条件、基準との差 |
 | interfaceを統合する | [wire互換性](dgcl-wire-compatibility.md) → [schema契約](../schemas/closure-and-receipt-contract.md) | field・stage・consumer view、失効と互換性 |
-| 効果を評価する | [研究仮説](research-hypotheses.md) → [前向き評価案](research/epistesys-prospective-evaluation-plan.md) | 仮説、予算統制、holdout、Judge、欠測 |
-| 現行状態を監査する | [alpha.3検証](../validation/epr-release-verification-2026-10-27.md) → [既知の制約](known-limitations.md) | 局所gateの結果、研究・配布・hostの未観測範囲 |
+| 開発上の効果を確かめる | [設計仮説と評価項目](research-hypotheses.md) → [前向き評価案](research/epistesys-prospective-evaluation-plan.md) | 比較条件、計算予算、未使用の評価データ、採点、欠測 |
+| 現行状態を確認する | [Beta 6.9保存記録](epistesys-6.9.0-beta.1-source-snapshot-2026-11-05.md) → [既知の制約](known-limitations.md) | 今回検証したこと、配布・実ホストで未確認のこと |
 
 ### 文書の役割
 
@@ -23,15 +26,15 @@ TLCXの数式・適用条件は[測定契約](tlcx-tl-screative-measurement-cont
 | --- | --- | --- |
 | 仕様・実行契約 | [アーキテクチャ](system-architecture.md)、[DGCL実行契約](dgcl-operating-profile-and-closure.md)、[wire互換性](dgcl-wire-compatibility.md) | sourceの型・状態・適用条件を説明する |
 | release記録 | [alpha.3 release notes](epistesys-6.3.2-alpha.3-release-notes-2026-10-27.md)、[alpha.3検証](../validation/epr-release-verification-2026-10-27.md) | 特定revision・環境で観測した結果を示す |
-| 評価設計 | [研究仮説](research-hypotheses.md)、[独立gold収集手順](dgcl-gold-collection-protocol.md)、[前向き評価案](research/epistesys-prospective-evaluation-plan.md) | 未実行の計画と検証済み結果を区別する |
+| 評価設計 | [設計仮説と評価項目](research-hypotheses.md)、[独立gold収集手順](dgcl-gold-collection-protocol.md)、[前向き評価案](research/epistesys-prospective-evaluation-plan.md) | 未実行の計画と検証済み結果を区別する |
 | 由来・除外 | [移行契約](migration-contract.md)、[採用manifest](adoption-manifest.md)、[clone検証](clone-verification.md) | sourceの継承範囲、互換名、非開示情報の除外を示す |
 | 補助監査 | [Assurance境界](assurance-compiler-status.md)、[RepoSeiri記録](reposeiri-audit.md) | 監査範囲・未対応・保留を保持する。一般安全性の証明ではない |
 
-各版のsource検証、配布検証、実host activation、研究効果は別状態です。candidate／Validated、証拠／権限、出力確定／配信を同一視しません。共通の定義は[用語表](system-architecture.md#terminology-ja)に集約しています。
+コードがテストを通ること、配布できること、実ホストで動くこと、開発時の失敗が減ることは、それぞれ別の確認です。candidate／Validated、証拠／権限、出力確定／配信も区別します。共通の定義は[用語表](system-architecture.md#terminology-ja)をご覧ください。
 
 Coding支援の説明と実装範囲を照合した今回の所見・修正・検証範囲は[文書改訂の敵対監査記録](../validation/coding-documentation-adversarial-review.md)に記録しています。
 
-### GB-CC75：前身の探索的な経験的観測
+### GB-CC75：前身システムのベンチマーク
 
 主要65 QIDの平均適合度は74.38%→94.10%（+19.71ポイント）、167対応ペアの全基準達成率は39.52%→48.50%でした。前身の独自Judge下の結果であり、alpha.2／alpha.3の改善、完全遵守、ハルシネーション抑制、長期保持へ移転しません。
 
@@ -80,7 +83,9 @@ Coding支援の説明と実装範囲を照合した今回の所見・修正・�
 
 ## English
 
-This index separates specifications, operating conditions, verification records, evaluation designs, and historical design notes. The current checkpoint is Beta 6.9 (`6.9.0-beta.1`). Start with the [snapshot record](epistesys-6.9.0-beta.1-source-snapshot-2026-11-05.md) for open work and validation scope. The Alpha.3 documents below remain explanations and historical records of the inherited baseline. Equivalent English prose follows Japanese prose.
+To use Epistesys in development, start with [Coding assistance](../README.md#coding-assistance-en), then follow the [execution guide](execution-guide.md). These pages cover how to inspect a requirement, interpret a test result, and determine what is needed for repair or resume.
+
+The current checkpoint is Beta 6.9 (`6.9.0-beta.1`). Its [snapshot record](epistesys-6.9.0-beta.1-source-snapshot-2026-11-05.md) identifies what has been checked and what is still open. Alpha.3 records describe an earlier version. Evaluation proposals and predecessor benchmarks appear below, separately from instructions for everyday use.
 
 The [measurement contract](tlcx-tl-screative-measurement-contract-v1-2026-10-29.md) defines TLCX formulas and applicability; the [roadmap](epistesys-tlcx-contextual-multilogic-loss-creativity-roadmap-2026-10-28.md) defines dependencies and completion criteria. Listing an item in a plan does not establish implementation, distribution, or host closure.
 
@@ -88,12 +93,13 @@ The [measurement contract](tlcx-tl-screative-measurement-contract-v1-2026-10-29.
 
 | Purpose | Reading order | Information |
 | --- | --- | --- |
-| Understand the structure from systems engineering/computer science | [README](../README.md) → [Architecture](system-architecture.md) | Failure model, terminology, dataflow, trust boundaries |
 | Use/integrate Coding assistance | [Coding overview](../README.md#coding-assistance-en) → [Execution guide](execution-guide.md) → [DGCL contract](dgcl-operating-profile-and-closure.md) | Explicit selection, requirement traceability, validation, candidate application, resume, decision scope |
 | Execute/inspect source | [Execution guide](execution-guide.md) → [DGCL contract](dgcl-operating-profile-and-closure.md) | Diagnostics, authority/tool conditions, repair, resume, scope |
+| Understand the overall architecture | [README](../README.md) → [Architecture](system-architecture.md) | Failure model, terminology, dataflow, trust boundaries |
+| Check the measurement equations | [EpiMapLoss](epimaploss-epirecompscore-formulas.md#map-en) → [EpiRecompScore F1/F2](epimaploss-epirecompscore-formulas.md#score-en) → [all 40 components](epimaploss-epirecompscore-formulas.md#catalog-en) | Symbols, calculations, conditions for no numeric value, differences from baseline |
 | Integrate interfaces | [Wire compatibility](dgcl-wire-compatibility.md) → [schema contract](../schemas/closure-and-receipt-contract.md) | Fields/stages/consumer views, invalidation, compatibility |
-| Evaluate effects | [Research hypotheses](research-hypotheses.md) → [Prospective plan](research/epistesys-prospective-evaluation-plan.md) | Hypotheses, budgets, holdouts, Judges, missingness |
-| Audit current status | [Alpha.3 verification](../validation/epr-release-verification-2026-10-27.md) → [Known limitations](known-limitations.md) | Local gates and unobserved research/distribution/host scope |
+| Evaluate effects on development work | [Design hypotheses and evaluation criteria](research-hypotheses.md) → [Prospective plan](research/epistesys-prospective-evaluation-plan.md) | Comparison conditions, compute budgets, holdouts, grading, missing data |
+| Check current status | [Beta 6.9 snapshot record](epistesys-6.9.0-beta.1-source-snapshot-2026-11-05.md) → [Known limitations](known-limitations.md) | Checks performed for this checkpoint and unverified distribution or real-host behavior |
 
 ### Document roles
 
@@ -101,15 +107,15 @@ The [measurement contract](tlcx-tl-screative-measurement-contract-v1-2026-10-29.
 | --- | --- | --- |
 | Specification/operating contract | [Architecture](system-architecture.md), [DGCL contract](dgcl-operating-profile-and-closure.md), [wire compatibility](dgcl-wire-compatibility.md) | Source types/states/preconditions |
 | Release record | [Alpha.3 notes](epistesys-6.3.2-alpha.3-release-notes-2026-10-27.md), [alpha.3 verification](../validation/epr-release-verification-2026-10-27.md) | Observations for a particular revision/environment |
-| Evaluation design | [Hypotheses](research-hypotheses.md), [independent-gold protocol](dgcl-gold-collection-protocol.md), [prospective plan](research/epistesys-prospective-evaluation-plan.md) | Unexecuted plans versus verified results |
+| Evaluation design | [Design hypotheses and evaluation criteria](research-hypotheses.md), [independent-gold protocol](dgcl-gold-collection-protocol.md), [prospective plan](research/epistesys-prospective-evaluation-plan.md) | Unexecuted plans versus verified results |
 | Provenance/exclusions | [Migration contract](migration-contract.md), [adoption manifest](adoption-manifest.md), [clone verification](clone-verification.md) | Inheritance, compatibility names, excluded non-disclosable material |
 | Advisory audit | [Assurance boundary](assurance-compiler-status.md), [RepoSeiri record](reposeiri-audit.md) | Scope, unsupported cases, and holds; not general-safety proof |
 
-Source verification, distribution verification, real host activation, and research effects are separate states. Candidate/Validated, evidence/authority, and finalization/delivery differ. Definitions are centralized in the [terminology table](system-architecture.md#terminology-en).
+Passing a code test, being distributable, running on a real host, and reducing failures in development each require a different check. Candidate versus Validated, evidence versus authority, and finalization versus delivery are also distinct. See the [terminology table](system-architecture.md#terminology-en) for definitions.
 
 The [documentation adversarial-review record](../validation/coding-documentation-adversarial-review.md) records this revision's findings, corrections, and verification scope for Coding assistance and its implementation boundaries.
 
-### GB-CC75: exploratory predecessor observations
+### GB-CC75: predecessor benchmark
 
 Primary mean adherence over 65 QIDs changed from 74.38% to 94.10% (+19.71 points); all-criteria pass over 167 pairs changed from 39.52% to 48.50%. Results use the predecessor's custom Judge and do not transfer to alpha.2/alpha.3 improvement, complete compliance, hallucination containment, or long retention.
 

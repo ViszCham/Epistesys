@@ -4,9 +4,9 @@
 
 ### 対象と境界
 
-対象はEpistesys `6.3.2-alpha.3`のsource実装です。本書は、LLMが生成する候補と、要求・操作権限・検証証拠・出力状態を管理する制御系を分離して記述します。モデルweightの変更、任意自然言語の完全理解、全host操作の強制制御は実装範囲に含めません。
+このページは、AIに実装を頼んだ後で何を検証できるかを理解するための、継承元 `6.3.2-alpha.3` の構成案内です。モデルが生成した候補と、要求・操作権限・検証結果・出力状態を管理する処理を区別します。モデルの重みの変更、任意の自然言語の完全理解、全ホスト操作の強制制御を扱うものではありません。
 
-現在の参照点は[alpha.3 release notes](epistesys-6.3.2-alpha.3-release-notes-2026-10-27.md)と[alpha.3検証記録](../validation/epr-release-verification-2026-10-27.md)です。実行条件の詳細は[DGCL実行契約](dgcl-operating-profile-and-closure.md)、wireの条件は[互換性文書](dgcl-wire-compatibility.md)に分離しています。
+現在のソースの検証範囲は[Beta 6.9保存記録](epistesys-6.9.0-beta.1-source-snapshot-2026-11-05.md)をご覧ください。変換で何を落としたかは[EpiMapLoss](epimaploss-epirecompscore-formulas.md#map-ja)、再編した候補をどう比べるかは[EpiRecompScore](epimaploss-epirecompscore-formulas.md#score-ja)に式をまとめています。[alpha.3変更一覧](epistesys-6.3.2-alpha.3-release-notes-2026-10-27.md)と[検証記録](../validation/epr-release-verification-2026-10-27.md)は以前の版の記録です。実行条件は[DGCL実行契約](dgcl-operating-profile-and-closure.md)、wire形式は[互換性文書](dgcl-wire-compatibility.md)にあります。
 
 <a id="terminology-ja"></a>
 
@@ -17,9 +17,11 @@
 | 入力／source | revision・digest・UTF-8 byte spanを持つ原文。互換APIではseedと呼ぶ場合がある | 確定した仕様、検証済み事実、操作許可 |
 | 要求／requirement・obligation | 原文に結び付いた実現・検証対象。条件・否定・scope等を別構造として保持 | 解析器が推測した真偽、実行済み状態 |
 | Program IR | source-boundな要求・関係・未解決事項の中間表現 | 任意プログラムの意味的等価性証明 |
-| 射影／projection | 表現間の変換と、変換元・変換先・規則・証拠の対応 | 単なる言い換え、意味保存の保証 |
-| TranslationLoss（TL） | ProjectionDefectGraph等による対応・欠落・矛盾・比較不能の記録 | 校正済みの普遍的な意味距離、真理値 |
-| Membrane | 表現・状態間の検証境界を指す実装上の名称 | 物理的な膜や、それ自体による正しさの保証 |
+| 射影／projection | 表現間の変換と、変換元・変換先・規則・証拠の対応 | 単なる言い換え、意味的等価性を確認した結果 |
+| TranslationLoss（TL、既存の互換用語） | ProjectionDefectGraph等による対応・欠落・矛盾・比較不能の記録 | 校正済みの普遍的な意味距離、真理値 |
+| [EpiMapLoss](epimaploss-epirecompscore-formulas.md#map-ja) | 事前に固定したプローブで保存義務の欠損を測り、定義できる場合に適用軸を集約する | 欠陥記録の単なる件数、事実が正しい確率 |
+| [EpiRecompScore](epimaploss-epirecompscore-formulas.md#score-ja) | 同一の比較範囲で再編候補を評価するF1・F2の選好指標 | 普遍的な創造性の尺度、実行や完了の許可 |
+| Membrane | 表現・状態間の検証境界を指す実装上の名称 | 物理的な膜や、正しさを示す証明 |
 | candidate | 生成・解析・構築された未確定候補 | Validated、Completed、Delivered |
 | evidence | 対象revision・観測方法・stageに束縛した検証材料 | permission、独立gold、形式証明 |
 | receipt | 発行主体・class・subject・scope・nonce・期限・parent・payloadを検査する証跡 | JSON内の成功flag、非空の署名らしい文字列 |
@@ -81,7 +83,7 @@ CLIのpackage finalizerは条件なしRequired要求の限定profileを扱いま
 
 離散・連続表現間の蒸留は、同じInstruction ASTの構造をbounded geometryへ送り、離散edge membershipを検査したmaterializationをProgram IRへ戻します。content-state更新がepoch progressになり、IR/TL/plan/candidateのidentityへ結び付きます。幾何的な近さ、探索score、構造membershipからpredicate truthやGrantを生成しません。
 
-GPUの数値経路、CPUとのparity、readback、device timing、overlap、occupancy、device-loss callbackは個別の観測対象です。実装の存在や短いGPU試験を、全hardwareの飽和・常時高速化・研究効果へ読み替えません。
+GPUの数値経路、CPUとのparity、readback、device timing、overlap、occupancy、device-loss callbackは個別の観測対象です。実装の存在や短いGPU試験だけでは、どのハードウェアでも飽和すること、常に高速になること、開発作業の結果が改善することは分かりません。
 
 alpha.3はCPU/GPUのsummaryとtop-16候補の対応を検査します。この比較をfull-vector parityや全候補の意味的等価性へ拡張せず、CPU final validationとhardwareのoccupancy／saturationも別に扱います。
 
@@ -121,9 +123,9 @@ source-only配布とローカル生成binaryの存在は矛盾しません。bui
 
 ### Scope and boundaries
 
-This document covers Epistesys `6.3.2-alpha.3` source implementation. It separates LLM-generated candidates from control of requirements, operation authority, validation evidence, and output states. Model-weight modification, complete arbitrary-language understanding, and enforcement over every host operation are outside scope.
+This guide to the inherited `6.3.2-alpha.3` architecture explains what can be checked after asking an AI to implement a change. It distinguishes a model-generated candidate from the processing of requirements, operation authority, validation results, and output states. It does not cover model-weight changes, complete understanding of arbitrary language, or enforcement over every host operation.
 
-Current references are the [alpha.3 release notes](epistesys-6.3.2-alpha.3-release-notes-2026-10-27.md) and [alpha.3 verification](../validation/epr-release-verification-2026-10-27.md). The [DGCL execution contract](dgcl-operating-profile-and-closure.md) defines operating conditions; the [compatibility document](dgcl-wire-compatibility.md) defines wire conditions.
+See the [Beta 6.9 snapshot record](epistesys-6.9.0-beta.1-source-snapshot-2026-11-05.md) for current source verification. The equations for what a mapping loses are under [EpiMapLoss](epimaploss-epirecompscore-formulas.md#map-en); those for comparing reorganized candidates are under [EpiRecompScore](epimaploss-epirecompscore-formulas.md#score-en). The [alpha.3 notes](epistesys-6.3.2-alpha.3-release-notes-2026-10-27.md) and [verification record](../validation/epr-release-verification-2026-10-27.md) describe an earlier version. The [DGCL execution contract](dgcl-operating-profile-and-closure.md) covers operating conditions; the [compatibility document](dgcl-wire-compatibility.md) covers wire formats.
 
 <a id="terminology-en"></a>
 
@@ -134,9 +136,11 @@ Current references are the [alpha.3 release notes](epistesys-6.3.2-alpha.3-relea
 | Input/source | Original text with revision, digest, and UTF-8 byte spans; some compatibility APIs call it seed | A finalized specification, validated fact, or permission |
 | Requirement/obligation | Source-bound realization/validation target with conditions, negation, and scope represented separately | Guessed predicate truth or an executed action |
 | Program IR | Source-bound intermediate representation of requirements, relations, and residuals | Proof of arbitrary-program semantic equivalence |
-| Projection | Representation transformation with source/target/rule/evidence correspondence | Paraphrase alone or guaranteed meaning preservation |
-| TranslationLoss (TL) | Correspondence/omission/contradiction/incomparability records, including ProjectionDefectGraph | A universally calibrated semantic distance or truth value |
-| Membrane | Implementation name for a validation boundary between representations/states | A physical membrane or correctness guarantee |
+| Projection | Representation transformation with source/target/rule/evidence correspondence | A paraphrase alone or a finding of semantic equivalence |
+| TranslationLoss (TL, existing compatibility term) | Correspondence/omission/contradiction/incomparability records, including ProjectionDefectGraph | A universally calibrated semantic distance or truth value |
+| [EpiMapLoss](epimaploss-epirecompscore-formulas.md#map-en) | Measures preservation failures on fixed probes and reduces active axes when defined | A count of defect records or the probability that a claim is true |
+| [EpiRecompScore](epimaploss-epirecompscore-formulas.md#score-en) | F1 and F2 preference scores for comparing reorganized candidates within one scope | Universal creativity, permission to execute, or a completion decision |
+| Membrane | Implementation name for a validation boundary between representations/states | A physical membrane or proof of correctness |
 | Candidate | Generated, parsed, or constructed proposal | Validated, Completed, Delivered |
 | Evidence | Validation material bound to subject revision, method, and stage | Permission, independent gold, formal proof |
 | Receipt | Witness with checked issuer/class/subject/scope/nonce/expiry/parent/payload | A JSON success flag or nonempty signature-like string |
@@ -198,7 +202,7 @@ Inherited exploration materializes 256 distinct worlds through eight projections
 
 Discrete/continuous distillation projects the same Instruction AST structure into bounded geometry and returns materializations checked against discrete edge membership to Program IR. Changed content state records epoch progress and binds IR/TL/plan/candidate identity. Geometric proximity, search scores, and membership do not mint predicate truth or Grants.
 
-Numeric GPU paths, CPU parity, readback, device timing, overlap, occupancy, and device-loss callbacks are separate observations. Implementation presence or short GPU tests are not hardware-saturation, universal-speedup, or research-effect evidence.
+Numeric GPU paths, CPU parity, readback, device timing, overlap, occupancy, and device-loss callbacks require separate observations. The presence of an implementation or a short GPU test does not establish saturation on every device, a consistent speedup, or better development outcomes.
 
 Alpha.3 checks CPU/GPU summaries and top-16 candidate correspondence. This is not full-vector parity or semantic equivalence of every candidate; CPU final validation and hardware occupancy/saturation remain separate.
 

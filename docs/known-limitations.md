@@ -2,13 +2,13 @@
 
 ## 日本語
 
-この文書は`6.3.2-alpha.3`の未観測・未実証範囲を、次に必要な確認と対応付けます。実装経路の存在、宣言profileの局所検証、研究効果、配布、実host観測は別の状態です。[用語と境界](system-architecture.md)と[alpha.3検証記録](../validation/epr-release-verification-2026-10-27.md)を参照してください。
+現在の[Beta 6.9保存記録](epistesys-6.9.0-beta.1-source-snapshot-2026-11-05.md)に、この版で確認したことと未完了点があります。下表は `6.3.2-alpha.3` で記録した制約と、その確認に必要な材料です。機構があること、テストを通ること、実際の開発で役立つこと、配布や実ホストで動くことは別々に確認します。[指標の数式と適用範囲](epimaploss-epirecompscore-formulas.md#map-ja)、[用語と境界](system-architecture.md)、[alpha.3検証記録](../validation/epr-release-verification-2026-10-27.md)も参照できます。
 
 ### 残存条件
 
 | 領域 | 現在の境界 | 必要な確認 |
 | --- | --- | --- |
-| 研究効果 | hallucination containment、制約保持、長期整合性、risk–coverage、運用範囲の拡張は未実証 | 独立gold、未使用holdout、同等予算、反復・欠測・劣化を含む評価 |
+| 開発上の効果 | hallucination containment、制約保持、長期整合性、risk–coverage、運用範囲の拡張は未実証 | 独立gold、未使用holdout、同等予算、反復・欠測・劣化を含む評価 |
 | 構文・意味 | controlled grammar外の完全理解は対象外。exact source roundtripは意味的等価性ではない | 対応文法別の独立評価、configured parser/modelの実観測 |
 | Codingの要求抽出と受入条件 | 完了判定は抽出・登録済み要求と計画に限定。未抽出要求や受入oracleの不足が残りうる | 独立goldによる要求recall、target bindingとoracle妥当性、偽保留・誤受入の評価 |
 | 権限・証拠 | 外部receiptとcaller/host trust rootに依存。local署名は実hostや人間の独立性を証明しない | issuer/key provenance、失効・scope・snapshotの確認 |
@@ -38,7 +38,7 @@ ResearchEvaluation=`PendingNoCorpus`とhost観測=`PendingHostObservation`を維
 
 ### alpha.3でも残る境界
 
-alpha.3は以下の不具合対策と明示的な制限を追加します。局所回帰の成功を全gate成功、研究効果、全host強制制御や欠陥ゼロへ昇格させません。alpha.2の履歴的検証とalpha.3の検証は別に記録します。
+alpha.3では以下の不具合対策と制限を追加しました。局所的な回帰試験の成功は、すべての検証の合格、開発上の効果、全ホストでの強制制御、欠陥がないことを示すものではありません。alpha.2とalpha.3の検証記録も別々です。
 
 | 対象 | 修正範囲と、なお残る条件 |
 | --- | --- |
@@ -55,13 +55,13 @@ alpha.3は以下の不具合対策と明示的な制限を追加します。局�
 
 ## English
 
-This document maps unobserved/unproven scope in `6.3.2-alpha.3` to required checks. Implementation presence, declared-profile local verification, research effects, distribution, and real-host observation are distinct states. See [terms/boundaries](system-architecture.md) and [alpha.3 verification](../validation/epr-release-verification-2026-10-27.md).
+The current [Beta 6.9 snapshot record](epistesys-6.9.0-beta.1-source-snapshot-2026-11-05.md) lists what was checked for that version and what remains open. The table below records limitations identified in `6.3.2-alpha.3` and the evidence needed to check them. Implementation, passing tests, practical utility, distribution, and operation on a real host require separate observations. See the [measurement equations and scope](epimaploss-epirecompscore-formulas.md#map-en), [terminology](system-architecture.md), and [alpha.3 verification](../validation/epr-release-verification-2026-10-27.md).
 
 ### Residual conditions
 
 | Area | Current boundary | Required checks |
 | --- | --- | --- |
-| Research effects | Hallucination containment, constraint preservation, long-horizon integrity, risk–coverage, and operating-range expansion are unproven | Independent gold, unused holdouts, matched budgets, repetitions/missingness/regressions |
+| Effects on development work | Hallucination containment, constraint preservation, long-horizon integrity, risk–coverage, and operating-range expansion are unproven | Independent gold, unused holdouts, matched budgets, repetitions/missingness/regressions |
 | Syntax/semantics | Complete interpretation outside controlled grammar is excluded; exact roundtrip is not semantic equivalence | Independent grammar-specific evaluation and observed configured parsers/models |
 | Coding extraction and acceptance conditions | Completion covers extracted/registered requirements and plans; unextracted requirements and incomplete oracles may remain | Requirement recall against independent gold, target-binding/oracle validity, false-hold/false-acceptance evaluation |
 | Authority/evidence | Depend on external receipts/caller-host trust roots; local signatures do not prove real-host or human independence | Issuer/key provenance, revocation, scope, snapshot verification |
@@ -91,7 +91,7 @@ Retain ResearchEvaluation=`PendingNoCorpus` and host observation=`PendingHostObs
 
 ### Boundaries remaining in alpha.3
 
-Alpha.3 adds the following defect mitigations and explicit limits. Passing bounded regressions is not elevated to all-gate success, research effects, host-wide enforcement, or zero defects. Historical alpha.2 and alpha.3 verification are recorded separately.
+Alpha.3 introduced the following fixes and limits. Passing bounded regressions does not establish that all checks passed, that the tool improves development outcomes, that it enforces controls across hosts, or that no defects remain. The alpha.2 and alpha.3 verification records are separate.
 
 | Subject | Remediation scope and remaining conditions |
 | --- | --- |

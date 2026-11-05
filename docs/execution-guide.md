@@ -4,7 +4,7 @@
 
 ### 実行前の条件
 
-このガイドはsource checkoutからの診断と、既存の実行契約への入口を示します。配布済みbinary、モデルweight、receiptや秘密鍵の自動provisionを前提にしません。source-only配布の条件は[最終検証](../validation/epia2-alpha2-release-verification-2026-10-02.md)、CLI/SDKの適用範囲は[実行契約](dgcl-operating-profile-and-closure.md)を参照してください。
+まず診断で元の要求と未確認事項を確認し、実ファイルを変更する修復へ進むときだけ、権限・対象の版・検証計画を用意します。配布済みbinary、モデルweight、receiptや秘密鍵が自動で用意されるわけではありません。現在のソースの検証範囲は[Beta 6.9保存記録](epistesys-6.9.0-beta.1-source-snapshot-2026-11-05.md)、CLI/SDKの実行条件は[DGCL実行契約](dgcl-operating-profile-and-closure.md)をご覧ください。
 
 ### 診断
 
@@ -31,7 +31,7 @@ launcherは自身の配置からrunnerを解決するため、別cwdでもchecko
 
 現開発sourceのlauncherは、同梱binaryがなければ診断で停止し、暗黙の`cargo run`を行いません。開発buildが必要な場合だけ、`EPISTESYS_ALLOW_DEVELOPMENT_BUILD=1`と専用の絶対pathを持つ`EPISTESYS_DEVELOPMENT_TARGET`を明示します。手動のCargo呼出しは別の開発操作です。
 
-通常のcanonical solveは保存offのturn境界を通ります。SDKの`turn_cache::with_turn_cache`を明示利用する場合も、再計算可能な借用入力のコピーだけをメモリへ保持し、容量・TTL・resource leaseを検査し、turn終了時に自動解放します。Media／NLP／Python解析の子Pythonには`-B`を渡します。これは全library cacheの禁止や任意のdisk cleanupではありません。実装と未観測範囲は[キャッシュ寿命契約](tlcx-cache-lifecycle-and-prevention-2026-11-04.md)を参照してください。開発sourceの修正は、installed pluginの更新・host pickupを意味しません。
+通常のcanonical solveではキャッシュ保存は既定で無効です。SDKで[`turn_cache::with_turn_cache`](../scripts/lc631/crates/lc631-runtime/src/turn_cache.rs)を明示的に使う場合は、容量・TTL・資源の割当を確認して、再計算可能な入力のコピーだけをメモリに置きます。通常のturn終了時にはこのコピーを解放します。Media／NLP／Python解析の子Pythonには`-B`を渡します。すべてのlibrary cacheを無効化したり、鍵、モデル、再開記録、共用buildをディスクから削除したりする機構ではありません。開発ソースの変更はinstalled pluginの更新やhost pickupを意味しません。
 
 ### TLCX bundleの読取り専用診断（開発source）
 
@@ -41,7 +41,7 @@ launcherは自身の配置からrunnerを解決するため、別cwdでもchecko
 cargo run --locked --no-default-features --manifest-path scripts/lc631/Cargo.toml -p lc631-cli -- lc631-journal-bundle-inspect --ledger-root <ledger-root>
 ```
 
-このcommandは既存mark済みbundleのsegment／index／local-headを同じruntime検証経路で照合し、rootやwriter lockを作りません。正常でも`inspected_unanchored`であり、権限・完了・配信を復元しません。空inventory、破損、未対応flagは保留または引数errorとして残し、`--execute`は受け付けません。[bundle契約](tlcx-journal-bundle-v1.md)と[独立payload schema](../schemas/lc631-journal-bundle-inspect.v1.schema.json)を参照してください。通常のsolve/repair/resumeへの配線と実host検証は別です。
+診断本体は既存mark済みbundleのsegment／index／local-headをruntimeで照合し、診断対象のrootやwriter lockを作りません。上の例でCargoが行うビルドは別の操作です。正常でも`inspected_unanchored`であり、権限・完了・配信を復元しません。空inventory、破損、未対応flagは保留または引数errorとして残し、`--execute`は受け付けません。[診断の実装](../scripts/lc631/crates/lc631-cli/src/bundle_inspect.rs)と[出力schema](../schemas/lc631-journal-bundle-inspect.v1.schema.json)をご覧ください。通常のsolve/repair/resumeへの配線と実host検証は別です。
 
 ### Codexからの入力
 
@@ -78,7 +78,7 @@ schema不適合、source/config drift、stale/expired evidence、未対応backen
 
 ### Preconditions
 
-This guide covers source-checkout diagnostics and entry to existing execution contracts. It assumes no automatic provisioning of distribution binaries, model weights, receipts, or private keys. See [final verification](../validation/epia2-alpha2-release-verification-2026-10-02.md) for source-only conditions and the [execution contract](dgcl-operating-profile-and-closure.md) for CLI/SDK scope.
+Start with a diagnostic to inspect the original requirements and outstanding checks. Prepare authority, the target revision, and a validation plan before attempting a repair that changes a real file. Distribution binaries, model weights, receipts, and private keys are not provisioned automatically. See the [Beta 6.9 snapshot record](epistesys-6.9.0-beta.1-source-snapshot-2026-11-05.md) for the current verification scope and the [DGCL execution contract](dgcl-operating-profile-and-closure.md) for CLI/SDK preconditions.
 
 ### Diagnostics
 
@@ -105,7 +105,7 @@ Launchers resolve runners relative to their installation, so reference the check
 
 The current development-source launcher stops with a diagnostic when its packaged binary is missing; it never starts an implicit `cargo run`. Only explicit development builds set both `EPISTESYS_ALLOW_DEVELOPMENT_BUILD=1` and `EPISTESYS_DEVELOPMENT_TARGET` to a dedicated absolute path. Manual Cargo commands are separate development operations.
 
-Normal canonical solve passes through a storage-off turn boundary. Explicit SDK use of `turn_cache::with_turn_cache` retains only in-memory copies of borrowed recomputable inputs, checks capacity/TTL/resource leases, and releases those copies automatically at turn end. Media/NLP/Python-analysis child interpreters receive `-B`. This does not prohibit every library cache or authorize arbitrary disk cleanup. See the [cache-lifetime contract](tlcx-cache-lifecycle-and-prevention-2026-11-04.md) for implementation and unobserved scope. Development-source changes do not establish installed-plugin updates or host pickup.
+Cache storage is off by default in normal canonical solve. When the SDK explicitly uses [`turn_cache::with_turn_cache`](../scripts/lc631/crates/lc631-runtime/src/turn_cache.rs), it checks capacity, TTL, and the resource reservation before retaining in-memory copies of recomputable inputs. Normal turn completion releases these copies. Media/NLP/Python-analysis child interpreters receive `-B`. This does not disable all library caches or delete keys, models, resume records, or shared builds from disk. Development-source changes do not establish installed-plugin updates or host pickup.
 
 ### Read-only TLCX bundle diagnostics (development source)
 
@@ -115,7 +115,7 @@ Explicit example building from current source; this does not establish installed
 cargo run --locked --no-default-features --manifest-path scripts/lc631/Cargo.toml -p lc631-cli -- lc631-journal-bundle-inspect --ledger-root <ledger-root>
 ```
 
-This command checks an existing marked bundle's segment/index/local-head through the shared runtime validator without creating roots or writer locks. Even a positive result is `inspected_unanchored` and restores no authority, completion or delivery. Empty inventories, corruption and unsupported flags retain Holds or argument errors; `--execute` is rejected. See the [bundle contract](tlcx-journal-bundle-v1.md) and [separate payload schema](../schemas/lc631-journal-bundle-inspect.v1.schema.json). Normal solve/repair/resume wiring and real-host verification are separate.
+The diagnostic checks an existing marked bundle's segment, index, and local head through the runtime validator without creating the inspected root or a writer lock. Cargo's build in the example above is a separate operation. Even a positive result is `inspected_unanchored` and restores no authority, completion, or delivery. Empty inventories, corruption, and unsupported flags remain Holds or argument errors; `--execute` is rejected. See the [diagnostic implementation](../scripts/lc631/crates/lc631-cli/src/bundle_inspect.rs) and [output schema](../schemas/lc631-journal-bundle-inspect.v1.schema.json). Normal solve/repair/resume wiring and real-host verification are separate.
 
 ### Codex input
 
