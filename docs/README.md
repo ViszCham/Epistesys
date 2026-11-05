@@ -4,6 +4,8 @@
 
 この索引は、現行の仕様、実行条件、検証証跡、評価設計、歴史的な設計記録を区別します。対象は`6.3.2-alpha.3`です。日本語説明の後に、同内容の英語説明を置きます。
 
+`main-alpha.3`をご覧の方は、[保守ライン案内](alpha3-maintenance.md)から保存元と対象範囲をご確認ください。下記のrelease記録は、記載されたrevision・環境での履歴的観測であり、保守ブランチの作成だけで再検証されたことにはなりません。
+
 ### 読者別の参照経路
 
 | 目的 | 読む順序 | 確認できる内容 |
@@ -21,6 +23,7 @@
 | --- | --- | --- |
 | 仕様・実行契約 | [アーキテクチャ](system-architecture.md)、[DGCL実行契約](dgcl-operating-profile-and-closure.md)、[wire互換性](dgcl-wire-compatibility.md) | sourceの型・状態・適用条件を説明する |
 | release記録 | [alpha.3 release notes](epistesys-6.3.2-alpha.3-release-notes-2026-10-27.md)、[alpha.3検証](../validation/epr-release-verification-2026-10-27.md) | 特定revision・環境で観測した結果を示す |
+| 保守ライン | [Alpha.3保守ライン案内](alpha3-maintenance.md) | 保存元、変更しない境界、現在の作業で確認する範囲を示す |
 | 評価設計 | [研究仮説](research-hypotheses.md)、[独立gold収集手順](dgcl-gold-collection-protocol.md)、[前向き評価案](research/epistesys-prospective-evaluation-plan.md) | 未実行の計画と検証済み結果を区別する |
 | 由来・除外 | [移行契約](migration-contract.md)、[採用manifest](adoption-manifest.md)、[clone検証](clone-verification.md) | sourceの継承範囲、互換名、非開示情報の除外を示す |
 | 補助監査 | [Assurance境界](assurance-compiler-status.md)、[RepoSeiri記録](reposeiri-audit.md) | 監査範囲・未対応・保留を保持する。一般安全性の証明ではない |
@@ -80,6 +83,8 @@ Coding支援の説明と実装範囲を照合した今回の所見・修正・�
 
 This index separates current specifications, operating conditions, verification records, evaluation designs, and historical design notes for `6.3.2-alpha.3`. Equivalent English prose follows Japanese prose.
 
+If you are reading `main-alpha.3`, start with the [maintenance guide](alpha3-maintenance.md) for its baseline and scope. The release records below are historical observations for their stated revisions and environments; creating a maintenance branch does not itself repeat that validation.
+
 ### Reader-oriented routes
 
 | Purpose | Reading order | Information |
@@ -97,6 +102,7 @@ This index separates current specifications, operating conditions, verification 
 | --- | --- | --- |
 | Specification/operating contract | [Architecture](system-architecture.md), [DGCL contract](dgcl-operating-profile-and-closure.md), [wire compatibility](dgcl-wire-compatibility.md) | Source types/states/preconditions |
 | Release record | [Alpha.3 notes](epistesys-6.3.2-alpha.3-release-notes-2026-10-27.md), [alpha.3 verification](../validation/epr-release-verification-2026-10-27.md) | Observations for a particular revision/environment |
+| Maintenance line | [Alpha.3 maintenance guide](alpha3-maintenance.md) | Baseline, retained boundaries, and scope of checks in the current work |
 | Evaluation design | [Hypotheses](research-hypotheses.md), [independent-gold protocol](dgcl-gold-collection-protocol.md), [prospective plan](research/epistesys-prospective-evaluation-plan.md) | Unexecuted plans versus verified results |
 | Provenance/exclusions | [Migration contract](migration-contract.md), [adoption manifest](adoption-manifest.md), [clone verification](clone-verification.md) | Inheritance, compatibility names, excluded non-disclosable material |
 | Advisory audit | [Assurance boundary](assurance-compiler-status.md), [RepoSeiri record](reposeiri-audit.md) | Scope, unsupported cases, and holds; not general-safety proof |
