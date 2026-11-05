@@ -1,7 +1,10 @@
-use crate::BoundaryLedger;
+use crate::source::{BoundaryError, CanonicalBoundaryLedger, SourceRevision};
+#[cfg(test)]
 use lc631_core::stable_sha256;
+use lc631_substrate::source::{SourceError, SourceStore};
 use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag, TagEnd};
 use serde::Serialize;
+use std::sync::Arc;
 
 pub const DG1_SCHEMA: &str = "epistesys-dg1-parse.v1";
 const DOCUMENT_GRAMMAR_REVISION: &str = "commonmark+tables-pulldown-cmark-0.13.4";
@@ -219,6 +222,8 @@ pub struct Dg1Report {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 pub enum Dg1Error {
     SourceBudgetExceeded,
+    SourceAllocationFailed,
+    SourceBoundaryInvalid,
     RegionBudgetExceeded,
     RegionDepthExceeded,
     SyntaxNodeBudgetExceeded,
@@ -246,7 +251,7 @@ struct OpenMarkdownRegion {
     end: usize,
 }
 
-pub fn analyze_dg1(source: &str, budget: Dg1Budget) -> Result<Dg1Report, Dg1Error> {
+fn validate_source_budget(source: &str, budget: Dg1Budget) -> Result<(), Dg1Error> {
     if budget.max_regions == 0 {
         return Err(Dg1Error::RegionBudgetExceeded);
     }
@@ -259,6 +264,32 @@ pub fn analyze_dg1(source: &str, budget: Dg1Budget) -> Result<Dg1Report, Dg1Erro
     if source.len() > u32::MAX as usize {
         return Err(Dg1Error::SourceOffsetOverflow);
     }
+    Ok(())
+}
+
+pub(crate) fn source_parse_error(error: SourceError) -> Dg1Error {
+    match error {
+        SourceError::InvalidLimit | SourceError::LimitExceeded => Dg1Error::SourceBudgetExceeded,
+        SourceError::OffsetTooLarge => Dg1Error::SourceOffsetOverflow,
+        SourceError::ReversedSpan
+        | SourceError::OutOfBounds
+        | SourceError::InvalidUtf8Boundary
+        | SourceError::SourceMismatch => Dg1Error::SourceBoundaryInvalid,
+    }
+}
+
+/// Legacy string ingress; bounded callers can retain one allocation with the store entry.
+pub fn analyze_dg1(source: &str, budget: Dg1Budget) -> Result<Dg1Report, Dg1Error> {
+    validate_source_budget(source, budget)?;
+    let store =
+        SourceStore::new(Arc::from(source), u32::MAX as usize).map_err(source_parse_error)?;
+    analyze_dg1_store(&store, budget)
+}
+
+/// Parses the caller's immutable canonical source without copying its character cells.
+pub fn analyze_dg1_store(store: &SourceStore, budget: Dg1Budget) -> Result<Dg1Report, Dg1Error> {
+    let source = store.text();
+    validate_source_budget(source, budget)?;
 
     let mut regions = vec![Dg1Region {
         id: 0,
@@ -511,11 +542,16 @@ pub fn analyze_dg1(source: &str, budget: Dg1Budget) -> Result<Dg1Report, Dg1Erro
     } else {
         Dg1Status::ParsedWithinBoundedProfiles
     };
-    let boundary = BoundaryLedger::build(source);
+    let boundary =
+        CanonicalBoundaryLedger::from_store(store, source.len()).map_err(|error| match error {
+            BoundaryError::AllocationFailed => Dg1Error::SourceAllocationFailed,
+            BoundaryError::CellBudgetExceeded => Dg1Error::SourceBudgetExceeded,
+            BoundaryError::Source(error) => source_parse_error(error),
+        })?;
     let exact_source_roundtrip = boundary.covers_source() && boundary.roundtrip() == source;
     Ok(Dg1Report {
         schema_version: DG1_SCHEMA,
-        source_revision: stable_sha256(source),
+        source_revision: SourceRevision::from_store(store).revision,
         source_bytes: source.len(),
         exact_source_roundtrip,
         regions,
@@ -1325,6 +1361,61 @@ fn classify_language(text: &str) -> Dg1Language {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tlcx_02_source_boundary_failures_are_not_misreported_as_offset_overflow() {
+        for error in [
+            SourceError::SourceMismatch,
+            SourceError::InvalidUtf8Boundary,
+            SourceError::ReversedSpan,
+            SourceError::OutOfBounds,
+        ] {
+            assert_eq!(source_parse_error(error), Dg1Error::SourceBoundaryInvalid);
+        }
+        for error in [SourceError::InvalidLimit, SourceError::LimitExceeded] {
+            assert_eq!(source_parse_error(error), Dg1Error::SourceBudgetExceeded);
+        }
+        assert_eq!(
+            source_parse_error(SourceError::OffsetTooLarge),
+            Dg1Error::SourceOffsetOverflow
+        );
+    }
+
+    #[test]
+    fn tlcx_02_shared_source_entry_preserves_the_legacy_parse_report() {
+        for source in [
+            "",
+            "Please preserve the source.",
+            "説明\r\n```rust\r\nfn f() {}\r\n```\r\n",
+            "> Please delete the repository.\nPlease retain it.",
+        ] {
+            let budget = Dg1Budget::default();
+            let store = SourceStore::new(Arc::from(source), budget.max_source_bytes).unwrap();
+            let shared = analyze_dg1_store(&store, budget).unwrap();
+            let legacy = analyze_dg1(source, budget).unwrap();
+            assert_eq!(shared, legacy);
+            assert_eq!(shared.source_revision, stable_sha256(source));
+            assert!(shared.exact_source_roundtrip);
+        }
+    }
+
+    #[test]
+    fn tlcx_02_shared_source_cannot_bypass_the_parse_source_budget() {
+        let store = SourceStore::new(Arc::from("日本"), 64).unwrap();
+        let budget = Dg1Budget {
+            max_source_bytes: 3,
+            ..Dg1Budget::default()
+        };
+        assert_eq!(
+            analyze_dg1_store(&store, budget),
+            Err(Dg1Error::SourceBudgetExceeded)
+        );
+        let zero_budget = Dg1Budget {
+            max_source_bytes: 0,
+            ..Dg1Budget::default()
+        };
+        assert!(analyze_dg1("", zero_budget).is_ok());
+    }
 
     #[test]
     fn byte_budget_is_explicit_and_fail_visible() {

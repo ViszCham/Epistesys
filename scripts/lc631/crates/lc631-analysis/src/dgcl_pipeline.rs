@@ -1,21 +1,50 @@
-use crate::build_dgcl_projection;
+use crate::dgcl_projection::{
+    build_dgcl_projection_store, validate_dgcl_ast_bindings, validate_program_ast_bindings,
+};
+use crate::instruction_grammar::{legacy_json_digest, parse_controlled_instruction_span};
 use crate::{
-    parse_controlled_instruction, run_language_worker, DependencySentence, InstructionGrammarError,
-    InstructionParseBudget, InstructionParseReport, InstructionParseState, LanguageWorkerConfig,
+    run_language_worker, DependencySentence, InstructionGrammarError, InstructionParseBudget,
+    InstructionParseReport, InstructionParseState, LanguageWorkerConfig,
 };
 use lc631_core::stable_sha256;
+use lc631_substrate::source::{SourceSpan, SourceStore};
 use lc631_tldg::{
-    analyze_dg1, Dg1Budget, Dg1ContentRole, Dg1Language, Dg1RegionKind, Dg1Report,
+    analyze_dg1_store, Dg1Budget, Dg1ContentRole, Dg1Language, Dg1RegionKind, Dg1Report,
     Dg1RequirementPolarity, Dg1ResidualReason,
 };
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::ops::Range;
+use std::sync::Arc;
+
+#[path = "declared_build_capture/goal_input_admission.rs"]
+pub(crate) mod goal_input_admission;
+
+#[cfg(test)]
+#[path = "declared_build_capture/goal_input_admission_tests.rs"]
+mod goal_input_admission_tests;
 
 #[derive(Clone, Copy)]
 pub struct DgclBackendSet<'a> {
     pub english: Option<&'a LanguageWorkerConfig>,
     pub japanese: Option<&'a LanguageWorkerConfig>,
+}
+
+/// Exact-payload budgeted worker supplied by the runtime. Its observation
+/// remains a source-bound candidate, never semantic truth or authority.
+pub trait DgclWorkerRunner {
+    fn run(
+        &mut self,
+        source: &str,
+        language: &str,
+        config: &LanguageWorkerConfig,
+    ) -> Result<crate::LanguageObservation, crate::LanguageWorkerError>;
+}
+
+/// Resource/source-map inspection only. Returning success never supplies a
+/// language observation; all unconfigured operative regions remain unsupported.
+pub trait DgclSourceObserver {
+    fn inspect(&mut self, source: &str, language: &str) -> Result<(), crate::LanguageWorkerError>;
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
@@ -74,7 +103,8 @@ pub struct DgclInstructionParse {
     pub root_source_revision: String,
     pub source_span: Range<usize>,
     pub state: DgclInstructionParseState,
-    pub report: Option<InstructionParseReport>,
+    #[serde(serialize_with = "serialize_instruction_report")]
+    pub report: Option<Arc<InstructionParseReport>>,
     pub error: Option<InstructionGrammarError>,
 }
 
@@ -96,6 +126,21 @@ pub struct DgclPipelineReport {
     pub claim_boundary: &'static str,
     #[serde(skip)]
     immutable_core_digest: String,
+    #[serde(skip)]
+    source_store: SourceStore,
+}
+
+impl DgclPipelineReport {
+    pub fn source_store(&self) -> &SourceStore {
+        &self.source_store
+    }
+}
+
+fn serialize_instruction_report<S: serde::Serializer>(
+    report: &Option<Arc<InstructionParseReport>>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    report.as_deref().serialize(serializer)
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -112,23 +157,21 @@ pub enum DgclPipelineError {
 }
 
 fn pipeline_core_digest(report: &DgclPipelineReport) -> String {
-    stable_sha256(
-        &serde_json::to_string(&(
-            report.schema_version,
-            &report.source_revision,
-            &report.dg1,
-            &report.language_regions,
-            &report.unsupported_operative_region_ids,
-            &report.requirement_bindings,
-            &report.instruction_parses,
-            &report.program_ir,
-            &report.translation_projection,
-            &report.completion_plan,
-            report.authority_created,
-            report.complete_instruction_grammar_claim,
-        ))
-        .expect("pipeline core serializes"),
-    )
+    legacy_json_digest(&(
+        report.schema_version,
+        &report.source_revision,
+        &report.dg1,
+        &report.language_regions,
+        &report.unsupported_operative_region_ids,
+        &report.requirement_bindings,
+        &report.instruction_parses,
+        &report.program_ir,
+        &report.translation_projection,
+        &report.completion_plan,
+        report.authority_created,
+        report.complete_instruction_grammar_claim,
+    ))
+    .expect("pipeline core serializes")
 }
 
 /// Local construction seal, not a transferable signature. JSON/report inputs
@@ -136,6 +179,9 @@ fn pipeline_core_digest(report: &DgclPipelineReport) -> String {
 /// second seed parse or another language-worker call.
 pub fn verify_dgcl_pipeline_identity(source: &str, report: &DgclPipelineReport) -> bool {
     report.source_revision == stable_sha256(source)
+        && report.source_store.text() == source
+        && validate_dgcl_ast_bindings(&report.source_store, &report.instruction_parses).is_ok()
+        && validate_program_ast_bindings(&report.source_store, &report.program_ir).is_ok()
         && report.immutable_core_digest == pipeline_core_digest(report)
         && !report.authority_created
         && !report.complete_instruction_grammar_claim
@@ -154,7 +200,46 @@ pub fn build_dgcl_pipeline(
     source: &str,
     backends: DgclBackendSet<'_>,
 ) -> Result<DgclPipelineReport, DgclPipelineError> {
-    let dg1 = analyze_dg1(source, Dg1Budget::default())
+    build_dgcl_pipeline_read(source, backends, None, None)
+}
+
+pub fn build_dgcl_pipeline_with_runner(
+    source: &str,
+    backends: DgclBackendSet<'_>,
+    runner: &mut dyn DgclWorkerRunner,
+) -> Result<DgclPipelineReport, DgclPipelineError> {
+    build_dgcl_pipeline_read(source, backends, Some(runner), None)
+}
+
+pub fn build_dgcl_pipeline_with_source_observer(
+    source: &str,
+    observer: &mut dyn DgclSourceObserver,
+) -> Result<DgclPipelineReport, DgclPipelineError> {
+    build_dgcl_pipeline_read(
+        source,
+        DgclBackendSet {
+            english: None,
+            japanese: None,
+        },
+        None,
+        Some(observer),
+    )
+}
+
+fn build_dgcl_pipeline_read(
+    source: &str,
+    backends: DgclBackendSet<'_>,
+    mut runner: Option<&mut dyn DgclWorkerRunner>,
+    mut observer: Option<&mut dyn DgclSourceObserver>,
+) -> Result<DgclPipelineReport, DgclPipelineError> {
+    let budget = Dg1Budget::default();
+    if source.len() > budget.max_source_bytes {
+        return Err(DgclPipelineError::Parse("SourceBudgetExceeded".into()));
+    }
+    let source_store = SourceStore::new(Arc::from(source), budget.max_source_bytes)
+        .map_err(|_| DgclPipelineError::SourceSpan)?;
+    let source = source_store.text();
+    let dg1 = analyze_dg1_store(&source_store, budget)
         .map_err(|error| DgclPipelineError::Parse(format!("{error:?}")))?;
     let instruction_parses = dg1
         .regions
@@ -164,9 +249,9 @@ pub fn build_dgcl_pipeline(
                 && region.content_role == Dg1ContentRole::OperativeProse
         })
         .map(|region| {
-            let fragment = source
-                .get(region.span.clone())
-                .ok_or(DgclPipelineError::SourceSpan)?;
+            let region_span =
+                SourceSpan::checked(&source_store, region.span.start, region.span.end)
+                    .map_err(|_| DgclPipelineError::SourceSpan)?;
             let legacy_requirement_ids = dg1
                 .requirement_candidates
                 .iter()
@@ -176,25 +261,24 @@ pub fn build_dgcl_pipeline(
                 })
                 .map(|requirement| requirement.id)
                 .collect();
-            let (state, report, error) =
-                match parse_controlled_instruction(fragment, InstructionParseBudget::default()) {
-                    Ok(report) => {
-                        let state = match report.state {
-                            InstructionParseState::Parsed => DgclInstructionParseState::Parsed,
-                            InstructionParseState::Ambiguous => {
-                                DgclInstructionParseState::Ambiguous
-                            }
-                            InstructionParseState::Unresolved => {
-                                DgclInstructionParseState::Unresolved
-                            }
-                            InstructionParseState::Unsupported => {
-                                DgclInstructionParseState::Unsupported
-                            }
-                        };
-                        (state, Some(report), None)
-                    }
-                    Err(error) => (DgclInstructionParseState::BudgetRejected, None, Some(error)),
-                };
+            let (state, report, error) = match parse_controlled_instruction_span(
+                &source_store,
+                region_span,
+                InstructionParseBudget::default(),
+            ) {
+                Ok(report) => {
+                    let state = match report.state {
+                        InstructionParseState::Parsed => DgclInstructionParseState::Parsed,
+                        InstructionParseState::Ambiguous => DgclInstructionParseState::Ambiguous,
+                        InstructionParseState::Unresolved => DgclInstructionParseState::Unresolved,
+                        InstructionParseState::Unsupported => {
+                            DgclInstructionParseState::Unsupported
+                        }
+                    };
+                    (state, Some(Arc::new(report)), None)
+                }
+                Err(error) => (DgclInstructionParseState::BudgetRejected, None, Some(error)),
+            };
             Ok(DgclInstructionParse {
                 region_id: region.id,
                 legacy_requirement_ids,
@@ -249,17 +333,31 @@ pub fn build_dgcl_pipeline(
         if synthetic.len() > 262_144 {
             return Err(DgclPipelineError::BatchBudget);
         }
-        let Some(config) = config else {
-            unsupported_operative_region_ids.extend(maps.iter().map(|map| map.region_id));
-            continue;
-        };
         let language_code = if language == Dg1Language::English {
             "en"
         } else {
             "ja"
         };
-        let observed = run_language_worker(&synthetic, language_code, config)
-            .map_err(|error| DgclPipelineError::Backend(format!("{error:?}")))?;
+        if let Some(observer) = observer.as_deref_mut() {
+            observer
+                .inspect(&synthetic, language_code)
+                .map_err(|error| DgclPipelineError::Backend(format!("{error:?}")))?;
+        }
+        let Some(config) = config else {
+            unsupported_operative_region_ids.extend(maps.iter().map(|map| map.region_id));
+            continue;
+        };
+        let observed = match runner.as_deref_mut() {
+            Some(runner) => runner.run(&synthetic, language_code, config),
+            None => run_language_worker(&synthetic, language_code, config),
+        }
+        .map_err(|error| DgclPipelineError::Backend(format!("{error:?}")))?;
+        if observed.source_revision != stable_sha256(&synthetic)
+            || observed.language != language_code
+            || observed.semantic_truth_claim
+        {
+            return Err(DgclPipelineError::PayloadEncoding);
+        }
         let mut by_language_span = BTreeMap::<u32, Vec<DependencySentence>>::new();
         for sentence in observed.sentences {
             if sentence.tokens.is_empty() {
@@ -304,7 +402,7 @@ pub fn build_dgcl_pipeline(
             let region_text = source
                 .get(map.source_span.clone())
                 .ok_or(DgclPipelineError::SourceSpan)?;
-            let canonical = serde_json::to_string(&(
+            let payload_digest = legacy_json_digest(&(
                 "epistesys-dgcl-language-region-payload.v2",
                 &dg1.source_revision,
                 map.region_id,
@@ -333,7 +431,7 @@ pub fn build_dgcl_pipeline(
                 requirements_lock_digest: observed.requirements_lock_digest.clone(),
                 python_version: observed.python_version.clone(),
                 payload_binding_revision: "epistesys-dgcl-language-region-payload.v2",
-                payload_digest: stable_sha256(&canonical),
+                payload_digest,
                 sentences,
                 semantic_truth_claim: false,
             });
@@ -451,7 +549,7 @@ pub fn build_dgcl_pipeline(
         })
         .collect();
     let (program_ir, translation_projection) =
-        build_dgcl_projection(source, &dg1, &language_regions, &instruction_parses)
+        build_dgcl_projection_store(&source_store, &dg1, &language_regions, &instruction_parses)
             .map_err(DgclPipelineError::Projection)?;
     let completion_plan =
         crate::build_dgcl_completion_plan(source, &program_ir, &translation_projection)
@@ -486,6 +584,7 @@ pub fn build_dgcl_pipeline(
         complete_instruction_grammar_claim: false,
         claim_boundary: "real JA/EN dependency observations are source mapped candidate evidence, not validated instruction semantics or authority",
         immutable_core_digest: String::new(),
+        source_store,
     };
     report.immutable_core_digest = pipeline_core_digest(&report);
     Ok(report)

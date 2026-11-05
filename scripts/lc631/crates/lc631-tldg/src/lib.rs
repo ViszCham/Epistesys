@@ -28,10 +28,10 @@ pub use calibration::{
     CalibrationError, CalibrationPartition, EmpiricalRiskOverlay, EmpiricalRiskSource,
 };
 pub use dg1::{
-    analyze_dg1, Dg1Budget, Dg1ConditionKind, Dg1ContentRole, Dg1Error, Dg1InstructionResidual,
-    Dg1Language, Dg1LanguageSpan, Dg1Region, Dg1RegionKind, Dg1Report, Dg1RequirementCandidate,
-    Dg1RequirementPolarity, Dg1RequirementStrength, Dg1ResidualReason, Dg1SourceAccountingSegment,
-    Dg1SourceRole, Dg1Status, Dg1SyntaxNode, Dg1SyntaxTree, DG1_SCHEMA,
+    analyze_dg1, analyze_dg1_store, Dg1Budget, Dg1ConditionKind, Dg1ContentRole, Dg1Error,
+    Dg1InstructionResidual, Dg1Language, Dg1LanguageSpan, Dg1Region, Dg1RegionKind, Dg1Report,
+    Dg1RequirementCandidate, Dg1RequirementPolarity, Dg1RequirementStrength, Dg1ResidualReason,
+    Dg1SourceAccountingSegment, Dg1SourceRole, Dg1Status, Dg1SyntaxNode, Dg1SyntaxTree, DG1_SCHEMA,
 };
 pub use distillation::{
     run_mutual_distillation, AcceptedProposal, Anchored, BackflowReport, Decoded, DecodedProposal,
@@ -74,6 +74,9 @@ pub use semantics::{
     build_semantic_views, SemanticView, SemanticViewEdge, SemanticViewKind, SemanticViewNode,
     SemanticViewPayload,
 };
-pub use source::{BoundaryCell, BoundaryClass, BoundaryLedger, SourceRevision};
+pub use source::{
+    BoundaryCell, BoundaryClass, BoundaryError, BoundaryLedger, CanonicalBoundaryCell,
+    CanonicalBoundaryLedger, SourceRevision, SourceTextView,
+};
 
 pub const TLDG_SCHEMA: &str = "lc631-unified-geometric-deepgrammar.v1";

@@ -1,15 +1,15 @@
 {
   "name": "epistesys",
-  "version": "6.3.2-alpha.3",
-  "description": "Epistesys (エピステシス) 6.3.2-alpha.3: experimental source-only AI control with inherited v6.3.1 surfaces, controlled JA/EN DeepGrammar, per-requirement IR/TL/evidence, bounded Cargo validation, actual repair and journal-backed fresh resume; research and real-host evidence remain pending.",
+  "version": "6.9.0-beta.1",
+  "description": "Epistesys Beta 6.9: an explicitly unfinished, source-only TLCX development snapshot. Includes typed context, multi-logic, TranslationLoss/S_Creative, binary/resource, Coding and host-boundary work; whole-system audit, release gates, research evaluation and real-host closure are not complete.",
   "author": {
     "name": "Labyrinth-Codex authors"
   },
   "skills": "./skills/",
   "interface": {
-    "displayName": "Epistesys 6.3.2-alpha.3",
+    "displayName": "Epistesys Beta 6.9 (6.9.0-beta.1)",
     "shortDescription": "Inspect bounded Epistesys control and DGCL source paths.",
-    "longDescription": "An experimental source-only control architecture derived from v6.3.1. Preserves authenticated receipts, ProjectionDefectGraph v3, 256x8 world materialization, GPU parity surfaces, bounded media candidates, and durable-replay source paths. Adds controlled JA/EN grammar, same-artifact IR/TL/completion, separate Cargo observations, externally authorized file repair, signed checkpoint heads and fresh resume, structural distillation and explicit consumer views. Independent semantic evaluation, general performance, real host pickup and host-wide enforcement are not established.",
+    "longDescription": "An intermediate source snapshot preserving the Alpha.3 baseline and ongoing TLCX implementation. Adds source for typed context reconstruction, finite logic solvers, four-record TranslationLoss, original F1/F2 creativity arithmetic, bounded binary state and resource ownership, and Coding/Media/host integration. Some producer and consumer paths remain unfinished or unregistered. This checkpoint is not release-ready, an audited installable package, a completed Beta-7.0 implementation, or evidence of semantic, performance, safety or real-host improvement.",
     "developerName": "Epistesys authors",
     "category": "Developer Tools",
     "capabilities": [
@@ -17,8 +17,8 @@
       "Read"
     ],
     "defaultPrompt": [
-      "Audit this request through the Epistesys 6.3.2-alpha.3 clone.",
-      "Inspect inherited v6.3.1 behavior without changing files."
+      "Inspect this request through the Epistesys Beta 6.9 development source without treating pending gates as success.",
+      "Review the snapshot's explicit implementation, evidence and authority boundaries without changing files."
     ]
   }
 }

@@ -14,6 +14,18 @@ use serde_json::Value;
 use std::collections::BTreeSet;
 use std::path::Path;
 
+mod resources;
+pub(super) use resources::{build_package_pipeline_with_resources, PackageIo};
+
+pub(super) struct PackageExecution<'a> {
+    pub budget: std::time::Duration,
+    pub resources: &'a crate::io::CommandIo,
+}
+
+#[cfg(test)]
+#[path = "dgcl_resource_tests.rs"]
+mod resource_tests;
+
 #[derive(Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PackageSeedReceipt {
@@ -39,29 +51,23 @@ pub struct PackageValidationBundle {
     pub binding_receipts: Vec<UntrustedReceipt>,
 }
 
-pub fn finalize_package(
+pub(super) fn finalize_package_with_resources(
     root: &Path,
     source: &str,
     bundle: PackageValidationBundle,
     context: &HostReceiptContext,
     author: &HostReceiptContext,
+    resources: &crate::io::CommandIo,
 ) -> Result<Value, String> {
-    let pipeline = build_dgcl_pipeline(
-        source,
-        DgclBackendSet {
-            english: None,
-            japanese: None,
-        },
-    )
-    .map_err(|error| format!("dgcl_package_pipeline:{error:?}"))?;
-    finalize_with_pipeline(
+    let pipeline = build_package_pipeline_with_resources(source, resources)?;
+    finalize_with_pipeline_mode(
         root,
         source,
         bundle,
-        context,
-        author,
+        (context, author),
         &pipeline,
         std::time::Duration::from_secs(120),
+        PackageIo(Some(resources)),
     )
 }
 
@@ -74,6 +80,47 @@ pub(super) fn finalize_with_pipeline(
     pipeline: &DgclPipelineReport,
     budget: std::time::Duration,
 ) -> Result<Value, String> {
+    finalize_with_pipeline_mode(
+        root,
+        source,
+        bundle,
+        (context, author),
+        pipeline,
+        budget,
+        PackageIo(None),
+    )
+}
+
+pub(super) fn finalize_with_pipeline_with_resources(
+    root: &Path,
+    source: &str,
+    bundle: PackageValidationBundle,
+    context: &HostReceiptContext,
+    author: &HostReceiptContext,
+    pipeline: &DgclPipelineReport,
+    execution: PackageExecution<'_>,
+) -> Result<Value, String> {
+    finalize_with_pipeline_mode(
+        root,
+        source,
+        bundle,
+        (context, author),
+        pipeline,
+        execution.budget,
+        PackageIo(Some(execution.resources)),
+    )
+}
+
+fn finalize_with_pipeline_mode(
+    root: &Path,
+    source: &str,
+    bundle: PackageValidationBundle,
+    identities: (&HostReceiptContext, &HostReceiptContext),
+    pipeline: &DgclPipelineReport,
+    budget: std::time::Duration,
+    io: PackageIo<'_>,
+) -> Result<Value, String> {
+    let (context, author) = identities;
     let count = pipeline.completion_plan.requirements.len();
     if bundle.schema_version != "epistesys-dgcl-package-validation-bundle.v1"
         || count == 0
@@ -96,8 +143,7 @@ pub(super) fn finalize_with_pipeline(
     }
     let mut tasks = BTreeSet::new();
     for plan in &bundle.plans {
-        lc631_analysis::preflight_dgcl_cargo_plan(root, pipeline, plan)
-            .map_err(|error| format!("dgcl_package_plan_preflight:{error:?}"))?;
+        io.preflight(root, source, pipeline, plan)?;
         if lc631_analysis::dgcl_repository_root_digest(root)
             .map_err(|error| format!("dgcl_package_root:{error:?}"))?
             != plan.repository_root_digest
@@ -184,6 +230,7 @@ pub(super) fn finalize_with_pipeline(
         context,
         bundle.authority_revision,
         bundle.revocation_revision,
+        io,
     )?;
     let binding_tasks = pipeline
         .completion_plan
@@ -235,7 +282,7 @@ pub(super) fn finalize_with_pipeline(
             caller_origin: CallerOrigin::HostVerifiedUser,
             trusted_host_fingerprint: &fingerprint,
         };
-        let observation = observe_dgcl_cargo_validation(
+        let observation = io.observe(
             root,
             source,
             pipeline,
@@ -249,8 +296,7 @@ pub(super) fn finalize_with_pipeline(
                     .min(std::time::Duration::from_secs(120))
                     .saturating_sub(execution_started.elapsed()),
             },
-        )
-        .map_err(|error| format!("dgcl_package_observation:{error:?}"))?;
+        )?;
         processes.push(observation.process().clone());
         claims.push(
             issue_dgcl_cargo_evidence(observation, context.issuer(), context.verifier())
@@ -266,6 +312,7 @@ pub(super) fn finalize_with_pipeline(
         context,
         bundle.authority_revision,
         bundle.revocation_revision,
+        io,
     )?;
     let candidate = build_verified_dgcl_completion_candidate(
         source,
@@ -310,13 +357,14 @@ fn capture(
     host: &HostReceiptContext,
     revision: u64,
     revocation: u64,
+    io: PackageIo<'_>,
 ) -> Result<lc631_analysis::DgclExecutionSnapshot, String> {
     let principal = seed
         .principal_binding()
         .map_err(|error| format!("dgcl_package_principal:{error:?}"))?;
     let scope = dgcl_cargo_validation_scope(plan);
     let fingerprint = host.key_fingerprint();
-    capture_dgcl_cargo_snapshot(
+    io.snapshot(
         root,
         source,
         pipeline,
@@ -333,5 +381,4 @@ fn capture(
             trusted_host_fingerprint: &fingerprint,
         },
     )
-    .map_err(|error| format!("dgcl_package_snapshot:{error:?}"))
 }

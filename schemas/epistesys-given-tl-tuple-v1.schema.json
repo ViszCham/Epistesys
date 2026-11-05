@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "epistesys-given-tl-tuple-v1.schema.json",
+  "title": "Explicit Given finite temporal/spatial tuple, not source-semantic evidence",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "clock_label", "frame_label", "unit", "declare_identity_map", "spatial_probe", "root", "target"],
+  "properties": {
+    "schema_version": {"const": "epistesys-given-tl-tuple.v1"},
+    "clock_label": {"type": "string", "minLength": 1, "maxLength": 128, "description": "Implementation additionally limits UTF-8 bytes to128 and rejects control characters; a label is not authenticated calibration."},
+    "frame_label": {"type": "string", "minLength": 1, "maxLength": 128, "description": "Implementation additionally limits UTF-8 bytes to128 and rejects control characters; a label is not world-coordinate calibration."},
+    "unit": {"enum": ["pixel", "millimeter"]},
+    "declare_identity_map": {"type": "boolean", "description": "Caller Given identity-map declaration. false retains NoScalar/Uncalibrated, never zero."},
+    "spatial_probe": {"enum": ["strict_left", "continuous_distance"], "description": "continuous_distance is explicitly unsupported and retains NoScalar."},
+    "root": {"$ref": "#/$defs/tuple"}, "target": {"$ref": "#/$defs/tuple"}
+  },
+  "$defs": {
+    "i64": {"type": "integer", "minimum": -9223372036854775808, "maximum": 9223372036854775807},
+    "point": {"type": "array", "items": {"$ref": "#/$defs/i64"}, "minItems": 2, "maxItems": 2},
+    "rect": {"type": "object", "additionalProperties": false, "required": ["min", "max"], "properties": {"min": {"$ref": "#/$defs/point"}, "max": {"$ref": "#/$defs/point"}}, "description": "Actual constructor additionally requires min[x]<max[x] and min[y]<max[y]."},
+    "objects": {"type": "object", "additionalProperties": false, "properties": {"left": {"anyOf": [{"$ref": "#/$defs/rect"}, {"type": "null"}]}, "right": {"anyOf": [{"$ref": "#/$defs/rect"}, {"type": "null"}]}}, "description": "Missing or null objects preserve Unknown, not False."},
+    "trace": {"type": "object", "additionalProperties": false, "required": ["times_ns", "values"], "properties": {"times_ns": {"type": "array", "items": {"$ref": "#/$defs/i64"}, "minItems": 4, "maxItems": 4, "description": "Actual constructor requires strictly increasing nanosecond instants, one exact declared monotonic clock."}, "values": {"type": "array", "items": {"enum": ["false", "unknown", "true"]}, "minItems": 4, "maxItems": 4}}},
+    "tuple": {"type": "object", "additionalProperties": false, "required": ["temporal", "spatial"], "properties": {"temporal": {"$ref": "#/$defs/trace"}, "spatial": {"$ref": "#/$defs/objects"}}}
+  },
+  "description": "Whole input is capped at16384 UTF-8 bytes before parsing. All extra fields, duplicate struct fields, arbitrary weights/masks/gates/totals are rejected. Exact raw config bytes, not reserialized JSON, bind the run source. This schema is not semantic validation, authority or eligibility."
+}

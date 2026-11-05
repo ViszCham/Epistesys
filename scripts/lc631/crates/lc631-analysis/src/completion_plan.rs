@@ -12,6 +12,65 @@ use std::ops::Range;
 pub const DGCL_COMPLETION_PLAN_SCHEMA: &str = "epistesys-dgcl-completion-plan.v1";
 const MAX_COMPLETION_TASKS: usize = 8_192;
 
+/// The typed task path has no implicit Coding fallback. These are outstanding
+/// obligations, not issued evidence; legacy Coding JSON remains unchanged.
+pub(crate) fn build_logical_task_plan(
+    program: &crate::logical_lowering::TaskProgramIr,
+    max_obligations: usize,
+) -> Result<
+    crate::logical_lowering::TaskCompletionPlan,
+    crate::logical_lowering::LogicalLoweringError,
+> {
+    use crate::logical_lowering::{
+        LogicalLoweringError, TaskCompletionPlan, TaskObligation, TaskObligationKind as Kind,
+    };
+    use lc631_core::context::TaskKind;
+    let kinds: &[Kind] = match program.task {
+        TaskKind::Mathematics => &[Kind::MathematicalDerivation],
+        TaskKind::Reasoning => &[Kind::LogicalConsequence],
+        TaskKind::Explanation => &[Kind::ExplanationCorrespondence],
+        TaskKind::Media => &[Kind::SourceTimeRegionBinding],
+        TaskKind::Coding => &[
+            Kind::ImplementationBinding,
+            Kind::ProductionConnection,
+            Kind::StaticValidation,
+            Kind::RuntimeValidation,
+            Kind::AcceptanceTest,
+        ],
+    };
+    let count = program
+        .directives
+        .len()
+        .checked_mul(kinds.len())
+        .ok_or(LogicalLoweringError::BudgetExceeded)?;
+    if count > max_obligations {
+        return Err(LogicalLoweringError::BudgetExceeded);
+    }
+    let mut obligations = Vec::new();
+    obligations
+        .try_reserve_exact(count)
+        .map_err(|_| LogicalLoweringError::AllocationFailed)?;
+    for directive in &program.directives {
+        program.formula(directive.target)?;
+        for kind in kinds {
+            let mut condition_indices = Vec::new();
+            condition_indices
+                .try_reserve_exact(directive.condition_indices.len())
+                .map_err(|_| LogicalLoweringError::AllocationFailed)?;
+            condition_indices.extend_from_slice(&directive.condition_indices);
+            obligations.push(TaskObligation {
+                kind: *kind,
+                target: directive.target,
+                span: directive.span,
+                condition_indices,
+                needs_interpretation: directive.needs_interpretation,
+                applicability: directive.applicability,
+            });
+        }
+    }
+    Ok(TaskCompletionPlan { obligations })
+}
+
 #[derive(Serialize)]
 struct CompletionPlanDigestInput<'a> {
     schema_version: &'static str,
@@ -979,11 +1038,21 @@ fn acceptance_criterion(
         };
     }
     match kind {
-        CodingEvidenceKind::ImplementationBinding => "bind the implementation target and source revision to this action requirement".into(),
-        CodingEvidenceKind::ProductionConnection => "observe the declared producer-to-consumer route for this target".into(),
-        CodingEvidenceKind::StaticValidation => "run the declared current static/compiler check for the bound target".into(),
-        CodingEvidenceKind::RuntimeValidation => format!("bind a bounded runtime trace to the exact executable, input, and target; {condition_clause}"),
-        CodingEvidenceKind::AcceptanceTest => format!("check an independently authored acceptance oracle against this requirement; {condition_clause}"),
+        CodingEvidenceKind::ImplementationBinding => {
+            "bind the implementation target and source revision to this action requirement".into()
+        }
+        CodingEvidenceKind::ProductionConnection => {
+            "observe the declared producer-to-consumer route for this target".into()
+        }
+        CodingEvidenceKind::StaticValidation => {
+            "run the declared current static/compiler check for the bound target".into()
+        }
+        CodingEvidenceKind::RuntimeValidation => format!(
+            "bind a bounded runtime trace to the exact executable, input, and target; {condition_clause}"
+        ),
+        CodingEvidenceKind::AcceptanceTest => format!(
+            "check an independently authored acceptance oracle against this requirement; {condition_clause}"
+        ),
     }
 }
 

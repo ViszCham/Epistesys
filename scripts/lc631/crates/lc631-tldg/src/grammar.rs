@@ -1,6 +1,8 @@
+use crate::source::SourceTextView;
 use crate::{GrammarProfileId, SourceRevision};
 use lc631_core::SourceSpan;
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
@@ -20,7 +22,7 @@ pub struct Token {
     pub id: u32,
     pub span: SourceSpan,
     pub kind: TokenKind,
-    pub surface: String,
+    pub surface: SourceTextView,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize)]
@@ -227,6 +229,7 @@ impl TypedConstraintGraph {
             return Err(ConstraintBindingError::IncompleteMapping);
         }
         let mut source_cursor = 0;
+        let source_digest: [u8; 32] = Sha256::digest(source.as_bytes()).into();
         for token in &tokens.tokens {
             let binding = bindings_by_token
                 .get(&token.id)
@@ -238,6 +241,9 @@ impl TypedConstraintGraph {
                 || token.span.end <= token.span.start
                 || token.span != binding.source_span
                 || source.get(token.span.start..token.span.end) != Some(token.surface.as_str())
+                || token.surface.source().id().digest().as_bytes() != &source_digest
+                || token.surface.span().start() != token.span.start
+                || token.surface.span().end() != token.span.end
                 || node.kind != SyntaxNodeKind::Token
                 || node.spans.as_slice() != [token.span]
                 || node.origin != "source_anchored_surface_token"
@@ -286,7 +292,7 @@ pub struct UnifiedSyntaxHypergraph {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct DeepGrammarArtifact {
     pub source: SourceRevision,
-    pub boundary_roundtrip: String,
+    pub boundary_roundtrip: SourceTextView,
     pub regions: RegionLattice,
     pub tokens: TokenLattice,
     pub grammar: UnifiedGrammarIr,

@@ -1,12 +1,17 @@
 use super::*;
 use cubecl_core::{self as cubecl, prelude::*, Runtime};
 use cubecl_wgpu::{AutoGraphicsApi, RuntimeOptions, WgpuDevice, WgpuRuntime};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, OnceLock};
+
+mod fault_signals;
+use fault_signals::FaultSignals;
 
 const WORKGROUP_SIZE: u32 = 64;
 const SUMMARY_CHUNK_VALUES: usize = 1_024;
 static GPU_IN_FLIGHT: AtomicUsize = AtomicUsize::new(0);
+
+pub(crate) mod semantic_pareto;
 
 #[cube(launch)]
 fn projection_loss_kernel(
@@ -495,7 +500,13 @@ fn projection_finalists_kernel(input: &Array<u32>, finalist_count: usize, output
 struct GpuState {
     client: ComputeClient<WgpuRuntime>,
     device_identity: String,
-    device_lost: Arc<AtomicBool>,
+    adapter: crate::semantic_pareto::SemanticAdapterMetadata,
+    device_lost: Arc<FaultSignals>,
+    operation: std::sync::Mutex<()>,
+    requested: std::sync::Mutex<semantic_pareto::RequestedLedger>,
+    max_buffer_bytes: u64,
+    max_storage_binding_bytes: u64,
+    max_storage_buffers: u32,
 }
 
 fn gpu_state() -> &'static GpuState {
@@ -506,25 +517,63 @@ fn gpu_state() -> &'static GpuState {
             RuntimeOptions::default(),
         );
         let adapter = setup.adapter.get_info();
+        let limits = setup.device.limits();
+        // init_setup registers this setup's server; duplicate registration panics.
+        // Runtime::client below retrieves that same registered default device.
+        let mut end = adapter.name.len().min(256);
+        while !adapter.name.is_char_boundary(end) {
+            end -= 1;
+        }
+        let metadata = crate::semantic_pareto::SemanticAdapterMetadata {
+            name: adapter.name[..end].into(),
+            name_truncated: end != adapter.name.len(),
+            backend: match adapter.backend {
+                wgpu::Backend::Noop => "Noop",
+                wgpu::Backend::Vulkan => "Vulkan",
+                wgpu::Backend::Metal => "Metal",
+                wgpu::Backend::Dx12 => "Dx12",
+                wgpu::Backend::Gl => "Gl",
+                wgpu::Backend::BrowserWebGpu => "BrowserWebGpu",
+            },
+            device_class: match adapter.device_type {
+                wgpu::DeviceType::DiscreteGpu => {
+                    crate::semantic_pareto::SemanticDeviceClass::DiscreteGpu
+                }
+                wgpu::DeviceType::IntegratedGpu => {
+                    crate::semantic_pareto::SemanticDeviceClass::IntegratedGpu
+                }
+                wgpu::DeviceType::VirtualGpu => {
+                    crate::semantic_pareto::SemanticDeviceClass::VirtualGpu
+                }
+                wgpu::DeviceType::Cpu => crate::semantic_pareto::SemanticDeviceClass::Cpu,
+                wgpu::DeviceType::Other => crate::semantic_pareto::SemanticDeviceClass::Other,
+            },
+        };
         let device_identity = format!(
             "cubecl-wgpu:{}:{:?}:{:?}",
             adapter.name, adapter.backend, adapter.device_type
         );
-        let device_lost = Arc::new(AtomicBool::new(false));
+        let device_lost = Arc::new(FaultSignals::new());
         let callback_state = Arc::clone(&device_lost);
         setup
             .device
             .set_device_lost_callback(move |_reason, _message| {
-                callback_state.store(true, Ordering::Release);
+                callback_state.record_device_lost_callback();
             });
         let uncaptured_state = Arc::clone(&device_lost);
         setup.device.on_uncaptured_error(Arc::new(move |_error| {
-            uncaptured_state.store(true, Ordering::Release);
+            uncaptured_state.record_uncaptured_error();
         }));
         GpuState {
             client: <WgpuRuntime as Runtime>::client(&WgpuDevice::DefaultDevice),
             device_identity,
+            adapter: metadata,
             device_lost,
+            operation: semantic_pareto::operation_mutex(),
+            requested: std::sync::Mutex::new(semantic_pareto::RequestedLedger::default()),
+            max_buffer_bytes: limits.max_buffer_size,
+            max_storage_binding_bytes: limits.max_storage_buffer_binding_size,
+            max_storage_buffers: limits.max_storage_buffers_per_shader_stage,
         }
     })
 }
@@ -574,6 +623,7 @@ impl NumericBackend for CubeClWgpuBackend {
     ) -> Result<RawBackendObservation, AcceleratorError> {
         input.validate()?;
         let state = gpu_state();
+        let mut shared_operation = semantic_pareto::legacy_gate(state)?;
         if state.device_lost.load(Ordering::Acquire) {
             return Err(AcceleratorError::BackendFault(FaultKind::DeviceLost));
         }
@@ -895,6 +945,7 @@ impl NumericBackend for CubeClWgpuBackend {
                 NUMERIC_SUMMARY_WORDS,
             ),
         ];
+        shared_operation.completed();
         Ok(RawBackendObservation {
             backend: BackendKind::CubeClWgpu,
             device_identity: state.device_identity.clone(),
@@ -916,7 +967,7 @@ impl NumericBackend for CubeClWgpuBackend {
                 host_inflight_overlap_observed: in_flight.overlap_observed,
                 shader_occupancy: MeasurementState::Unavailable,
                 device_loss_callback_registered: true,
-                device_loss_callback_observed: state.device_lost.load(Ordering::Acquire),
+                device_loss_callback_observed: state.device_lost.callback_observed(),
             },
         })
     }

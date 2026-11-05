@@ -1,5 +1,8 @@
 [workspace]
 members = [
+    "crates/lc631-substrate",
+    "crates/lc631-solvers",
+    "crates/lc631-runtime",
     "crates/lc631-receipt-kernel",
     "crates/lc631-core",
     "crates/lc631-analysis",
@@ -17,7 +20,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "6.3.2-alpha.3"
+version = "6.9.0-beta.1"
 edition = "2021"
 license = "UNLICENSED"
 
@@ -25,6 +28,9 @@ license = "UNLICENSED"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.11"
+num-bigint = "=0.4.6"
+num-rational = "=0.4.2"
+num-traits = "=0.2.19"
 getrandom = "0.3"
 cubecl-core = { version = "=0.10.0", default-features = false, features = ["std"] }
 cubecl-wgpu = { version = "=0.10.0", default-features = false, features = ["std"] }
@@ -40,3 +46,18 @@ opt-level = 3
 
 [profile.test.package.sha2]
 opt-level = 3
+
+# Exact rational enclosure tests are CPU-intensive in unoptimized dependencies.
+# Keep debug/overflow checks enabled and optimize only the numeric substrate
+# and its arithmetic dependencies; this does not relax measurement budgets.
+[profile.dev.package.lc631-substrate]
+opt-level = 1
+
+[profile.dev.package.num-bigint]
+opt-level = 3
+
+[profile.dev.package.num-integer]
+opt-level = 1
+
+[profile.dev.package.num-rational]
+opt-level = 1

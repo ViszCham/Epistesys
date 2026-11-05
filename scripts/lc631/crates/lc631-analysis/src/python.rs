@@ -9,6 +9,8 @@ use crate::{
 };
 
 const MAX_PYTHON_SOURCE_BYTES: usize = 1024 * 1024;
+mod resources;
+pub(crate) use resources::analyze_python_source_with_resources;
 
 #[derive(Deserialize)]
 struct RawObservation {
@@ -74,7 +76,7 @@ pub(crate) fn analyze_python_source(source: &str) -> PythonAnalysisSurface {
         ("py", &["-3"][..]),
     ] {
         let mut args = prefix.to_vec();
-        args.extend(["-X", "utf8", "-I", "-S", "-c", SCRIPT]);
+        args.extend(["-X", "utf8", "-I", "-S", "-B", "-c", SCRIPT]);
         let result = run_bounded_tool(BoundedToolRequest {
             program,
             args: &args,
@@ -99,8 +101,24 @@ pub(crate) fn analyze_python_source(source: &str) -> PythonAnalysisSurface {
         }
     }
     let capabilities = probe_typing_tools();
+    finish_python_surface(
+        source,
+        source_revision,
+        observation.map(|(program, _, raw)| (program, raw)),
+        capabilities,
+        process_unknowns,
+    )
+}
+
+fn finish_python_surface(
+    source: &str,
+    source_revision: String,
+    observation: Option<(String, RawObservation)>,
+    capabilities: Vec<PythonToolCapability>,
+    process_unknowns: Vec<String>,
+) -> PythonAnalysisSurface {
     match observation {
-        Some((program, _process, raw)) => {
+        Some((program, raw)) => {
             let interpreter = interpreter_receipt(&program, &raw.interpreter);
             let parsed = raw.parsed;
             let compiled = raw.compiled;
@@ -172,7 +190,19 @@ pub(crate) fn apply_python_stages(stages: &mut [StageReceipt], python: &PythonAn
         .filter(|tool| tool.state == EvidenceState::Observed)
         .map(|tool| tool.process.stdout_digest.clone())
         .collect::<Vec<_>>();
-    update(stages, "RPA-29", if available_checkers.is_empty() { EvidenceState::NeedsEvidence } else { EvidenceState::Candidate }, available_checkers, &["type-checker capability/version is observed; no checker was executed on candidate source or project configuration"]);
+    update(
+        stages,
+        "RPA-29",
+        if available_checkers.is_empty() {
+            EvidenceState::NeedsEvidence
+        } else {
+            EvidenceState::Candidate
+        },
+        available_checkers,
+        &[
+            "type-checker capability/version is observed; no checker was executed on candidate source or project configuration",
+        ],
+    );
     let code = [
         python.code_object_digest.clone(),
         python.opcode_digest.clone(),
@@ -191,7 +221,19 @@ pub(crate) fn apply_python_stages(stages: &mut [StageReceipt], python: &PythonAn
         code,
         &["code-object/opcode digest is CPython-version specific and runtime trace is unobserved"],
     );
-    update(stages, "RPA-31", if python.interpreter.is_some() { EvidenceState::Candidate } else { EvidenceState::Unavailable }, source, &["dynamic effects, async cancellation, GIL schedules, free-threading races, and native-extension ABI remain unexecuted"]);
+    update(
+        stages,
+        "RPA-31",
+        if python.interpreter.is_some() {
+            EvidenceState::Candidate
+        } else {
+            EvidenceState::Unavailable
+        },
+        source,
+        &[
+            "dynamic effects, async cancellation, GIL schedules, free-threading races, and native-extension ABI remain unexecuted",
+        ],
+    );
 }
 
 fn probe_typing_tools() -> Vec<PythonToolCapability> {

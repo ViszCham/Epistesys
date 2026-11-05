@@ -27,6 +27,22 @@ repository rootで実行する例です。JSONの解析状態・source roundtrip
 
 launcherは自身の配置からrunnerを解決するため、別cwdでもcheckout内のlauncherを指定できます。root外の個人host pathをrepository文書へ固定しません。
 
+### 不要キャッシュを作らない起動とturn境界
+
+現開発sourceのlauncherは、同梱binaryがなければ診断で停止し、暗黙の`cargo run`を行いません。開発buildが必要な場合だけ、`EPISTESYS_ALLOW_DEVELOPMENT_BUILD=1`と専用の絶対pathを持つ`EPISTESYS_DEVELOPMENT_TARGET`を明示します。手動のCargo呼出しは別の開発操作です。
+
+通常のcanonical solveは保存offのturn境界を通ります。SDKの`turn_cache::with_turn_cache`を明示利用する場合も、再計算可能な借用入力のコピーだけをメモリへ保持し、容量・TTL・resource leaseを検査し、turn終了時に自動解放します。Media／NLP／Python解析の子Pythonには`-B`を渡します。これは全library cacheの禁止や任意のdisk cleanupではありません。実装と未観測範囲は[キャッシュ寿命契約](tlcx-cache-lifecycle-and-prevention-2026-11-04.md)を参照してください。開発sourceの修正は、installed pluginの更新・host pickupを意味しません。
+
+### TLCX bundleの読取り専用診断（開発source）
+
+現sourceからビルドする場合の明示例です。installed pluginへの反映・配布完了を意味しません。
+
+```powershell
+cargo run --locked --no-default-features --manifest-path scripts/lc631/Cargo.toml -p lc631-cli -- lc631-journal-bundle-inspect --ledger-root <ledger-root>
+```
+
+このcommandは既存mark済みbundleのsegment／index／local-headを同じruntime検証経路で照合し、rootやwriter lockを作りません。正常でも`inspected_unanchored`であり、権限・完了・配信を復元しません。空inventory、破損、未対応flagは保留または引数errorとして残し、`--execute`は受け付けません。[bundle契約](tlcx-journal-bundle-v1.md)と[独立payload schema](../schemas/lc631-journal-bundle-inspect.v1.schema.json)を参照してください。通常のsolve/repair/resumeへの配線と実host検証は別です。
+
 ### Codexからの入力
 
 Epistesysを明示選択し、host側で利用を有効にした場合、codingにはCoding Projector、通常会話にはConversation Projectorを使用します。両facadeを重複実行せず、元入力をUTF-8 stdinで`lc631-dgcl-run --prompt-stdin`へ渡します。source／Program IR／TL／candidate／未解決状態を同artifactで確認します。具体的な手順は[明示選択時のルーティング](codex-default-routing.md)に記載しています。repositoryを開くことやEpistesysへの言及だけで、自動利用を選択したことにはなりません。
@@ -84,6 +100,22 @@ Examples run from repository root. Inspect JSON parse states/source roundtrip/re
 | World budget | Local hypothesis/projection materialization, not LLM call count |
 
 Launchers resolve runners relative to their installation, so reference the checkout's launcher from another working directory. Do not embed personal absolute host paths in repository documentation.
+
+### Launch prevention and turn-local cache boundaries
+
+The current development-source launcher stops with a diagnostic when its packaged binary is missing; it never starts an implicit `cargo run`. Only explicit development builds set both `EPISTESYS_ALLOW_DEVELOPMENT_BUILD=1` and `EPISTESYS_DEVELOPMENT_TARGET` to a dedicated absolute path. Manual Cargo commands are separate development operations.
+
+Normal canonical solve passes through a storage-off turn boundary. Explicit SDK use of `turn_cache::with_turn_cache` retains only in-memory copies of borrowed recomputable inputs, checks capacity/TTL/resource leases, and releases those copies automatically at turn end. Media/NLP/Python-analysis child interpreters receive `-B`. This does not prohibit every library cache or authorize arbitrary disk cleanup. See the [cache-lifetime contract](tlcx-cache-lifecycle-and-prevention-2026-11-04.md) for implementation and unobserved scope. Development-source changes do not establish installed-plugin updates or host pickup.
+
+### Read-only TLCX bundle diagnostics (development source)
+
+Explicit example building from current source; this does not establish installed-plugin pickup or distribution completion:
+
+```powershell
+cargo run --locked --no-default-features --manifest-path scripts/lc631/Cargo.toml -p lc631-cli -- lc631-journal-bundle-inspect --ledger-root <ledger-root>
+```
+
+This command checks an existing marked bundle's segment/index/local-head through the shared runtime validator without creating roots or writer locks. Even a positive result is `inspected_unanchored` and restores no authority, completion or delivery. Empty inventories, corruption and unsupported flags retain Holds or argument errors; `--execute` is rejected. See the [bundle contract](tlcx-journal-bundle-v1.md) and [separate payload schema](../schemas/lc631-journal-bundle-inspect.v1.schema.json). Normal solve/repair/resume wiring and real-host verification are separate.
 
 ### Codex input
 

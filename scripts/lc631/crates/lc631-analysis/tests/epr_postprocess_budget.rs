@@ -54,7 +54,7 @@ fn action_graph_work_is_not_an_unmetered_second_pass() {
 fn ordinary_three_clause_input_preserves_exact_action_spans() {
     let source = "編集し、検証し、保存してください";
     let report = parse_controlled_instruction(source, InstructionParseBudget::default()).unwrap();
-    let selected = report.selected.unwrap();
+    let selected = report.selected.unwrap().into_legacy();
     assert_eq!(selected.actions.len(), 3);
     for action in selected.actions {
         assert_eq!(source.get(action.source_span), Some(action.text.as_str()));

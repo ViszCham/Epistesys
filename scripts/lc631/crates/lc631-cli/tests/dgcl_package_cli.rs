@@ -15,6 +15,75 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+#[path = "dgcl_package_cli/bounded_interruption.rs"]
+mod bounded_interruption;
+
+#[test]
+fn interruption_diagnostics_do_not_unconditionally_join_reader() {
+    let source = include_str!("dgcl_package_cli.rs");
+    assert!(
+        !source.contains(concat!("stderr_reader", ".join()")),
+        "the interruption fixture must not unconditionally join a pipe reader"
+    );
+}
+
+fn safe_cli_failure_summary(stderr: &[u8]) -> Option<String> {
+    const SAFE_ERROR_STAGES: &[&str] = &[
+        "repair_resume",
+        "repair_head_load",
+        "repair_historical_head",
+        "repair_historical_resume",
+        "repair_head_renew_issue",
+        "repair_head_renew_persist",
+        "repair_head_issue",
+        "dgcl_package_repair_ingress",
+        "dgcl_package_repair_permit",
+        "dgcl_repair_principal",
+        "dgcl_repair_prediction",
+        "dgcl_repair_predicted_binding",
+        "dgcl_repair_tool",
+        "dgcl_repair_test_ingress",
+        "dgcl_repair_test_permit",
+        "dgcl_repair_lease",
+        "dgcl_repair_driver",
+        "dgcl_package_repair",
+        "dgcl_package_root",
+        "dgcl_package_tool_registration",
+        "dgcl_package_ingress",
+        "dgcl_package_permit",
+        "dgcl_package_intent",
+        "dgcl_package_principal",
+        "dgcl_package_evidence",
+        "dgcl_package_candidate",
+    ];
+
+    let value: Value = serde_json::from_slice(stderr).ok()?;
+    if value.get("schema_version")?.as_str()? != "lc631-cli-error.v1" {
+        return None;
+    }
+    let stage = value
+        .get("error")
+        .and_then(Value::as_str)
+        .and_then(|error| error.split_once(':').map(|(stage, _)| stage))
+        .filter(|stage| SAFE_ERROR_STAGES.contains(stage))
+        .unwrap_or("unclassified");
+    let safe_effect = |key: &str| match value
+        .pointer(&format!("/effect_state/{key}"))
+        .and_then(Value::as_str)
+    {
+        Some("not_attempted") => "not_attempted",
+        Some("may_have_applied") => "may_have_applied",
+        Some("applied_observed") => "applied_observed",
+        Some("observed_no_progress") => "observed_no_progress",
+        _ => "unknown",
+    };
+    Some(format!(
+        "CLI failure stage={stage}; source_effect={}; persistence_effect={}",
+        safe_effect("source_effect"),
+        safe_effect("persistence_effect")
+    ))
+}
+
 fn hash(path: &Path) -> String {
     let bytes = Sha256::digest(std::fs::read(path).unwrap());
     format!(
@@ -755,51 +824,18 @@ fn package_cli_case(case: PackageCase) {
     if interrupt {
         let current = fresh_test_bundle(&bundle, source, &host, &author, epoch_now());
         std::fs::write(&bundle_path, serde_json::to_vec(&current).unwrap()).unwrap();
-        let mut child = Command::new(env!("CARGO_BIN_EXE_lc631"))
-            .current_dir(&base)
-            .args(["lc631-dgcl-package-repair", "--execute", "--prompt", source])
-            .arg("--repo")
-            .arg(&package)
-            .arg("--evidence-file")
-            .arg(&bundle_path)
-            .arg("--receipt-root")
-            .arg(&host_root)
-            .arg("--author-receipt-root")
-            .arg(&author_root)
-            .arg("--ledger-root")
-            .arg(&journal_root)
-            .arg("--head-root")
-            .arg(&head_root)
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .spawn()
-            .unwrap();
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
-        loop {
-            assert!(
-                std::time::Instant::now() < deadline,
-                "repair must reach the write boundary"
-            );
-            assert!(
-                child.try_wait().unwrap().is_none(),
-                "child ended before interruption"
-            );
-            if std::fs::read_to_string(package.join("src/lib.rs"))
-                .ok()
-                .as_deref()
-                == Some(correct.as_str())
-            {
-                child.kill().unwrap();
-                child.wait().unwrap();
-                break;
-            }
-            std::thread::sleep(std::time::Duration::from_millis(5));
+        bounded_interruption::RepairFixture {
+            base: &base,
+            package: &package,
+            bundle: &bundle_path,
+            host_root: &host_root,
+            author_root: &author_root,
+            journal: &journal_root,
+            head: &head_root,
+            source,
+            correct: &correct,
         }
-        let checkpoint: Value = serde_json::from_slice(
-            &std::fs::read(journal_root.join("checkpoint-00000000000000000000.json")).unwrap(),
-        )
-        .unwrap();
-        assert_eq!(checkpoint["body"]["event_kind"], "action_started");
+        .run();
         if expired_history {
             // Controlled fixture clock: replace only the test-owned head with
             // an authentic expired attestation of the exact same stored action.

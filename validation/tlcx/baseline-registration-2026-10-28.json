@@ -1,0 +1,149 @@
+{
+  "schema_version": "epistesys-tlcx-baseline-registration.v1",
+  "slice": "TLCX-00",
+  "baseline": {
+    "version": "6.3.2-alpha.3",
+    "commit": "1fca5165eca21011bcefd6518d3b3c9b93e17d58",
+    "tree": "fa5fffa50a4f512380b4fda2f869e0ff3ad88706",
+    "roadmap_sha256": "aba6a886d28f43a84ad02c9ed781ce1666ab081869c13c00a583fd44ca17d5fc",
+    "source_input_count": 205
+  },
+  "negative_controls": {
+    "missing_source_rejected": true,
+    "changed_source_rejected": true
+  },
+  "windows_baseline_commands": [
+    {
+      "label": "format",
+      "exit_code": 0,
+      "elapsed_ms": 1419,
+      "output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "check",
+      "exit_code": 0,
+      "elapsed_ms": 30558,
+      "output_sha256": "e5a96252e4ecfd0fd717a7c9761ed0e6f9e682e841fbca147529cd160981d42f"
+    },
+    {
+      "label": "no-default-tests",
+      "exit_code": 0,
+      "elapsed_ms": 181715,
+      "output_sha256": "8d286851e976d0560c16d21c2fdd108eb9c4a12045b41e8e59206a0bdf3ab043"
+    },
+    {
+      "label": "default-tests",
+      "exit_code": 0,
+      "elapsed_ms": 365525,
+      "output_sha256": "4d8e7b5b81a5ba770e35310daad7134ffe4e2d5f7fca42a33279de5aefab84d9"
+    },
+    {
+      "label": "strict-clippy",
+      "exit_code": 0,
+      "elapsed_ms": 24535,
+      "output_sha256": "7122719e10a8ba2ffeb0b1f7ff647d726b6b66e98f6583789bf72164150690d4"
+    },
+    {
+      "label": "release",
+      "exit_code": 0,
+      "elapsed_ms": 13385,
+      "output_sha256": "70284917109b5fe2f09ba1dd2ead6d7233bc29c325d682aa34cba7cde0d6c818"
+    },
+    {
+      "label": "release-parser",
+      "exit_code": 0,
+      "elapsed_ms": 2348,
+      "output_sha256": "9cbfb4cdf6b4c90d9ba1cc0db472baf44cbe8331b6ae5137dbb336a25ff9b60e"
+    },
+    {
+      "label": "worker-lock-tests",
+      "exit_code": 0,
+      "elapsed_ms": 1272,
+      "output_sha256": "383a12fba9b5b327054a24ce7e5739569c4f0b6621facd981f2d6a4271063b3c"
+    },
+    {
+      "label": "pinned-byte-tests",
+      "exit_code": 0,
+      "elapsed_ms": 264,
+      "output_sha256": "00314bcb93032e26b644e3865a18e0f8ea2a564911cc95518a72057ec0a39308"
+    },
+    {
+      "label": "media-wire-tests",
+      "exit_code": 0,
+      "elapsed_ms": 312,
+      "output_sha256": "72f5595d3b7def0aedf14601dce26d3ce3ed29eee815fe930e26ed611dc705ec"
+    },
+    {
+      "label": "media-resource-tests",
+      "exit_code": 0,
+      "elapsed_ms": 2970,
+      "output_sha256": "c355db37da881c449ab311235cb509363dcf79d5a46d33881de5af46fcf1c1e5"
+    },
+    {
+      "label": "configured-ja-en",
+      "exit_code": 0,
+      "elapsed_ms": 61435,
+      "output_sha256": "b59c15657f7217c0c9503d8b18e044dd78eb527c9a04231c1e25d119223ba778"
+    },
+    {
+      "label": "actual-gpu",
+      "exit_code": 0,
+      "elapsed_ms": 4668,
+      "output_sha256": "23678957489872bd269bcea9eda05c239e7518016705986f0fa02e85a29ea841"
+    }
+  ],
+  "solver_profiles": [
+    {
+      "platform": "windows-x86_64",
+      "python": "3.12.10",
+      "z3_package": "5.3.2.0",
+      "clingo": "5.8.2",
+      "probe_count": 9,
+      "probe_record_sha256": "0e0bb838fe106caedc8f98c97f543b3e59b71a0a0317c952fdb5fdc2ca2facab",
+      "lock_sha256": "d479125aa845a5cdd2aa86a5a0b750a8cc9f695230c8d24621c0d36fd1568364",
+      "z3_binary_sha256": "5f32b2d2b93291b56e3c10a43b088cae78acc84017ebff8fa741a7ecee6c6ca5"
+    },
+    {
+      "platform": "ubuntu-24.04-x86_64-wsl2",
+      "python": "3.12.3",
+      "z3_package": "5.3.2.0",
+      "clingo": "5.8.2",
+      "probe_count": 9,
+      "probe_record_sha256": "80fb1a671ce79cdd9fa75fcbf4bd0f5a420e8c0078bd923697529334631c025e",
+      "lock_sha256": "38c0f50a25d224dc3e74f141823171eef6a028ce1b03a80783951252685e8cf9",
+      "z3_binary_sha256": "c45e787b5d1a3d94079d1e83b98e23bbc884ccaf542ea38c3814f31ac2f79197"
+    }
+  ],
+  "required_finite_profiles": [
+    "finite_trace",
+    "four_valued",
+    "modal_k",
+    "epistemic_s5",
+    "finite_intuitionistic",
+    "declared_deontic",
+    "finite_acyclic_scm",
+    "finite_spatial"
+  ],
+  "finite_profile_implementation": "not_started",
+  "resource_policy": {
+    "rust_run_bytes": 134217728,
+    "rust_process_bytes": 536870912,
+    "external_solvers": 2,
+    "frame_bytes": 16777216,
+    "record_bytes": 1048576,
+    "journal_segment_bytes": 4194304,
+    "summary_bytes": 65536,
+    "recomputable_disk_cache_default": "off",
+    "vram_profile": "must be explicitly measured/registered before new GPU admission"
+  },
+  "external_dependencies": {
+    "host_callback": "HostIntegrationPending",
+    "monotonic_anchor": "RollbackResistanceUnavailable",
+    "independent_natural_language_gold": "PendingNoCorpus"
+  },
+  "slice_local_exit": "baseline_and_prerequisites_registered",
+  "production_multilogic_connected": false,
+  "full_release_ready": false,
+  "claim_boundary": "Observed baseline commands and small actual solver fixtures; registration is not proof, execution authority, new production wiring, general performance, or real-host completion.",
+  "supply_chain_residual": "Z3 PyPI inconsistent-provenance warning retained; byte hashes are not independent provenance proof."
+}

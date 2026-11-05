@@ -1,5 +1,7 @@
+use crate::instruction_grammar::legacy_json_digest;
 use lc631_core::stable_sha256;
-use lc631_tldg::{analyze_dg1, Dg1Budget, Dg1Error, Dg1Report};
+use lc631_substrate::source::{SourceSpan, SourceStore};
+use lc631_tldg::{analyze_dg1_store, Dg1Budget, Dg1Error, Dg1Report};
 use serde::Serialize;
 use std::sync::Arc;
 
@@ -45,10 +47,10 @@ impl ArtifactId {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct SourceSnapshot {
     revision: SourceRevision,
-    text: Arc<str>,
+    store: SourceStore,
 }
 
 impl SourceSnapshot {
@@ -57,9 +59,21 @@ impl SourceSnapshot {
     }
 
     pub fn text(&self) -> &str {
-        &self.text
+        self.store.text()
+    }
+
+    pub fn store(&self) -> &SourceStore {
+        &self.store
     }
 }
+
+impl PartialEq for SourceSnapshot {
+    fn eq(&self, other: &Self) -> bool {
+        self.revision == other.revision && self.text() == other.text()
+    }
+}
+
+impl Eq for SourceSnapshot {}
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct RequirementIdentity {
@@ -153,12 +167,14 @@ pub fn build_dgcl_artifact(
     if !valid_manifest(request.grammar_manifest) || !valid_manifest(request.profile_manifest) {
         return Err(DgclArtifactError::ManifestInvalid);
     }
+    if request.source.len() > request.budget.max_source_bytes {
+        return Err(DgclArtifactError::Parse(Dg1Error::SourceBudgetExceeded));
+    }
     let source_revision = SourceRevision(stable_sha256(request.source));
     let grammar_revision = GrammarRevision(stable_sha256(request.grammar_manifest));
     let profile_revision = ProfileRevision(stable_sha256(request.profile_manifest));
-    let budget_digest = stable_sha256(
-        &serde_json::to_string(&request.budget).map_err(|_| DgclArtifactError::ManifestInvalid)?,
-    );
+    let budget_digest =
+        legacy_json_digest(&request.budget).map_err(|_| DgclArtifactError::ManifestInvalid)?;
     let artifact_id = ArtifactId(stable_sha256(&format!(
         "epistesys-dgcl-artifact.v1\0{}\0{}\0{}\0{}",
         source_revision.as_str(),
@@ -168,9 +184,11 @@ pub fn build_dgcl_artifact(
     )));
     let source = SourceSnapshot {
         revision: source_revision,
-        text: Arc::<str>::from(request.source),
+        store: SourceStore::new(Arc::from(request.source), request.budget.max_source_bytes)
+            .map_err(|_| DgclArtifactError::SourceSpanInvalid)?,
     };
-    let dg1 = analyze_dg1(source.text(), request.budget).map_err(DgclArtifactError::Parse)?;
+    let dg1 =
+        analyze_dg1_store(source.store(), request.budget).map_err(DgclArtifactError::Parse)?;
     if dg1.source_revision != source.revision.as_str() {
         return Err(DgclArtifactError::SourceRevisionMismatch);
     }
@@ -182,10 +200,12 @@ pub fn build_dgcl_artifact(
             let ordinal =
                 u32::try_from(index + 1).map_err(|_| DgclArtifactError::SourceSpanInvalid)?;
             let span = candidate.source_span.clone();
+            let checked_span = SourceSpan::checked(source.store(), span.start, span.end)
+                .map_err(|_| DgclArtifactError::SourceSpanInvalid)?;
             let source_text = source
-                .text()
-                .get(span.clone())
-                .ok_or(DgclArtifactError::SourceSpanInvalid)?;
+                .store()
+                .slice(checked_span)
+                .map_err(|_| DgclArtifactError::SourceSpanInvalid)?;
             if source_text != candidate.source_text.as_str() {
                 return Err(DgclArtifactError::SourceSpanInvalid);
             }

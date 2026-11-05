@@ -30,6 +30,8 @@ v2 phaseはActionStarted、ActionObserved、CandidatePrepared、CandidateSendAtt
 
 Standalone candidate、repair loop、lifecycle lease、trusted checkpoint head、host output stage ledgerはそれぞれ別schema/shapeを持つ。Standalone candidateは正確なbytesとtop-level schema versionを保存するが、Requirementごとの意味実現を`NotObserved`のまま示し、hostのprecommit/post-send/sink/durable-replayを勝手にverifiedへ昇格しない。
 
+TLCXの`lc631-journal-bundle-inspect.v1`は[独立した診断payload schema](../schemas/lc631-journal-bundle-inspect.v1.schema.json)であり、既存のcheckpoint／pipeline fieldを変更しない。countとlocal-head digestは検査できた場合だけ表示し、Hold時はnullを保つ。Authority／completion／commitはfalse。予期しない作用errorのBeforeEffect／MayHaveAppliedも異なるcodeで残し、旧generic codeのschema許容値は互換用に保持する。既存read-only checkpoint inspectorのshapeは維持するが、metadata不足や先頭physical sequence欠損の拒否を強化しており、低予算／不完全入力の従来と同じ動作までは保証しない。新commandは現sourceの機能で、旧installed binaryの対応は未確認。
+
 Repair reportのtimeout後`may_have_applied`は、最後にreceipt検証済みsnapshotと実filesystemが異なる可能性を示す。RepairLoopの候補やadapter署名はhost filesystem confinement、Codex callback、hard process cancellationの証明ではない。
 
 Host output stageはPreCommitCandidate → PostSendObserved → SinkDeliveryObservedの順序を別々のstage-scoped receiptで検証する。これはcontract adapterであり、実hostがreceiptを発行したrun、実sink delivery、durable replayと同一ではない。
@@ -84,6 +86,8 @@ V2 phases distinguish ActionStarted, ActionObserved, CandidatePrepared, Candidat
 ### New independent surfaces
 
 Standalone candidates, repair loops, lifecycle leases, trusted checkpoint heads, and host output stage ledgers each have their own schema/shape. A standalone candidate captures exact bytes and a top-level schema version but keeps per-requirement semantic realization `NotObserved`; it never promotes host precommit/post-send/sink/durable-replay to verified by itself.
+
+TLCX `lc631-journal-bundle-inspect.v1` uses a [separate diagnostic payload schema](../schemas/lc631-journal-bundle-inspect.v1.schema.json), changing no existing checkpoint/pipeline fields. Counts and local-head digest appear only when inspected; Holds preserve null. Authority/completion/commit remain false. Unexpected effect errors also retain distinct BeforeEffect/MayHaveApplied codes; the old generic schema value remains allowed for compatibility. The existing read-only checkpoint inspector retains its shape, but metadata exhaustion and missing-first-physical-sequence checks are stricter; identical behavior for low-budget/incomplete inputs is not guaranteed. The new command is a current-source capability, with support in older installed binaries unobserved.
 
 `may_have_applied` after a repair timeout indicates that the actual filesystem may differ from the last receipt-verified snapshot. A repair proposal or adapter signature is not proof of host filesystem confinement, Codex callbacks, or hard process cancellation.
 

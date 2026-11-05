@@ -107,6 +107,7 @@ pub(super) fn open_file(
     name: &OsStr,
     create: bool,
     exclusive: bool,
+    writable: bool,
 ) -> io::Result<File> {
     let path = parent.path.join(name);
     let file = if create {
@@ -142,8 +143,8 @@ pub(super) fn open_file(
     } else {
         OpenOptions::new()
             .read(true)
-            .write(true)
-            .share_mode(0)
+            .write(writable)
+            .share_mode(if writable { 0 } else { FILE_SHARE_READ })
             .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
             .open(path)?
     };
@@ -156,6 +157,42 @@ pub(super) fn identity(file: &File) -> io::Result<FileIdentity> {
     if !metadata.is_file() || metadata.file_attributes() & 0x400 != 0 {
         return Err(unsafe_path());
     }
+    let (identity, links) = handle_identity(file)?;
+    if links != 1 {
+        return Err(unsafe_path());
+    }
+    Ok(identity)
+}
+
+/// Preserve File::open's normal sharing for installed binary observations.
+/// OPEN_REPARSE_POINT inspects the leaf rather than following a replacement.
+pub(super) fn open_binary_file(parent: &DirectoryAnchor, name: &OsStr) -> io::Result<File> {
+    let file = OpenOptions::new()
+        .read(true)
+        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+        .open(parent.path.join(name))?;
+    binary_identity(&file)?;
+    Ok(file)
+}
+
+pub(super) fn binary_identity(file: &File) -> io::Result<FileIdentity> {
+    let metadata = file.metadata()?;
+    if !metadata.is_file() || metadata.file_attributes() & 0x400 != 0 {
+        return Err(unsafe_path());
+    }
+    // Hardlinks are allowed only by the distinct read-only binary surface.
+    handle_identity(file).map(|(identity, _links)| identity)
+}
+
+pub(super) fn directory_identity(file: &File) -> io::Result<FileIdentity> {
+    let metadata = file.metadata()?;
+    if !metadata.is_dir() || metadata.file_attributes() & 0x400 != 0 {
+        return Err(unsafe_path());
+    }
+    handle_identity(file).map(|(identity, _links)| identity)
+}
+
+fn handle_identity(file: &File) -> io::Result<(FileIdentity, u32)> {
     let mut info = std::mem::MaybeUninit::<BY_HANDLE_FILE_INFORMATION>::uninit();
     // SAFETY: file owns a live handle; info points to writable correctly sized storage.
     if unsafe { GetFileInformationByHandle(file.as_raw_handle(), info.as_mut_ptr()) } == 0 {
@@ -163,13 +200,13 @@ pub(super) fn identity(file: &File) -> io::Result<FileIdentity> {
     }
     // SAFETY: the successful API call fully initialized the structure.
     let info = unsafe { info.assume_init() };
-    if info.nNumberOfLinks != 1 {
-        return Err(unsafe_path());
-    }
-    Ok(FileIdentity {
-        volume: u64::from(info.dwVolumeSerialNumber),
-        index: (u64::from(info.nFileIndexHigh) << 32) | u64::from(info.nFileIndexLow),
-    })
+    Ok((
+        FileIdentity {
+            volume: u64::from(info.dwVolumeSerialNumber),
+            index: (u64::from(info.nFileIndexHigh) << 32) | u64::from(info.nFileIndexLow),
+        },
+        info.nNumberOfLinks,
+    ))
 }
 
 pub(super) fn validate_current(file: &AnchoredFile) -> io::Result<()> {

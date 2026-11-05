@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Local read-only journal bundle inspection; not authority or semantic validation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "status", "hold_code", "segment_count", "record_count",
+    "segment_input_bytes", "latest_record_sequence", "local_head_frame_digest_bytes",
+    "head_state", "rollback_resistance", "fresh_revalidation_required",
+    "external_anchor_observed", "authority_created", "completion_restored",
+    "output_commit_allowed", "diagnostic_only", "claim_boundary"
+  ],
+  "properties": {
+    "schema_version": {"const": "lc631-journal-bundle-inspect.v1"},
+    "status": {"enum": ["hold", "inspected_unanchored"]},
+    "hold_code": {"type": ["string", "null"]},
+    "segment_count": {"type": ["integer", "null"], "minimum": 1, "maximum": 1000},
+    "record_count": {"type": ["integer", "null"], "minimum": 1, "maximum": 131072},
+    "segment_input_bytes": {"type": ["integer", "null"], "minimum": 1, "maximum": 16777216},
+    "latest_record_sequence": {"type": ["integer", "null"], "minimum": 1, "maximum": 131072},
+    "local_head_frame_digest_bytes": {
+      "type": ["array", "null"], "minItems": 32, "maxItems": 32,
+      "items": {"type": "integer", "minimum": 0, "maximum": 255}
+    },
+    "head_state": {"enum": [null, "unanchored", "local_match_unanchored"]},
+    "rollback_resistance": {"const": "unavailable"},
+    "fresh_revalidation_required": {"const": true},
+    "external_anchor_observed": {"const": false},
+    "authority_created": {"const": false},
+    "completion_restored": {"const": false},
+    "output_commit_allowed": {"const": false},
+    "diagnostic_only": {"const": true},
+    "claim_boundary": {"type": "string", "minLength": 1, "maxLength": 1024}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"status": {"const": "inspected_unanchored"}}},
+      "then": {
+        "properties": {
+          "hold_code": {"const": null},
+          "segment_count": {"type": "integer"},
+          "record_count": {"type": "integer"},
+          "segment_input_bytes": {"type": "integer"},
+          "latest_record_sequence": {"type": "integer"},
+          "local_head_frame_digest_bytes": {"type": "array"},
+          "head_state": {"enum": ["unanchored", "local_match_unanchored"]}
+        }
+      },
+      "else": {
+        "properties": {
+          "hold_code": {"enum": [
+            "empty_inventory", "storage_read_hold", "resource_hold", "bundle_rebuild_required",
+            "chain_limit", "stale_cursor", "invalid_candidate", "index_hold", "codec_hold",
+            "poisoned_read", "unexpected_storage_effect_state",
+            "unexpected_open_before_effect", "unexpected_open_may_have_applied",
+            "unexpected_write_rejected_before_effect", "unexpected_write_may_have_applied"
+          ]},
+          "segment_count": {"const": null}, "record_count": {"const": null},
+          "segment_input_bytes": {"const": null}, "latest_record_sequence": {"const": null},
+          "local_head_frame_digest_bytes": {"const": null}, "head_state": {"const": null}
+        }
+      }
+    }
+  ]
+}

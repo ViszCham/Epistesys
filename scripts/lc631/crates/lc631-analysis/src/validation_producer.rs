@@ -19,6 +19,9 @@ use std::io::Read;
 use std::path::{Component, Path};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+mod resources;
+use resources::ProducerIo;
+
 pub struct DgclCargoExecutionContext<'a> {
     pub lifecycle: &'a DgclExecutionSnapshot,
     pub permit: &'a ExecutionPermit,
@@ -158,7 +161,35 @@ pub fn preflight_dgcl_cargo_plan(
     pipeline: &DgclPipelineReport,
     plan: &DgclCargoValidationPlan,
 ) -> Result<(), DgclValidationProducerError> {
+    preflight_cargo_plan_io(root, pipeline, plan, &mut ProducerIo::Legacy)
+}
+
+pub fn preflight_dgcl_cargo_plan_with_runner(
+    root: &Path,
+    source: &str,
+    pipeline: &DgclPipelineReport,
+    plan: &DgclCargoValidationPlan,
+    runner: &mut dyn crate::ToolProcessRunner,
+) -> Result<(), DgclValidationProducerError> {
+    if !crate::verify_dgcl_pipeline_identity(source, pipeline) {
+        return Err(DgclValidationProducerError::InvalidArtifact);
+    }
+    preflight_cargo_plan_io(
+        root,
+        pipeline,
+        plan,
+        &mut ProducerIo::Injected { source, runner },
+    )
+}
+
+fn preflight_cargo_plan_io(
+    root: &Path,
+    pipeline: &DgclPipelineReport,
+    plan: &DgclCargoValidationPlan,
+    io: &mut ProducerIo<'_>,
+) -> Result<(), DgclValidationProducerError> {
     use DgclValidationProducerError as Error;
+    io.check()?;
     if plan.schema_version != "epistesys-dgcl-cargo-validation-plan.v1"
         || !(1..=120_000).contains(&plan.timeout_ms)
         || plan.source_revision != pipeline.source_revision
@@ -204,6 +235,7 @@ pub fn preflight_dgcl_cargo_plan(
     }
     let absolute_root = std::path::absolute(root).map_err(|_| Error::UnsafePath)?;
     for part in absolute_root.ancestors() {
+        io.check()?;
         let metadata = fs::symlink_metadata(part).map_err(|_| Error::UnsafePath)?;
         if !metadata.is_dir() || metadata.file_type().is_symlink() {
             return Err(Error::UnsafePath);
@@ -225,13 +257,11 @@ pub fn preflight_dgcl_cargo_plan(
         return Err(Error::UnsafePath);
     }
     check_real_file(cargo)?;
-    if digest_validation_file(&manifest)? != plan.manifest_digest
-        || digest_validation_file(cargo)? != plan.cargo_digest
-    {
+    if io.digest(&manifest)? != plan.manifest_digest || io.digest(cargo)? != plan.cargo_digest {
         return Err(Error::StaleInput);
     }
     if let Some(spec) = &plan.connection {
-        crate::production_connection::validate_connection_source(&canonical_root, spec)?;
+        io.connection(&canonical_root, spec)?;
     }
     Ok(())
 }
@@ -369,6 +399,7 @@ pub enum DgclValidationProducerError {
     InvalidConnectionDriver,
     ConnectionNotRegistered,
     ConnectionNotObserved,
+    Resource(String),
 }
 
 /// Fields intentionally private, and no Deserialize implementation. Public
@@ -429,6 +460,42 @@ pub fn observe_dgcl_cargo_validation(
     plan: &DgclCargoValidationPlan,
     context: DgclCargoExecutionContext<'_>,
 ) -> Result<CheckedDgclCargoObservation, DgclValidationProducerError> {
+    observe_cargo_validation_io(
+        root,
+        source,
+        pipeline,
+        plan,
+        context,
+        &mut ProducerIo::Legacy,
+    )
+}
+
+pub fn observe_dgcl_cargo_validation_with_runner(
+    root: &Path,
+    source: &str,
+    pipeline: &DgclPipelineReport,
+    plan: &DgclCargoValidationPlan,
+    context: DgclCargoExecutionContext<'_>,
+    runner: &mut dyn crate::ToolProcessRunner,
+) -> Result<CheckedDgclCargoObservation, DgclValidationProducerError> {
+    observe_cargo_validation_io(
+        root,
+        source,
+        pipeline,
+        plan,
+        context,
+        &mut ProducerIo::Injected { source, runner },
+    )
+}
+
+fn observe_cargo_validation_io(
+    root: &Path,
+    source: &str,
+    pipeline: &DgclPipelineReport,
+    plan: &DgclCargoValidationPlan,
+    context: DgclCargoExecutionContext<'_>,
+    io: &mut ProducerIo<'_>,
+) -> Result<CheckedDgclCargoObservation, DgclValidationProducerError> {
     use DgclValidationProducerError as Error;
     let start = Instant::now();
     let DgclCargoExecutionContext {
@@ -447,7 +514,7 @@ pub fn observe_dgcl_cargo_validation(
     if !crate::verify_dgcl_pipeline_identity(source, pipeline) {
         return Err(Error::InvalidArtifact);
     }
-    preflight_dgcl_cargo_plan(root, pipeline, plan)?;
+    preflight_cargo_plan_io(root, pipeline, plan, io)?;
     if plan.schema_version != "epistesys-dgcl-cargo-validation-plan.v1"
         || plan.timeout_ms == 0
         || plan.timeout_ms > 120_000
@@ -507,7 +574,7 @@ pub fn observe_dgcl_cargo_validation(
         return Err(Error::InvalidLifecycle);
     }
     let root = root.canonicalize().map_err(|_| Error::UnsafePath)?;
-    let before = capture_dgcl_cargo_snapshot(&root, source, pipeline, authority)?;
+    let before = capture_cargo_snapshot_io(&root, source, pipeline, authority, io)?;
     if before.snapshot_digest != lifecycle.snapshot_digest {
         return Err(Error::StaleInput);
     }
@@ -516,9 +583,7 @@ pub fn observe_dgcl_cargo_validation(
         .canonicalize()
         .map_err(|_| Error::UnsafePath)?;
     check_real_file(&cargo)?;
-    if digest_validation_file(&manifest)? != plan.manifest_digest
-        || digest_validation_file(&cargo)? != plan.cargo_digest
-    {
+    if io.digest(&manifest)? != plan.manifest_digest || io.digest(&cargo)? != plan.cargo_digest {
         return Err(Error::StaleInput);
     }
     let manifest_text = manifest.to_str().ok_or(Error::UnsafePath)?;
@@ -527,38 +592,40 @@ pub fn observe_dgcl_cargo_validation(
             .checked_sub(start.elapsed().as_millis().min(u128::from(u64::MAX)) as u64)
             .filter(|remaining| *remaining != 0)
             .ok_or(Error::ProcessFailed)?;
-        let metadata = run_bounded_tool(BoundedToolRequest {
-            program: cargo.to_str().ok_or(Error::UnsafePath)?,
-            args: &[
-                "metadata",
-                "--format-version",
-                "1",
-                "--manifest-path",
-                manifest_text,
-                "--locked",
-                "--offline",
-            ],
-            stdin: None,
-            timeout_ms: metadata_remaining_ms,
-            stdout_limit: 1_048_576,
-            stderr_limit: 1_048_576,
-        });
-        if metadata.state != ToolRunState::Observed
-            || metadata.exit_code != Some(0)
-            || metadata.timed_out
-            || metadata.stdout_truncated
-            || metadata.stderr_truncated
-            || metadata.executable_sha256.as_deref() != Some(plan.cargo_digest.as_str())
-            || !crate::production_connection::metadata_matches(
-                &metadata.stdout,
-                &root,
-                &manifest,
-                spec,
-            )
-        {
-            return Err(Error::ConnectionNotObserved);
-        }
-        Some(metadata)
+        let metadata = io.tool(
+            BoundedToolRequest {
+                program: cargo.to_str().ok_or(Error::UnsafePath)?,
+                args: &[
+                    "metadata",
+                    "--format-version",
+                    "1",
+                    "--manifest-path",
+                    manifest_text,
+                    "--locked",
+                    "--offline",
+                ],
+                stdin: None,
+                timeout_ms: metadata_remaining_ms,
+                stdout_limit: 1_048_576,
+                stderr_limit: 1_048_576,
+            },
+            |metadata, stdout, _| {
+                if metadata.state != ToolRunState::Observed
+                    || metadata.exit_code != Some(0)
+                    || metadata.timed_out
+                    || metadata.stdout_truncated
+                    || metadata.stderr_truncated
+                    || metadata.executable_sha256.as_deref() != Some(plan.cargo_digest.as_str())
+                    || !crate::production_connection::metadata_matches(
+                        stdout, &root, &manifest, spec,
+                    )
+                {
+                    return Err(Error::ConnectionNotObserved);
+                }
+                Ok(metadata.clone())
+            },
+        )?;
+        Some(metadata?)
     } else {
         None
     };
@@ -627,34 +694,39 @@ pub fn observe_dgcl_cargo_validation(
     } else if plan.kind == CodingEvidenceKind::RuntimeValidation {
         args.extend(["--", "--test-threads=1"]);
     }
-    let process = run_bounded_tool(BoundedToolRequest {
-        program: cargo.to_str().ok_or(Error::UnsafePath)?,
-        args: &args,
-        stdin: None,
-        timeout_ms: remaining_ms,
-        stdout_limit: 1_048_576,
-        stderr_limit: 1_048_576,
-    });
-    if process.state != ToolRunState::Observed
-        || process.exit_code != Some(0)
-        || process.timed_out
-        || process.stdout_truncated
-        || process.stderr_truncated
-    {
-        return Err(Error::ProcessFailed);
-    }
-    if plan.kind == CodingEvidenceKind::ProductionConnection {
-        let spec = plan.connection.as_ref().ok_or(Error::InvalidPlan)?;
-        if !crate::production_connection::connection_test_observed(&process.stdout, spec) {
-            return Err(Error::ConnectionNotObserved);
-        }
-    } else if plan.kind != CodingEvidenceKind::StaticValidation
-        && !check_cargo_test_result(plan.kind, &process.stdout)
-    {
-        return Err(Error::TestsNotObserved);
-    }
-    if digest_validation_file(&manifest)? != plan.manifest_digest
-        || digest_validation_file(&cargo)? != plan.cargo_digest
+    let process = io.tool(
+        BoundedToolRequest {
+            program: cargo.to_str().ok_or(Error::UnsafePath)?,
+            args: &args,
+            stdin: None,
+            timeout_ms: remaining_ms,
+            stdout_limit: 1_048_576,
+            stderr_limit: 1_048_576,
+        },
+        |process, stdout, _| {
+            if process.state != ToolRunState::Observed
+                || process.exit_code != Some(0)
+                || process.timed_out
+                || process.stdout_truncated
+                || process.stderr_truncated
+            {
+                return Err(Error::ProcessFailed);
+            }
+            if plan.kind == CodingEvidenceKind::ProductionConnection {
+                let spec = plan.connection.as_ref().ok_or(Error::InvalidPlan)?;
+                if !crate::production_connection::connection_test_observed(stdout, spec) {
+                    return Err(Error::ConnectionNotObserved);
+                }
+            } else if plan.kind != CodingEvidenceKind::StaticValidation
+                && !check_cargo_test_result(plan.kind, stdout)
+            {
+                return Err(Error::TestsNotObserved);
+            }
+            Ok(process.clone())
+        },
+    )??;
+    if io.digest(&manifest)? != plan.manifest_digest
+        || io.digest(&cargo)? != plan.cargo_digest
         || process.executable_sha256.as_deref() != Some(plan.cargo_digest.as_str())
     {
         return Err(Error::StaleInput);
@@ -663,7 +735,7 @@ pub fn observe_dgcl_cargo_validation(
         .now_epoch
         .checked_add(start.elapsed().as_secs())
         .ok_or(Error::InvalidPlan)?;
-    let after = capture_dgcl_cargo_snapshot(&root, source, pipeline, authority)?;
+    let after = capture_cargo_snapshot_io(&root, source, pipeline, authority, io)?;
     if after.snapshot_digest != before.snapshot_digest {
         return Err(Error::StaleInput);
     }
@@ -676,7 +748,7 @@ pub fn observe_dgcl_cargo_validation(
     }
     verify_dgcl_cargo_registration(plan, tool_verifier, observed_at_epoch)?;
     if let Some(spec) = &plan.connection {
-        crate::production_connection::validate_connection_source(&root, spec)?;
+        io.connection(&root, spec)?;
         crate::production_connection::verify_connection_registration(
             spec,
             tool_verifier,
@@ -735,11 +807,39 @@ pub fn capture_dgcl_cargo_snapshot(
     pipeline: &DgclPipelineReport,
     authority: &ExecutionPermitContext<'_>,
 ) -> Result<DgclExecutionSnapshot, DgclValidationProducerError> {
+    capture_cargo_snapshot_io(root, source, pipeline, authority, &mut ProducerIo::Legacy)
+}
+
+pub fn capture_dgcl_cargo_snapshot_with_runner(
+    root: &Path,
+    source: &str,
+    pipeline: &DgclPipelineReport,
+    authority: &ExecutionPermitContext<'_>,
+    runner: &mut dyn crate::ToolProcessRunner,
+) -> Result<DgclExecutionSnapshot, DgclValidationProducerError> {
+    capture_cargo_snapshot_io(
+        root,
+        source,
+        pipeline,
+        authority,
+        &mut ProducerIo::Injected { source, runner },
+    )
+}
+
+fn capture_cargo_snapshot_io(
+    root: &Path,
+    source: &str,
+    pipeline: &DgclPipelineReport,
+    authority: &ExecutionPermitContext<'_>,
+    io: &mut ProducerIo<'_>,
+) -> Result<DgclExecutionSnapshot, DgclValidationProducerError> {
     let mut pending = vec![root.to_path_buf()];
     let mut inputs = BTreeMap::new();
     let mut visited = 0usize;
     while let Some(directory) = pending.pop() {
+        io.check()?;
         for entry in fs::read_dir(directory).map_err(|_| DgclValidationProducerError::UnsafePath)? {
+            io.check()?;
             visited += 1;
             if visited > 16384 {
                 return Err(DgclValidationProducerError::InvalidLifecycle);
@@ -780,7 +880,7 @@ pub fn capture_dgcl_cargo_snapshot(
                 let key = validation_path_key(relative)?;
                 match inputs.entry(key) {
                     std::collections::btree_map::Entry::Vacant(entry) => {
-                        entry.insert(digest_validation_file(&path)?);
+                        entry.insert(io.digest(&path)?);
                     }
                     std::collections::btree_map::Entry::Occupied(_) => {
                         return Err(DgclValidationProducerError::UnsafePath);

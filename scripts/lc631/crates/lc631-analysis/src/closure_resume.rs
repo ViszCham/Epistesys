@@ -1,4 +1,5 @@
 use lc631_core::stable_sha256;
+use lc631_process_supervisor::{ResourceError, ResourceReservationView};
 use lc631_receipt_kernel::{
     ReceiptClass, ReceiptIssuer, ReceiptPolicy, ReceiptScope, ReceiptVerifier, ReplayGuard,
     SubjectRevision, UntrustedReceipt,
@@ -10,8 +11,11 @@ use std::path::Path;
 
 pub const DGCL_CHECKPOINT_V1_SCHEMA: &str = "epistesys-dgcl-checkpoint.v1";
 pub const DGCL_CHECKPOINT_V2_SCHEMA: &str = "epistesys-dgcl-checkpoint.v2";
-const MAX_RECORD_BYTES: u64 = 16_384;
-const MAX_RECORDS: usize = 1_000;
+pub const MAX_CHECKPOINT_RECORD_BYTES: u64 = 16_384;
+pub const MAX_CHECKPOINT_RECORDS: usize = 1_000;
+pub const MAX_CHECKPOINT_CHAIN_BYTES: usize = 16 * 1024 * 1024;
+const MAX_RECORD_BYTES: u64 = MAX_CHECKPOINT_RECORD_BYTES;
+const MAX_RECORDS: usize = MAX_CHECKPOINT_RECORDS;
 const MAX_HEAD_ANCHOR_SECONDS: u64 = 24 * 60 * 60;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -128,6 +132,117 @@ pub enum ResumeError {
     InvalidEventTransition,
     BudgetExceeded,
     ConcurrentWriter,
+    Resource(String),
+}
+
+/// A capped byte view only, not a parsed/trusted checkpoint or authority.
+pub fn read_checkpoint_record_with_resources<'a, R: std::io::Read + ?Sized>(
+    reader: &mut R,
+    source: lc631_substrate::Digest32,
+    view: &'a ResourceReservationView<'a>,
+) -> Result<crate::bounded_input::AnalysisText<'a>, ResourceError> {
+    crate::bounded_input::AnalysisText::read(reader, view, source, MAX_RECORD_BYTES as usize)
+}
+
+fn checkpoint_text<'a>(
+    path: &Path,
+    view: Option<&'a ResourceReservationView<'a>>,
+) -> Result<crate::bounded_input::TextInput<'a>, ResumeError> {
+    match view {
+        None => crate::bounded_input::legacy_text_file(path, MAX_RECORD_BYTES as usize)
+            .map(crate::bounded_input::TextInput::Legacy)
+            .map_err(|_| ResumeError::CorruptCheckpoint),
+        Some(view) => {
+            let mut file = File::open(path).map_err(|_| ResumeError::Io)?;
+            read_checkpoint_record_with_resources(&mut file, view.source_revision(), view)
+                .map(crate::bounded_input::TextInput::Reserved)
+                .map_err(resume_resource)
+        }
+    }
+}
+fn resume_resource(error: ResourceError) -> ResumeError {
+    ResumeError::Resource(format!("{error:?}"))
+}
+fn check_view(view: Option<&ResourceReservationView<'_>>) -> Result<(), ResumeError> {
+    if let Some(view) = view {
+        view.check().map_err(resume_resource)?;
+    }
+    Ok(())
+}
+
+fn coordination_lock(path: &Path) -> Result<bool, ResumeError> {
+    if !matches!(
+        path.file_name().and_then(|name| name.to_str()),
+        Some(".writer.lock" | ".resource-owner-v1.lock")
+    ) {
+        return Ok(false);
+    }
+    let metadata = fs::symlink_metadata(path).map_err(|_| ResumeError::RootUnsafe)?;
+    if !metadata.is_file() || is_reparse(&metadata) || metadata.len() != 0 {
+        return Err(ResumeError::RootUnsafe);
+    }
+    Ok(true)
+}
+fn check_source(
+    view: &ResourceReservationView<'_>,
+    source_revision: &str,
+) -> Result<(), ResumeError> {
+    view.check().map_err(resume_resource)?;
+    let mut expected = String::from("sha256:");
+    for byte in view.source_revision().as_bytes() {
+        use std::fmt::Write as _;
+        write!(expected, "{byte:02x}").map_err(|_| ResumeError::Io)?;
+    }
+    if expected != source_revision {
+        return Err(ResumeError::StaleSource);
+    }
+    Ok(())
+}
+
+fn record_write_claim<'a>(
+    view: Option<&'a ResourceReservationView<'a>>,
+) -> Result<Option<lc631_substrate::resource::ResourceClaim<'a>>, ResumeError> {
+    use lc631_substrate::resource::{ResourceAmount, ResourceRequest};
+    let Some(view) = view else { return Ok(None) };
+    view.check().map_err(resume_resource)?;
+    let amount = ResourceAmount::checked(MAX_RECORD_BYTES).map_err(resume_resource)?;
+    view.claim_resources(&[
+        ResourceRequest::new(lc631_process_supervisor::ResourceKind::Ram, amount),
+        ResourceRequest::new(lc631_process_supervisor::ResourceKind::Disk, amount),
+    ])
+    .map(Some)
+    .map_err(resume_resource)
+}
+
+fn store_record(
+    path: &Path,
+    bytes: &[u8],
+    view: Option<&ResourceReservationView<'_>>,
+) -> Result<(), ResumeError> {
+    check_view(view)?;
+    let result = (|| {
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(path)
+            .map_err(|_| ResumeError::Io)?;
+        file.write_all(bytes).map_err(|_| ResumeError::Io)?;
+        file.sync_all().map_err(|_| ResumeError::Io)
+    })();
+    if result.is_err() {
+        if let Some(view) = view {
+            view.record_cleanup_unknown();
+        }
+    }
+    result?;
+    check_view(view)
+}
+
+#[derive(Clone, Copy)]
+pub struct CheckpointReadIdentity<'a> {
+    pub source_revision: &'a str,
+    pub plan_digest: &'a str,
+    pub authority_revision: &'a str,
 }
 
 // The root and its ancestors must be real directories. A local administrator
@@ -191,21 +306,46 @@ pub fn persist_checkpoint_head(
     verifier: &ReceiptVerifier,
     now_epoch: u64,
 ) -> Result<(), ResumeError> {
+    persist_head_io(ledger, heads, anchor, verifier, now_epoch, None)
+}
+pub fn persist_checkpoint_head_with_resources(
+    ledger: &Path,
+    heads: &Path,
+    anchor: &CheckpointHeadAnchor,
+    verifier: &ReceiptVerifier,
+    now_epoch: u64,
+    view: &ResourceReservationView<'_>,
+) -> Result<(), ResumeError> {
+    check_source(view, &anchor.source_revision)?;
+    persist_head_io(ledger, heads, anchor, verifier, now_epoch, Some(view))
+}
+fn persist_head_io(
+    ledger: &Path,
+    heads: &Path,
+    anchor: &CheckpointHeadAnchor,
+    verifier: &ReceiptVerifier,
+    now_epoch: u64,
+    view: Option<&ResourceReservationView<'_>>,
+) -> Result<(), ResumeError> {
+    let _encoding = record_write_claim(view)?;
     let heads = distinct_head_root(ledger, heads)?;
     let _lock = writer_lock(&heads)?;
-    inspect_resume_with_anchor(
+    inspect_anchor_io(
         ledger,
-        &anchor.source_revision,
-        &anchor.plan_digest,
-        &anchor.authority_revision,
+        CheckpointReadIdentity {
+            source_revision: &anchor.source_revision,
+            plan_digest: &anchor.plan_digest,
+            authority_revision: &anchor.authority_revision,
+        },
         Some(anchor),
         Some(verifier),
         now_epoch,
+        view,
     )?;
     let index = anchor
         .sequence
         .map_or(0, |sequence| sequence.saturating_add(1));
-    if let Some(previous) = read_latest_head(&heads)? {
+    if let Some(previous) = read_latest_head_io(&heads, view)? {
         if previous.source_revision != anchor.source_revision
             || previous.plan_digest != anchor.plan_digest
             || previous.authority_revision != anchor.authority_revision
@@ -227,13 +367,7 @@ pub fn persist_checkpoint_head(
         return Err(ResumeError::BudgetExceeded);
     }
     let path = heads.join(format!("head-{index:020}.json"));
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(path)
-        .map_err(|_| ResumeError::Io)?;
-    file.write_all(&bytes).map_err(|_| ResumeError::Io)?;
-    file.sync_all().map_err(|_| ResumeError::Io)
+    store_record(&path, &bytes, view)
 }
 
 pub fn load_checkpoint_head(
@@ -262,6 +396,37 @@ fn load_checkpoint_head_inner(
     now_epoch: u64,
     historical: bool,
 ) -> Result<CheckpointHeadAnchor, ResumeError> {
+    load_head_io(ledger, heads, verifier, now_epoch, historical, None)
+}
+
+pub fn load_checkpoint_head_with_resources(
+    ledger: &Path,
+    heads: &Path,
+    verifier: &ReceiptVerifier,
+    now_epoch: u64,
+    view: &ResourceReservationView<'_>,
+) -> Result<CheckpointHeadAnchor, ResumeError> {
+    load_head_io(ledger, heads, verifier, now_epoch, false, Some(view))
+}
+pub fn load_checkpoint_head_historical_with_resources(
+    ledger: &Path,
+    heads: &Path,
+    verifier: &ReceiptVerifier,
+    now_epoch: u64,
+    view: &ResourceReservationView<'_>,
+) -> Result<CheckpointHeadAnchor, ResumeError> {
+    load_head_io(ledger, heads, verifier, now_epoch, true, Some(view))
+}
+
+fn load_head_io(
+    ledger: &Path,
+    heads: &Path,
+    verifier: &ReceiptVerifier,
+    now_epoch: u64,
+    historical: bool,
+    view: Option<&ResourceReservationView<'_>>,
+) -> Result<CheckpointHeadAnchor, ResumeError> {
+    check_view(view)?;
     let heads = distinct_head_root(ledger, heads)?;
     let path = heads.join(".writer.lock");
     let metadata = fs::symlink_metadata(&path).map_err(|_| ResumeError::TrustedHeadMissing)?;
@@ -274,7 +439,10 @@ fn load_checkpoint_head_inner(
         .map_err(|_| ResumeError::Io)?;
     lock.try_lock_shared()
         .map_err(|_| ResumeError::ConcurrentWriter)?;
-    let anchor = read_latest_head(&heads)?.ok_or(ResumeError::TrustedHeadMissing)?;
+    let anchor = read_latest_head_io(&heads, view)?.ok_or(ResumeError::TrustedHeadMissing)?;
+    if let Some(view) = view {
+        check_source(view, &anchor.source_revision)?;
+    }
     if historical && now_epoch < anchor.issued_at_epoch {
         return Err(ResumeError::TrustedHeadExpired);
     }
@@ -293,11 +461,16 @@ fn load_checkpoint_head_inner(
     Ok(anchor)
 }
 
-fn read_latest_head(root: &Path) -> Result<Option<CheckpointHeadAnchor>, ResumeError> {
+fn read_latest_head_io(
+    root: &Path,
+    view: Option<&ResourceReservationView<'_>>,
+) -> Result<Option<CheckpointHeadAnchor>, ResumeError> {
+    check_view(view)?;
     let mut paths = Vec::new();
     for entry in fs::read_dir(root).map_err(|_| ResumeError::Io)? {
+        check_view(view)?;
         let path = entry.map_err(|_| ResumeError::Io)?.path();
-        if path.file_name().and_then(|name| name.to_str()) == Some(".writer.lock") {
+        if coordination_lock(&path)? {
             continue;
         }
         if paths.len() >= MAX_RECORDS {
@@ -308,6 +481,7 @@ fn read_latest_head(root: &Path) -> Result<Option<CheckpointHeadAnchor>, ResumeE
     paths.sort();
     let mut latest: Option<CheckpointHeadAnchor> = None;
     for path in paths {
+        check_view(view)?;
         let metadata = fs::symlink_metadata(&path).map_err(|_| ResumeError::Io)?;
         if !metadata.is_file()
             || is_reparse(&metadata)
@@ -316,9 +490,13 @@ fn read_latest_head(root: &Path) -> Result<Option<CheckpointHeadAnchor>, ResumeE
         {
             return Err(ResumeError::TrustedHeadInvalid);
         }
-        let anchor: CheckpointHeadAnchor =
-            serde_json::from_slice(&fs::read(&path).map_err(|_| ResumeError::Io)?)
-                .map_err(|_| ResumeError::TrustedHeadInvalid)?;
+        let input = checkpoint_text(&path, view)?;
+        let anchor: CheckpointHeadAnchor = serde_json::from_str(
+            input
+                .as_str()
+                .map_err(|_| ResumeError::TrustedHeadInvalid)?,
+        )
+        .map_err(|_| ResumeError::TrustedHeadInvalid)?;
         let index = anchor
             .sequence
             .map_or(0, |sequence| sequence.saturating_add(1));
@@ -367,9 +545,31 @@ pub fn persist_checkpoint_head_renewal(
     verifier: &ReceiptVerifier,
     now_epoch: u64,
 ) -> Result<(), ResumeError> {
+    persist_renewal_io(ledger, heads, renewed, verifier, now_epoch, None)
+}
+pub fn persist_checkpoint_head_renewal_with_resources(
+    ledger: &Path,
+    heads: &Path,
+    renewed: &CheckpointHeadAnchor,
+    verifier: &ReceiptVerifier,
+    now_epoch: u64,
+    view: &ResourceReservationView<'_>,
+) -> Result<(), ResumeError> {
+    check_source(view, &renewed.source_revision)?;
+    persist_renewal_io(ledger, heads, renewed, verifier, now_epoch, Some(view))
+}
+fn persist_renewal_io(
+    ledger: &Path,
+    heads: &Path,
+    renewed: &CheckpointHeadAnchor,
+    verifier: &ReceiptVerifier,
+    now_epoch: u64,
+    view: Option<&ResourceReservationView<'_>>,
+) -> Result<(), ResumeError> {
+    let _encoding = record_write_claim(view)?;
     let heads = distinct_head_root(ledger, heads)?;
     let _lock = writer_lock(&heads)?;
-    let previous = read_latest_head(&heads)?.ok_or(ResumeError::TrustedHeadMissing)?;
+    let previous = read_latest_head_io(&heads, view)?.ok_or(ResumeError::TrustedHeadMissing)?;
     verify_checkpoint_head_anchor(
         &previous,
         verifier,
@@ -384,26 +584,27 @@ pub fn persist_checkpoint_head_renewal(
     {
         return Err(ResumeError::SequenceMismatch);
     }
-    inspect_resume_with_anchor(
+    inspect_anchor_io(
         ledger,
-        &renewed.source_revision,
-        &renewed.plan_digest,
-        &renewed.authority_revision,
+        CheckpointReadIdentity {
+            source_revision: &renewed.source_revision,
+            plan_digest: &renewed.plan_digest,
+            authority_revision: &renewed.authority_revision,
+        },
         Some(renewed),
         Some(verifier),
         now_epoch,
+        view,
     )?;
     let bytes = serde_json::to_vec(renewed).map_err(|_| ResumeError::TrustedHeadInvalid)?;
     if bytes.len() as u64 > MAX_RECORD_BYTES {
         return Err(ResumeError::BudgetExceeded);
     }
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(heads.join(checkpoint_head_renewal_name(renewed)))
-        .map_err(|_| ResumeError::Io)?;
-    file.write_all(&bytes).map_err(|_| ResumeError::Io)?;
-    file.sync_all().map_err(|_| ResumeError::Io)
+    store_record(
+        &heads.join(checkpoint_head_renewal_name(renewed)),
+        &bytes,
+        view,
+    )
 }
 
 pub fn issue_checkpoint_head_anchor(
@@ -478,7 +679,47 @@ pub fn inspect_resume_with_anchor(
     verifier: Option<&ReceiptVerifier>,
     now_epoch: u64,
 ) -> Result<ResumeObservation, ResumeError> {
-    let mut observation = inspect_resume(root, source_revision, plan_digest, authority_revision)?;
+    inspect_anchor_io(
+        root,
+        CheckpointReadIdentity {
+            source_revision,
+            plan_digest,
+            authority_revision,
+        },
+        anchor,
+        verifier,
+        now_epoch,
+        None,
+    )
+}
+
+pub fn inspect_resume_with_anchor_with_resources(
+    root: &Path,
+    identity: CheckpointReadIdentity<'_>,
+    anchor: Option<&CheckpointHeadAnchor>,
+    verifier: Option<&ReceiptVerifier>,
+    now_epoch: u64,
+    view: &ResourceReservationView<'_>,
+) -> Result<ResumeObservation, ResumeError> {
+    check_source(view, identity.source_revision)?;
+    inspect_anchor_io(root, identity, anchor, verifier, now_epoch, Some(view))
+}
+
+fn inspect_anchor_io(
+    root: &Path,
+    identity: CheckpointReadIdentity<'_>,
+    anchor: Option<&CheckpointHeadAnchor>,
+    verifier: Option<&ReceiptVerifier>,
+    now_epoch: u64,
+    view: Option<&ResourceReservationView<'_>>,
+) -> Result<ResumeObservation, ResumeError> {
+    let CheckpointReadIdentity {
+        source_revision,
+        plan_digest,
+        authority_revision,
+    } = identity;
+    let mut observation =
+        inspect_resume_io(root, source_revision, plan_digest, authority_revision, view)?;
     let Some(anchor) = anchor else {
         return Ok(observation);
     };
@@ -502,10 +743,10 @@ pub fn inspect_resume_with_anchor(
         }
         (Some(_), None) => return Err(ResumeError::RollbackDetected),
         (Some(expected), Some(actual)) if actual < expected => {
-            return Err(ResumeError::RollbackDetected)
+            return Err(ResumeError::RollbackDetected);
         }
         (Some(expected), Some(actual)) if actual > expected => {
-            return Err(ResumeError::UnanchoredTail)
+            return Err(ResumeError::UnanchoredTail);
         }
         (None, Some(_)) => return Err(ResumeError::UnanchoredTail),
         _ => return Err(ResumeError::TrustedHeadMismatch),
@@ -526,18 +767,50 @@ pub fn inspect_resume_with_historical_anchor(
     verifier: Option<&ReceiptVerifier>,
     now_epoch: u64,
 ) -> Result<ResumeObservation, ResumeError> {
+    inspect_historical_io(
+        root,
+        CheckpointReadIdentity {
+            source_revision,
+            plan_digest,
+            authority_revision,
+        },
+        anchor,
+        verifier,
+        now_epoch,
+        None,
+    )
+}
+
+pub fn inspect_resume_with_historical_anchor_with_resources(
+    root: &Path,
+    identity: CheckpointReadIdentity<'_>,
+    anchor: Option<&CheckpointHeadAnchor>,
+    verifier: Option<&ReceiptVerifier>,
+    now_epoch: u64,
+    view: &ResourceReservationView<'_>,
+) -> Result<ResumeObservation, ResumeError> {
+    check_source(view, identity.source_revision)?;
+    inspect_historical_io(root, identity, anchor, verifier, now_epoch, Some(view))
+}
+fn inspect_historical_io(
+    root: &Path,
+    identity: CheckpointReadIdentity<'_>,
+    anchor: Option<&CheckpointHeadAnchor>,
+    verifier: Option<&ReceiptVerifier>,
+    now_epoch: u64,
+    view: Option<&ResourceReservationView<'_>>,
+) -> Result<ResumeObservation, ResumeError> {
     let anchor = anchor.ok_or(ResumeError::TrustedHeadMissing)?;
     if now_epoch < anchor.issued_at_epoch {
         return Err(ResumeError::TrustedHeadExpired);
     }
-    let mut observation = inspect_resume_with_anchor(
+    let mut observation = inspect_anchor_io(
         root,
-        source_revision,
-        plan_digest,
-        authority_revision,
+        identity,
         Some(anchor),
         verifier,
         anchor.issued_at_epoch,
+        view,
     )?;
     observation.integrity_state = CheckpointIntegrityState::HistoricalHeadMatched;
     observation.retry_permitted_by_prior_result = false;
@@ -628,23 +901,29 @@ fn checkpoint_head_payload_digest(
 }
 
 pub fn append_checkpoint(root: &Path, body: CheckpointBody) -> Result<String, ResumeError> {
+    append_checkpoint_io(root, body, None)
+}
+pub fn append_checkpoint_with_resources(
+    root: &Path,
+    body: CheckpointBody,
+    view: &ResourceReservationView<'_>,
+) -> Result<String, ResumeError> {
+    check_source(view, &body.source_revision)?;
+    append_checkpoint_io(root, body, Some(view))
+}
+fn append_checkpoint_io(
+    root: &Path,
+    body: CheckpointBody,
+    view: Option<&ResourceReservationView<'_>>,
+) -> Result<String, ResumeError> {
+    let _encoding = record_write_claim(view)?;
     check_root(root)?;
     let root = checked_directory(root)?;
     let _lock = writer_lock(&root)?;
-    if !checkpoint_schema_matches(&body)
-        || body.action_key.trim().is_empty()
-        || body.action_key.len() > 1_024
-        || body.action_key.chars().any(char::is_control)
-        || !valid_digest(&body.source_revision)
-        || !valid_digest(&body.plan_digest)
-        || body.authority_revision.is_empty()
-        || body.authority_revision.len() > 512
-        || body.authority_revision.chars().any(char::is_control)
-        || !event_result_is_valid(&body)
-    {
+    if !checkpoint_body_fields_valid(&body) {
         return Err(ResumeError::CorruptCheckpoint);
     }
-    let latest = read_latest(&root)?;
+    let latest = read_latest_io(&root, view)?;
     match latest {
         Some((previous, digest)) => {
             if body.sequence != previous.sequence + 1
@@ -674,7 +953,7 @@ pub fn append_checkpoint(root: &Path, body: CheckpointBody) -> Result<String, Re
             }
         }
         None if body.sequence != 0 || body.parent_digest.is_some() => {
-            return Err(ResumeError::SequenceMismatch)
+            return Err(ResumeError::SequenceMismatch);
         }
         None => {}
     }
@@ -689,13 +968,7 @@ pub fn append_checkpoint(root: &Path, body: CheckpointBody) -> Result<String, Re
         return Err(ResumeError::BudgetExceeded);
     }
     let target = root.join(format!("checkpoint-{:020}.json", body.sequence));
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&target)
-        .map_err(|_| ResumeError::Io)?;
-    file.write_all(&encoded).map_err(|_| ResumeError::Io)?;
-    file.sync_all().map_err(|_| ResumeError::Io)?;
+    store_record(&target, &encoded, view)?;
     Ok(digest)
 }
 
@@ -705,6 +978,88 @@ pub fn inspect_resume(
     plan_digest: &str,
     authority_revision: &str,
 ) -> Result<ResumeObservation, ResumeError> {
+    inspect_resume_io(root, source_revision, plan_digest, authority_revision, None)
+}
+
+pub fn inspect_resume_with_resources(
+    root: &Path,
+    source_revision: &str,
+    plan_digest: &str,
+    authority_revision: &str,
+    view: &ResourceReservationView<'_>,
+) -> Result<ResumeObservation, ResumeError> {
+    check_source(view, source_revision)?;
+    inspect_resume_io(
+        root,
+        source_revision,
+        plan_digest,
+        authority_revision,
+        Some(view),
+    )
+}
+
+/// Inspect a caller-supplied ordered sequence of legacy checkpoint bytes.
+/// This read-only path performs no filesystem I/O, restores no completion, and
+/// always returns Unanchored; callers must freshly validate current tools,
+/// authority and any external head before acting on the observation.
+pub fn inspect_checkpoint_record_bytes(
+    records: &[&[u8]],
+    identity: CheckpointReadIdentity<'_>,
+) -> Result<ResumeObservation, ResumeError> {
+    if records.len() > MAX_RECORDS {
+        return Err(ResumeError::BudgetExceeded);
+    }
+    let mut total_bytes = 0_usize;
+    for bytes in records {
+        if bytes.is_empty() {
+            return Err(ResumeError::CorruptCheckpoint);
+        }
+        if u64::try_from(bytes.len()).map_err(|_| ResumeError::BudgetExceeded)? > MAX_RECORD_BYTES {
+            return Err(ResumeError::BudgetExceeded);
+        }
+        total_bytes = total_bytes
+            .checked_add(bytes.len())
+            .filter(|total| *total <= MAX_CHECKPOINT_CHAIN_BYTES)
+            .ok_or(ResumeError::BudgetExceeded)?;
+    }
+    if records.is_empty() {
+        return Ok(empty_observation());
+    }
+
+    let mut chain = CheckpointChainState::default();
+
+    for (index, bytes) in records.iter().enumerate() {
+        let raw = std::str::from_utf8(bytes).map_err(|_| ResumeError::CorruptCheckpoint)?;
+        let stored = parse_checkpoint_record(raw)?;
+        chain.observe(&stored, index, Some(identity))?;
+    }
+
+    let Some(body) = chain.prior_body else {
+        return Ok(empty_observation());
+    };
+    let digest = chain.prior_digest.ok_or(ResumeError::ChainMismatch)?;
+    Ok(ResumeObservation {
+        integrity_state: CheckpointIntegrityState::Unanchored,
+        latest_sequence: Some(body.sequence),
+        latest_digest: Some(digest),
+        latest_delivery: Some(body.delivery),
+        latest_event_kind: Some(body.event_kind),
+        retry_permitted_by_prior_result: body.event_kind == CheckpointEventKind::ActionObserved
+            && body.delivery == DeliveryState::ConfirmedFailed,
+        fresh_revalidation_required: true,
+        authority_created: false,
+        completion_restored: false,
+    })
+}
+
+fn inspect_resume_io(
+    root: &Path,
+    source_revision: &str,
+    plan_digest: &str,
+    authority_revision: &str,
+    view: Option<&ResourceReservationView<'_>>,
+) -> Result<ResumeObservation, ResumeError> {
+    check_view(view)?;
     match fs::symlink_metadata(root) {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             return Ok(empty_observation());
@@ -715,7 +1070,7 @@ pub fn inspect_resume(
         }
         Ok(_) => {}
     }
-    let latest = read_latest(root)?;
+    let latest = read_latest_io(root, view)?;
     if let Some((body, digest)) = latest {
         if body.source_revision != source_revision {
             return Err(ResumeError::StaleSource);
@@ -773,6 +1128,21 @@ fn event_result_is_valid(body: &CheckpointBody) -> bool {
                 && body.result_digest.as_deref().is_some_and(valid_digest)
         }
     }
+}
+
+/// Shared writer/read validation for fields that cannot be trusted merely
+/// because a body digest was recalculated by its caller.
+fn checkpoint_body_fields_valid(body: &CheckpointBody) -> bool {
+    checkpoint_schema_matches(body)
+        && !body.action_key.trim().is_empty()
+        && body.action_key.len() <= 1_024
+        && !body.action_key.chars().any(char::is_control)
+        && valid_digest(&body.source_revision)
+        && valid_digest(&body.plan_digest)
+        && !body.authority_revision.is_empty()
+        && body.authority_revision.len() <= 512
+        && !body.authority_revision.chars().any(char::is_control)
+        && event_result_is_valid(body)
 }
 
 fn checkpoint_schema_matches(body: &CheckpointBody) -> bool {
@@ -835,20 +1205,29 @@ fn check_root(root: &Path) -> Result<(), ResumeError> {
     Ok(())
 }
 
-fn read_latest(root: &Path) -> Result<Option<(CheckpointBody, String)>, ResumeError> {
+fn read_latest_io(
+    root: &Path,
+    view: Option<&ResourceReservationView<'_>>,
+) -> Result<Option<(CheckpointBody, String)>, ResumeError> {
+    check_view(view)?;
+    let root = checked_directory(root)?;
     let mut paths = Vec::new();
-    for entry in fs::read_dir(root).map_err(|_| ResumeError::Io)? {
+    for entry in fs::read_dir(&root).map_err(|_| ResumeError::Io)? {
+        check_view(view)?;
+        let path = entry.map_err(|_| ResumeError::Io)?.path();
+        if coordination_lock(&path)? {
+            continue;
+        }
         if paths.len() >= MAX_RECORDS {
             return Err(ResumeError::BudgetExceeded);
         }
-        paths.push(entry.map_err(|_| ResumeError::Io)?.path());
+        paths.push(path);
     }
-    paths.retain(|path| path.file_name().and_then(|name| name.to_str()) != Some(".writer.lock"));
     paths.sort();
-    let mut prior = None::<String>;
-    let mut prior_schema = None::<String>;
+    let mut chain = CheckpointChainState::default();
     let mut latest = None;
     for (index, path) in paths.into_iter().enumerate() {
+        check_view(view)?;
         let expected_name = format!("checkpoint-{index:020}.json");
         if path.file_name().and_then(|name| name.to_str()) != Some(expected_name.as_str()) {
             return Err(ResumeError::CorruptCheckpoint);
@@ -861,28 +1240,97 @@ fn read_latest(root: &Path) -> Result<Option<(CheckpointBody, String)>, ResumeEr
         {
             return Err(ResumeError::CorruptCheckpoint);
         }
-        let raw = fs::read_to_string(path).map_err(|_| ResumeError::CorruptCheckpoint)?;
-        let stored: StoredCheckpoint =
-            serde_json::from_str(&raw).map_err(|_| ResumeError::CorruptCheckpoint)?;
-        if !checkpoint_schema_matches(&stored.body)
-            || prior_schema
-                .as_deref()
-                .is_some_and(|schema| schema != stored.body.schema_version)
-            || stored.body.sequence != index as u64
-            || stored.body.parent_digest != prior
-        {
-            return Err(ResumeError::ChainMismatch);
-        }
-        prior_schema = Some(stored.body.schema_version.clone());
-        let canonical =
-            serde_json::to_string(&stored.body).map_err(|_| ResumeError::CorruptCheckpoint)?;
-        if stored.digest != stable_sha256(&canonical) {
-            return Err(ResumeError::ChainMismatch);
-        }
-        prior = Some(stored.digest.clone());
+        let input = checkpoint_text(&path, view)?;
+        let raw = input.as_str().map_err(|_| ResumeError::CorruptCheckpoint)?;
+        let stored = parse_checkpoint_record(raw)?;
+        chain.observe(&stored, index, None)?;
         latest = Some((stored.body, stored.digest));
     }
     Ok(latest)
+}
+
+/// Shared legacy-wire parser for filesystem and in-memory read-only callers.
+/// It preserves the v1/v2 schema and verifies the historical canonical body
+/// digest; it emits no fresh authority or external-head result.
+fn parse_checkpoint_record(raw: &str) -> Result<StoredCheckpoint, ResumeError> {
+    let stored: StoredCheckpoint =
+        serde_json::from_str(raw).map_err(|_| ResumeError::CorruptCheckpoint)?;
+    if !checkpoint_schema_matches(&stored.body) {
+        return Err(ResumeError::ChainMismatch);
+    }
+    if !checkpoint_body_fields_valid(&stored.body) {
+        return Err(ResumeError::CorruptCheckpoint);
+    }
+    let canonical =
+        serde_json::to_string(&stored.body).map_err(|_| ResumeError::CorruptCheckpoint)?;
+    if stored.digest != stable_sha256(&canonical) {
+        return Err(ResumeError::ChainMismatch);
+    }
+    Ok(stored)
+}
+
+/// Shared ordered-chain validator for filesystem and caller-supplied byte
+/// records. The optional identity adds a current-source/plan/authority check;
+/// both routes retain schema, digest, sequence, parent, scope and event-state
+/// failures before producing a read-only observation.
+#[derive(Default)]
+struct CheckpointChainState {
+    prior_digest: Option<String>,
+    prior_schema: Option<String>,
+    prior_body: Option<CheckpointBody>,
+}
+
+impl CheckpointChainState {
+    fn observe(
+        &mut self,
+        stored: &StoredCheckpoint,
+        index: usize,
+        identity: Option<CheckpointReadIdentity<'_>>,
+    ) -> Result<(), ResumeError> {
+        let body = &stored.body;
+        let expected_sequence = u64::try_from(index).map_err(|_| ResumeError::BudgetExceeded)?;
+        if body.sequence != expected_sequence
+            || body.parent_digest != self.prior_digest
+            || self
+                .prior_schema
+                .as_deref()
+                .is_some_and(|schema| schema != body.schema_version)
+        {
+            return Err(ResumeError::ChainMismatch);
+        }
+        if let Some(identity) = identity {
+            if body.source_revision != identity.source_revision {
+                return Err(ResumeError::StaleSource);
+            }
+            if body.plan_digest != identity.plan_digest {
+                return Err(ResumeError::StalePlan);
+            }
+            if body.authority_revision != identity.authority_revision {
+                return Err(ResumeError::AuthorityChanged);
+            }
+        }
+        if let Some(previous) = self.prior_body.as_ref() {
+            if previous.source_revision != body.source_revision {
+                return Err(ResumeError::StaleSource);
+            }
+            if previous.plan_digest != body.plan_digest {
+                return Err(ResumeError::StalePlan);
+            }
+            if previous.authority_revision != body.authority_revision {
+                return Err(ResumeError::AuthorityChanged);
+            }
+            if previous.action_key == body.action_key {
+                validate_event_transition(previous, body)?;
+            } else if previous.delivery == DeliveryState::UnknownDelivery {
+                return Err(ResumeError::UnknownDelivery);
+            }
+        }
+
+        self.prior_schema = Some(body.schema_version.clone());
+        self.prior_digest = Some(stored.digest.clone());
+        self.prior_body = Some(body.clone());
+        Ok(())
+    }
 }
 
 fn valid_digest(value: &str) -> bool {

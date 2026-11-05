@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "epistesys-canonical-summary.v1",
+  "title": "Bounded canonical command summary; not completion or delivery evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "status", "missing_stage", "task", "source_bytes",
+    "source_digest", "implementation_complete", "authority_created", "host_delivery_observed"
+  ],
+  "properties": {
+    "schema_version": { "const": "epistesys-canonical-summary.v1" },
+    "status": { "enum": ["not_connected", "needs_evidence", "clarify", "hold", "conflict"] },
+    "missing_stage": {
+      "enum": [null, "context_lowering", "solver_portfolio", "measurement", "selection", "host_observation", "artifact_store_capability"]
+    },
+    "task": { "enum": [null, "mathematics", "reasoning", "explanation", "coding", "media"] },
+    "source_bytes": { "type": ["integer", "null"], "minimum": 1, "maximum": 262144 },
+    "source_digest": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+    "implementation_complete": { "const": false },
+    "authority_created": { "const": false },
+    "host_delivery_observed": { "const": false }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "not_connected" } } },
+      "then": { "properties": { "missing_stage": { "type": "string" } } },
+      "else": { "properties": { "missing_stage": { "type": "null" } } }
+    },
+    {
+      "oneOf": [
+        {
+          "properties": {
+            "status": { "const": "not_connected" },
+            "missing_stage": { "const": "artifact_store_capability" },
+            "task": { "type": "null" },
+            "source_bytes": { "type": "null" },
+            "source_digest": { "type": "null" }
+          }
+        },
+        {
+          "properties": {
+            "missing_stage": { "not": { "const": "artifact_store_capability" } },
+            "task": { "type": "string" },
+            "source_bytes": { "type": "integer" },
+            "source_digest": { "type": "string" }
+          }
+        }
+      ]
+    }
+  ]
+}

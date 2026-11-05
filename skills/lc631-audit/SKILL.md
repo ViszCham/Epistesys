@@ -1,11 +1,13 @@
 ---
 name: lc631-audit
-description: Audit Epistesys 6.3.2-alpha.3 inherited closure levels, accelerator receipts, media authority, and promotion blockers.
+description: Audit Epistesys 6.9.0-beta.1 inherited closure levels, accelerator receipts, media authority, and promotion blockers.
 ---
 
 # Epistesys Audit
 
 ## 日本語
+
+Beta 6.9は未完成のsource保存版です。このfacadeはこの版を選択した場合の手順であり、既存hostのplugin更新・配布準備・全接続完了を意味しません。
 
 最小の該当commandだけを実行します。
 
@@ -25,6 +27,8 @@ Declared、Typed、Reachable、Executed、Consumed、Contained、HostBoundを分
 ---
 
 ## English
+
+Beta 6.9 is an unfinished source checkpoint. This facade describes use of this selected version; it does not establish plugin updates in an existing host, distribution readiness, or end-to-end completion.
 
 Run the narrowest applicable command:
 

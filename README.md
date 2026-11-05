@@ -10,14 +10,18 @@ Epistesys（エピステシス）は、AIシステムの**要求管理、実行�
 
 | 項目 | 現在の状態 |
 | --- | --- |
-| バージョン | `6.3.2-alpha.3` |
+| バージョン | **Beta 6.9 — `6.9.0-beta.1`**（開発途中のソース保存版） |
 | 実装の由来 | Labyrinth-Codex v6.3.1の選択source snapshotに、DGCLの構文解析・検証・修復経路を追加 |
-| ソース検証 | [alpha.3検証記録](validation/epr-release-verification-2026-10-27.md)に昇格前・昇格後のgateを分離。alpha.2の[履歴的な最終検証](validation/epia2-alpha2-release-verification-2026-10-02.md)は保持し、最終readinessは最新記録で確認する |
+| ソース検証 | 今回の状態は[Beta 6.9保存記録](docs/epistesys-6.9.0-beta.1-source-snapshot-2026-11-05.md)をご覧ください。全体監査とrelease gateは未完了です。[alpha.3検証記録](validation/epr-release-verification-2026-10-27.md)と[alpha.2の最終検証](validation/epia2-alpha2-release-verification-2026-10-02.md)は履歴であり、この版の合格結果には読み替えません |
 | 配布 | source-only。モデルweight、秘密鍵、個人設定、未監査の配布binaryを同梱しない |
 | ホスト接続 | adapter・receipt・replayの実装を含む。実ホストのcallback／delivery観測は`PendingHostObservation` |
 | 研究評価 | Epistesys固有の効果と独立評価は未実施。独立gold corpusは`PendingNoCorpus` |
 
-ソース経路の局所検証は、任意指示の意味的正確性、ハルシネーション抑制、長期対話の性能を実証するものではありません。現在のalphaは長期研究の基盤実装であり、研究目標の達成版ではありません。Epistesys-7はこの版の範囲外です。
+ソース経路の局所検証は、任意指示の意味的正確性、ハルシネーション抑制、長期対話の性能を実証するものではありません。Beta 6.9は、現在の実装を一度保存するための中間スナップショットです。完成・配布準備・host activationを示す版ではありません。Alpha.3は[独立した保守ブランチ](https://github.com/ViszCham/Epistesys/tree/main-alpha.3)に残し、全接続の監査と修復は後続のBeta-7.0に向けて続けます。
+
+### TLCXで追加中の実装
+
+現在のsourceには、型付き文脈の再構成、複数の有限論理profile、四記録のTranslationLoss、原案F1/F2に対応するS_Creative算術、バイナリ状態・journal、資源所有権、Coding・Media・hostへの接続作業を含めています。これらは単なる設計名の追加ではなく、sourceと試験コードを伴う変更です。ただし、未登録・未接続の経路や未確定の試験も残っています。数式と完了条件は[測定契約](docs/tlcx-tl-screative-measurement-contract-v1-2026-10-29.md)、依存順は[実装ロードマップ](docs/epistesys-tlcx-contextual-multilogic-loss-creativity-roadmap-2026-10-28.md)で確認できます。
 
 ### 制御対象とアーキテクチャ
 
@@ -36,7 +40,7 @@ Epistesys（エピステシス）は、AIシステムの**要求管理、実行�
 
 **DGCL**はDeepGrammarからCodingの要求別完了判定までを接続する経路です。未知の条件の真偽や未対応文法を推測で補わず、`Unsupported`／`Unresolved`／`Ambiguous`として保持します。外部モデルを使わない構成と、設定済みStanza構成を区別します。
 
-alpha.2は、実ファイル修復、非上書きbackup、最大4回を上限とするSDK repair coordinator、writer lock、ledgerと別管理の署名head、状態更新を伴う離散・連続表現の蒸留、明示的consumer view v1/v2を追加しています。Rust workspaceは13 crateです。修復・再開の事前条件と検証範囲は[DGCL実行契約](docs/dgcl-operating-profile-and-closure.md)、型・境界・継承機構の詳細は[システムアーキテクチャ](docs/system-architecture.md)に整理しています。
+alpha.2は、実ファイル修復、非上書きbackup、最大4回を上限とするSDK repair coordinator、writer lock、ledgerと別管理の署名head、状態更新を伴う離散・連続表現の蒸留、明示的consumer view v1/v2を追加しています。alpha.2時点のRust workspaceは13 crateで、現在のTLCX開発sourceは16 crateです。修復・再開の事前条件と検証範囲は[DGCL実行契約](docs/dgcl-operating-profile-and-closure.md)、型・境界・継承機構の詳細は[システムアーキテクチャ](docs/system-architecture.md)に整理しています。
 
 alpha.3はEPR監査に基づき、既存経路の次の境界を強化します。
 
@@ -96,6 +100,8 @@ Epistesysを明示的に選択した場合、Coding Projectorが設計・実装�
 
 次は診断用の例です。解析結果から実行権限は発行されません。副作用を伴うverify／finalizeには明示的な`--execute`と、登録tool・外部receipt等の条件が必要です。
 
+以下のlauncher例は対応する同梱binaryがある場合の入口です。現TLCX開発sourceでは、binary欠落時に暗黙buildを行いません。source-only checkoutからの明示開発build、共用targetの指定、turn-localキャッシュの寿命は[実行ガイド](docs/execution-guide.md#不要キャッシュを作らない起動とturn境界)で確認してください。これらの開発差分は、配布・installed plugin反映を意味しません。
+
 ```powershell
 ./scripts/run-epistesys.ps1 lc631-tl-doctor --prompt "Please test the package. Do not publish."
 ./scripts/run-epistesys.ps1 lc631-world-doctor --prompt "Please test the package. Do not publish."
@@ -130,14 +136,18 @@ The failure model includes commitment of unsupported generation, omitted constra
 
 | Item | Current state |
 | --- | --- |
-| Version | `6.3.2-alpha.3` |
+| Version | **Beta 6.9 — `6.9.0-beta.1`** (unfinished source checkpoint) |
 | Implementation provenance | Selected Labyrinth-Codex v6.3.1 source snapshot with added DGCL parsing, validation, and repair paths |
-| Source verification | The [alpha.3 verification record](validation/epr-release-verification-2026-10-27.md) separates pre- and post-promotion gates; retain [historical alpha.2 verification](validation/epia2-alpha2-release-verification-2026-10-02.md) and consult the current record for final readiness |
+| Source verification | See the [Beta 6.9 snapshot record](docs/epistesys-6.9.0-beta.1-source-snapshot-2026-11-05.md) for this checkpoint. Whole-system audit and release gates are incomplete. The [alpha.3 record](validation/epr-release-verification-2026-10-27.md) and [alpha.2 final verification](validation/epia2-alpha2-release-verification-2026-10-02.md) are historical, not passing results for this version |
 | Distribution | Source-only; excludes model weights, private keys, personal settings, and unaudited distribution binaries |
 | Host integration | Includes adapter/receipt/replay implementations; real-host callback/delivery observations remain `PendingHostObservation` |
 | Research evaluation | Epistesys-specific effects and independent evaluation are pending; independent gold corpus remains `PendingNoCorpus` |
 
-Local source-path verification does not establish arbitrary-instruction semantic accuracy, hallucination containment, or long-session performance. The alpha is a baseline for long-term research, not completion of the research objectives. Epistesys-7 is outside this version.
+Local source-path verification does not establish arbitrary-instruction semantic accuracy, hallucination containment, or long-session performance. Beta 6.9 is an intermediate checkpoint of the current implementation, not completion, distribution readiness, or host activation. Alpha.3 remains on its [independent maintenance branch](https://github.com/ViszCham/Epistesys/tree/main-alpha.3), while end-to-end audit and repairs continue toward Beta-7.0.
+
+### Implementation being added through TLCX
+
+The current source includes typed context reconstruction, multiple finite-logic profiles, four-record TranslationLoss, S_Creative arithmetic matching the original F1/F2 definitions, binary state and journals, resource ownership, and Coding/Media/host integration work. These changes include source and test code rather than design labels alone. However, unregistered or disconnected paths and unresolved tests remain. The [measurement contract](docs/tlcx-tl-screative-measurement-contract-v1-2026-10-29.md) defines formulas and completion criteria; the [implementation roadmap](docs/epistesys-tlcx-contextual-multilogic-loss-creativity-roadmap-2026-10-28.md) records dependency order.
 
 ### Control scope and architecture
 
@@ -156,7 +166,7 @@ The principal dataflow is **source preservation → syntax/requirement extractio
 
 **DGCL** connects DeepGrammar to per-requirement Coding completion decisions. Unknown predicate truth and unsupported grammar remain `Unsupported`/`Unresolved`/`Ambiguous`, not guessed. No-external-model and configured-Stanza profiles are distinct.
 
-Alpha.2 adds real file repair, non-overwriting backups, an SDK repair coordinator capped at four attempts, writer locks, signed heads managed separately from ledgers, state-changing discrete/continuous distillation, and explicit consumer views v1/v2. The Rust workspace contains 13 crates. See the [DGCL execution contract](docs/dgcl-operating-profile-and-closure.md) for repair/resume prerequisites and scope; the [system architecture](docs/system-architecture.md) details types, boundaries, and inherited mechanisms.
+Alpha.2 adds real file repair, non-overwriting backups, an SDK repair coordinator capped at four attempts, writer locks, signed heads managed separately from ledgers, state-changing discrete/continuous distillation, and explicit consumer views v1/v2. The alpha.2 Rust workspace contained 13 crates; current TLCX development source contains 16. See the [DGCL execution contract](docs/dgcl-operating-profile-and-closure.md) for repair/resume prerequisites and scope; the [system architecture](docs/system-architecture.md) details types, boundaries, and inherited mechanisms.
 
 Following the EPR audit, alpha.3 strengthens these boundaries in existing paths:
 
@@ -215,6 +225,8 @@ See the [study](docs/research/gb-cc75-study.md), [methods/provenance](docs/resea
 ### Execution examples
 
 These are diagnostics; parsing does not issue execution authority. Effectful verify/finalize commands require explicit `--execute` and conditions including registered tools and external receipts.
+
+The launcher examples below require a matching packaged binary. Current TLCX development source never builds implicitly when that binary is missing. See the [execution guide](docs/execution-guide.md#launch-prevention-and-turn-local-cache-boundaries) for explicit source-checkout development builds, shared targets and turn-local cache lifetimes. These development changes do not establish distribution or installed-plugin pickup.
 
 ```powershell
 ./scripts/run-epistesys.ps1 lc631-tl-doctor --prompt "Please test the package. Do not publish."

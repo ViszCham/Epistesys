@@ -19,6 +19,10 @@ use std::collections::BTreeMap;
 use std::path::{Component, Path};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+mod effects;
+mod current_build;
+pub use effects::{DgclFileEffectOwner, DgclFileEffectPlan};
+
 pub trait DgclFileEvidenceValidator {
     /// Return newly observed receipts, not a boolean or a list of supposedly
     /// closed gaps. The driver and coordinator recompute the entire closure.
@@ -46,6 +50,8 @@ pub struct DgclFileRepairDriver<'a> {
     config: DgclFileRepairConfig<'a>,
     snapshot: DgclExecutionSnapshot,
     started: Instant,
+    runner: Option<&'a mut dyn crate::ToolProcessRunner>,
+    file_effects: Option<&'a mut dyn DgclFileEffectOwner>,
 }
 
 impl<'a> DgclFileRepairDriver<'a> {
@@ -64,7 +70,23 @@ impl<'a> DgclFileRepairDriver<'a> {
             snapshot: config.initial_snapshot.clone(),
             config,
             started: Instant::now(),
+            runner: None,
+            file_effects: None,
         })
+    }
+
+    /// An explicitly injected repair path. Failure never switches to the
+    /// compatibility snapshot producer; execution permits remain independent.
+    pub fn new_with_runner(
+        config: DgclFileRepairConfig<'a>,
+        runner: &'a mut dyn crate::ToolProcessRunner,
+        file_effects: Option<&'a mut dyn DgclFileEffectOwner>,
+    ) -> Result<Self, DgclRepairDriverError> {
+        let file_effects = file_effects.ok_or(DgclRepairDriverError::Unavailable)?;
+        let mut driver = Self::new(config)?;
+        driver.runner = Some(runner);
+        driver.file_effects = Some(file_effects);
+        Ok(driver)
     }
 
     fn now(&self) -> u64 {
@@ -83,32 +105,78 @@ impl<'a> DgclFileRepairDriver<'a> {
         permit: &'b ExecutionPermit,
         scope: &'b str,
     ) -> ExecutionPermitContext<'b> {
-        ExecutionPermitContext {
-            principal: permit.principal_binding(),
-            action: Action::Edit,
-            scope,
-            source_revision: &self.config.pipeline.source_revision,
-            authority_revision: self.config.authorization.authority_revision,
-            now_epoch: self.now(),
-            revocation_revision: self.config.authorization.revocation_revision,
-            revoked_permit_digests: self.config.authorization.revoked_permit_digests,
-            caller_origin: CallerOrigin::HostVerifiedUser,
-            trusted_host_fingerprint: self.config.authorization.trusted_host_fingerprint,
-        }
+        effects::current_authority(&self.config, self.started, permit, scope)
     }
 
     fn capture(
-        &self,
+        &mut self,
         permit: &ExecutionPermit,
         scope: &str,
     ) -> Result<DgclExecutionSnapshot, DgclRepairDriverError> {
-        capture_dgcl_cargo_snapshot(
-            self.config.root,
-            self.config.source,
-            self.config.pipeline,
-            &self.authority(permit, scope),
-        )
+        let now = self.now();
+        let config = &self.config;
+        let authority = ExecutionPermitContext {
+            principal: permit.principal_binding(),
+            action: Action::Edit,
+            scope,
+            source_revision: &config.pipeline.source_revision,
+            authority_revision: config.authorization.authority_revision,
+            now_epoch: now,
+            revocation_revision: config.authorization.revocation_revision,
+            revoked_permit_digests: config.authorization.revoked_permit_digests,
+            caller_origin: CallerOrigin::HostVerifiedUser,
+            trusted_host_fingerprint: config.authorization.trusted_host_fingerprint,
+        };
+        match self.runner.as_deref_mut() {
+            Some(runner) => crate::capture_dgcl_cargo_snapshot_with_runner(
+                config.root,
+                config.source,
+                config.pipeline,
+                &authority,
+                runner,
+            ),
+            None => {
+                capture_dgcl_cargo_snapshot(config.root, config.source, config.pipeline, &authority)
+            }
+        }
         .map_err(|_| DgclRepairDriverError::Failed)
+    }
+
+    fn read_target(
+        &mut self,
+        target: &mut lc631_process_supervisor::filesystem::AnchoredFile,
+    ) -> Result<String, DgclRepairDriverError> {
+        const CAP: usize = 1024 * 1024;
+        let bytes = match self.runner.as_deref_mut() {
+            None => target
+                .read_bounded(CAP)
+                .map_err(|_| DgclRepairDriverError::Failed)?,
+            Some(runner) => crate::process::with_input_result(
+                runner,
+                self.config.source,
+                2 * (CAP + 1),
+                |view| {
+                    use lc631_substrate::resource::{ResourceAmount, ResourceRequest};
+                    let _claim = view.claim_resources(&[ResourceRequest::new(
+                        lc631_process_supervisor::ResourceKind::Ram,
+                        ResourceAmount::checked((2 * (CAP + 1)) as u64)?,
+                    )])?;
+                    view.check()?;
+                    let bytes = target
+                        .read_bounded(CAP)
+                        .map_err(|e| lc631_process_supervisor::ResourceError::Io(e.kind()))?;
+                    view.check()?;
+                    if bytes.len() > CAP || bytes.capacity() > 2 * (CAP + 1) {
+                        return Err(lc631_process_supervisor::ResourceError::Exhausted(
+                            lc631_process_supervisor::ResourceKind::Ram,
+                        ));
+                    }
+                    Ok(bytes)
+                },
+            )
+            .map_err(|_| DgclRepairDriverError::Failed)?,
+        };
+        String::from_utf8(bytes).map_err(|_| DgclRepairDriverError::Failed)
     }
 }
 
@@ -171,9 +239,8 @@ impl DgclRepairDriver for DgclFileRepairDriver<'_> {
         if current.snapshot_digest != self.snapshot.snapshot_digest {
             return Err(fail);
         }
-        let mut target = root.open_read_write(relative).map_err(|_| fail)?;
-        let before = String::from_utf8(target.read_bounded(1024 * 1024).map_err(|_| fail)?)
-            .map_err(|_| fail)?;
+        let mut target = Some(root.open_read_write(relative).map_err(|_| fail)?);
+        let before = self.read_target(target.as_mut().ok_or(fail)?)?;
         if before.len() > 1024 * 1024 || stable_sha256(&before) != request.target_digest_before {
             return Err(fail);
         }
@@ -181,10 +248,6 @@ impl DgclRepairDriver for DgclFileRepairDriver<'_> {
         if delta > remaining_delta_bytes {
             return Err(fail);
         }
-        // Preserve recoverable preimage bytes. Never delete/overwrite backups.
-        let backups = root
-            .directory(Path::new(".dgcl-repair-backups"), true)
-            .map_err(|_| fail)?;
         let unique = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_err(|_| fail)?
@@ -195,19 +258,55 @@ impl DgclRepairDriver for DgclFileRepairDriver<'_> {
             dgcl_repair_request_digest(request)
         ));
         let backup_name = format!("{}-{unique}.backup", request.attempt);
-        let mut backup = backups
-            .create_private_file(Path::new(&backup_name))
-            .map_err(|_| fail)?;
-        backup.write_and_sync(before.as_bytes()).map_err(|_| fail)?;
-        if start.elapsed() >= remaining_time
-            || permit.validate(&self.authority(permit, &request.authorization_scope))
-                != PermitValidation::ValidGrant
-        {
-            return Err(fail);
+        let config = &self.config;
+        let driver_started = self.started;
+        let authorized = || {
+            start.elapsed() < remaining_time
+                && permit.validate(&effects::current_authority(
+                    config,
+                    driver_started,
+                    permit,
+                    &request.authorization_scope,
+                )) == PermitValidation::ValidGrant
+        };
+        let mut commit = effects::WriteCommit {
+            root: &root,
+            target: &mut target,
+            before: before.as_bytes(),
+            replacement: candidate.as_bytes(),
+            backup_name: Path::new(&backup_name),
+            authorized: &authorized,
+        };
+        if self.runner.is_some() {
+            let owner = self
+                .file_effects
+                .as_deref_mut()
+                .ok_or(DgclRepairDriverError::Unavailable)?;
+            let plan = DgclFileEffectPlan {
+                source: config.source,
+                repository_root: config.root,
+                target_relative: relative,
+                backup_relative: Path::new(&backup_name),
+                before: before.as_bytes(),
+                replacement: candidate.as_bytes(),
+            };
+            let mut calls = 0_usize;
+            let mut completed = false;
+            owner.apply(plan, &mut |view| {
+                calls = calls.saturating_add(1);
+                if calls != 1 {
+                    return Err(fail);
+                }
+                commit.write(config.source, Some(view))?;
+                completed = true;
+                Ok(())
+            })?;
+            if calls != 1 || !completed {
+                return Err(DgclRepairDriverError::Unavailable);
+            }
+        } else {
+            commit.write(config.source, None)?;
         }
-        target
-            .compare_and_write(before.as_bytes(), candidate.as_bytes())
-            .map_err(|_| fail)?;
         drop(target);
         // A post-write failure is explicitly MayHaveApplied in the coordinator.
         if start.elapsed() >= remaining_time {

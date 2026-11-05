@@ -3,6 +3,9 @@
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
+use std::num::NonZeroUsize;
+
+mod wire_text;
 
 pub const RECEIPT_SCHEMA: &str = "lc631-authenticated-receipt.v1";
 const MIN_KEY_BYTES: usize = 32;
@@ -80,7 +83,7 @@ macro_rules! checked_text {
             where
                 D: serde::Deserializer<'de>,
             {
-                Self::checked(String::deserialize(deserializer)?)
+                Self::checked(wire_text::bounded::<D, $limit>(deserializer)?)
                     .map_err(|error| serde::de::Error::custom(format!("{error:?}")))
             }
         }
@@ -94,15 +97,19 @@ checked_text!(ReceiptScope, 512);
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ReceiptClaims {
+    #[serde(deserialize_with = "wire_text::schema")]
     schema_version: String,
     issuer: PrincipalId,
     class: ReceiptClass,
     subject_revision: SubjectRevision,
     scope: ReceiptScope,
+    #[serde(deserialize_with = "wire_text::nonce")]
     nonce_hex: String,
+    #[serde(deserialize_with = "wire_text::digest")]
     payload_digest: String,
     issued_at_epoch: u64,
     expires_at_epoch: Option<u64>,
+    #[serde(default, deserialize_with = "wire_text::optional_digest")]
     parent_receipt_digest: Option<String>,
 }
 
@@ -144,12 +151,45 @@ impl ReceiptClaims {
 #[serde(deny_unknown_fields)]
 pub struct UntrustedReceipt {
     claims: ReceiptClaims,
+    #[serde(deserialize_with = "wire_text::digest")]
     mac_sha256: String,
 }
 
 impl UntrustedReceipt {
     pub fn claims(&self) -> &ReceiptClaims {
         &self.claims
+    }
+
+    /// Check wire field sizes without cloning, formatting, hashing or consuming
+    /// replay state. This is not validation of the MAC, authority or freshness.
+    pub fn check_size_bounds(&self) -> Result<(), ReceiptError> {
+        let claims = &self.claims;
+        let lengths = [
+            claims.schema_version.len(),
+            claims.issuer.as_str().len(),
+            claims.subject_revision.as_str().len(),
+            claims.scope.as_str().len(),
+            claims.nonce_hex.len(),
+            claims.payload_digest.len(),
+            claims.parent_receipt_digest.as_deref().map_or(0, str::len),
+            self.mac_sha256.len(),
+        ];
+        if lengths[0] > RECEIPT_SCHEMA.len()
+            || lengths[1] > 128
+            || lengths[2] > 256
+            || lengths[3] > 512
+            || lengths[4] > 32
+            || lengths[5] > 71
+            || lengths[6] > 71
+            || lengths[7] > 71
+            || lengths
+                .into_iter()
+                .try_fold(0_usize, usize::checked_add)
+                .is_none_or(|total| total > 2048)
+        {
+            return Err(ReceiptError::InvalidWire);
+        }
+        Ok(())
     }
 
     pub fn receipt_digest(&self) -> String {
@@ -419,16 +459,88 @@ impl ReceiptVerifier {
     }
 }
 
-#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize)]
+/// Per-instance in-memory bound for new replay observations.
+///
+/// This limit does not make replay state durable or cross-process. When the
+/// bound is reached, callers must retain the existing set and reject new
+/// observations rather than evicting a prior nonce/receipt.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ReplayCapacityPolicy {
+    max_entries: NonZeroUsize,
+}
+
+impl ReplayCapacityPolicy {
+    /// Default per-verification-context cap. The entry count is bounded; exact
+    /// allocator-node overhead and process RSS are not measured by this type.
+    pub const DEFAULT_ENTRIES: usize = 4_096;
+    /// Hard upper bound for explicitly configured in-memory replay sets.
+    pub const MAX_ENTRIES: usize = 16_384;
+
+    pub fn checked(max_entries: usize) -> Result<Self, ReceiptError> {
+        let max_entries =
+            NonZeroUsize::new(max_entries).ok_or(ReceiptError::InvalidReplayCapacity)?;
+        if max_entries.get() > Self::MAX_ENTRIES {
+            return Err(ReceiptError::InvalidReplayCapacity);
+        }
+        Ok(Self { max_entries })
+    }
+
+    pub fn max_entries(self) -> usize {
+        self.max_entries.get()
+    }
+}
+
+/// In-memory, per-instance replay state. The default uses a finite cap and
+/// rejects new receipts when full; this is not durable or cross-process replay
+/// protection. Existing nonce/receipt records are never evicted.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct ReplayGuard {
     seen_nonces: BTreeSet<String>,
     seen_receipts: BTreeSet<String>,
+    // Skip preserves the legacy serialized report fields exactly. A replay
+    // limit is local policy, never part of a receipt or authenticity claim.
+    #[serde(skip)]
+    max_entries: usize,
+}
+
+impl Default for ReplayGuard {
+    fn default() -> Self {
+        Self {
+            seen_nonces: BTreeSet::new(),
+            seen_receipts: BTreeSet::new(),
+            max_entries: ReplayCapacityPolicy::DEFAULT_ENTRIES,
+        }
+    }
 }
 
 impl ReplayGuard {
+    /// Construct a bounded in-memory replay set for a stricter task profile.
+    /// Capacity exhaustion is fail-closed and never removes a prior observation.
+    pub fn with_capacity(max_entries: usize) -> Result<Self, ReceiptError> {
+        let policy = ReplayCapacityPolicy::checked(max_entries)?;
+        Ok(Self::with_policy(policy))
+    }
+
+    pub fn with_policy(policy: ReplayCapacityPolicy) -> Self {
+        Self {
+            seen_nonces: BTreeSet::new(),
+            seen_receipts: BTreeSet::new(),
+            max_entries: policy.max_entries(),
+        }
+    }
+
+    pub fn capacity_limit(&self) -> usize {
+        self.max_entries
+    }
+
     fn check_and_record(&mut self, nonce: &str, receipt: &str) -> Result<(), ReceiptError> {
         if self.seen_nonces.contains(nonce) || self.seen_receipts.contains(receipt) {
             return Err(ReceiptError::ReplayDetected);
+        }
+        if self.seen_receipts.len() >= self.max_entries
+            || self.seen_nonces.len() >= self.max_entries
+        {
+            return Err(ReceiptError::ReplayCapacityExceeded);
         }
         self.seen_nonces.insert(nonce.to_string());
         self.seen_receipts.insert(receipt.to_string());
@@ -447,6 +559,7 @@ pub enum ReceiptError {
     InvalidDigest,
     InvalidExpiry,
     InvalidField(&'static str),
+    InvalidReplayCapacity,
     InvalidWire,
     IssuerMismatch,
     MacMismatch,
@@ -454,6 +567,7 @@ pub enum ReceiptError {
     PayloadMismatch,
     ParentMismatch,
     RandomUnavailable,
+    ReplayCapacityExceeded,
     ReplayDetected,
     ScopeMismatch,
     SubjectMismatch,
@@ -475,6 +589,7 @@ pub fn digest_bytes(value: &[u8]) -> String {
 }
 
 fn validate_wire(receipt: &UntrustedReceipt) -> Result<(), ReceiptError> {
+    receipt.check_size_bounds()?;
     let claims = &receipt.claims;
     if claims.schema_version != RECEIPT_SCHEMA
         || claims.nonce_hex.len() != 32

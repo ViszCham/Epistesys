@@ -1,0 +1,10 @@
+[package]
+name = "lc631-solvers"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+lc631-process-supervisor = { path = "../lc631-process-supervisor" }
+lc631-substrate = { path = "../lc631-substrate" }
+sha2.workspace = true

@@ -1,7 +1,15 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+/// Compile-time feature metadata, not an observed device or dispatch.
+pub const fn is_gpu_compiled() -> bool {
+    cfg!(feature = "gpu-cubecl-wgpu")
+}
+
 #[cfg(feature = "gpu-cubecl-wgpu")]
 mod gpu;
+
+/// Separate exact-grid numeric capability; does not satisfy legacy lane gates.
+pub mod semantic_pareto;
 
 use lc631_core::{
     stable_sha256, EpochId, FenceId, Generation, ReceiptId, ReceiptOwner, RevisionBinding,
@@ -1066,6 +1074,8 @@ pub struct AcceleratorBroker<B> {
     generation: Generation,
     minted: BTreeSet<ReceiptId>,
     quarantined: bool,
+    #[cfg_attr(not(feature = "gpu-cubecl-wgpu"), allow(dead_code))]
+    semantic_owner: Option<std::num::NonZeroU64>,
 }
 
 impl<B: NumericBackend> AcceleratorBroker<B> {
@@ -1078,6 +1088,7 @@ impl<B: NumericBackend> AcceleratorBroker<B> {
             generation: Generation(0),
             minted: BTreeSet::new(),
             quarantined: false,
+            semantic_owner: semantic_pareto::new_owner(),
         }
     }
 
@@ -1090,6 +1101,7 @@ impl<B: NumericBackend> AcceleratorBroker<B> {
             generation: Generation(0),
             minted: BTreeSet::new(),
             quarantined: false,
+            semantic_owner: semantic_pareto::new_owner(),
         }
     }
 

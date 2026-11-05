@@ -10,11 +10,25 @@ use lc631_core::{
 };
 use lc631_receipt_kernel::{
     ReceiptClass, ReceiptPolicy, ReceiptScope, ReceiptVerifier, ReplayGuard, SubjectRevision,
-    UntrustedReceipt,
+    UntrustedReceipt, VerifiedReceipt,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::time::{Duration, Instant};
+
+#[path = "repair_total_budget.rs"]
+mod repair_total_budget;
+pub use repair_total_budget::{
+    DgclRepairDeltaUnit, DgclRepairTotalBudgetObservation, DgclRepairTotalBudgetReport,
+};
+use repair_total_budget::{RepairTotalBudget, RepairTotalBudgetError};
+
+#[path = "repair_verified_application.rs"]
+mod repair_verified_application;
+pub use repair_verified_application::DgclVerifiedRepairApplication;
+#[path = "repair_verified_validation.rs"]
+mod repair_verified_validation;
+pub use repair_verified_validation::DgclVerifiedRepairValidation;
 
 pub const MAX_DGCL_REPAIR_ATTEMPTS: u8 = 4;
 const MAX_GAP_IDS: usize = 4_096;
@@ -175,6 +189,25 @@ pub enum DgclRepairDriverError {
 }
 
 pub trait DgclRepairDriver {
+    /// Accepted validation is not Test authority for additional probes. Failure
+    /// retains the actual effect, settled charge and accepted receipt identities,
+    /// while leaving the previous unresolved gap set unchanged.
+    fn on_verified_validation(
+        &mut self,
+        _validation: DgclVerifiedRepairValidation<'_>,
+    ) -> Result<(), DgclRepairDriverError> {
+        Ok(())
+    }
+
+    /// Observe a coordinator-checked application before total-budget settlement.
+    /// Failure does not undo the write and retains uncertain reservations.
+    fn on_verified_application(
+        &mut self,
+        _application: DgclVerifiedRepairApplication<'_>,
+    ) -> Result<(), DgclRepairDriverError> {
+        Ok(())
+    }
+
     /// Trusted adapter clock, never a timestamp from a public receipt/report.
     /// Synthetic SDK drivers can keep the supplied epoch + elapsed default.
     fn observation_epoch(&self) -> Option<u64> {
@@ -238,6 +271,28 @@ fn sample_repair_epoch(
 pub fn run_dgcl_repair_loop(
     input: DgclRepairLoopInput<'_>,
     driver: &mut dyn DgclRepairDriver,
+) -> Result<DgclRepairLoopReport, DgclRepairConfigError> {
+    run_dgcl_repair_loop_inner(input, driver, None)
+}
+
+/// Adds an explicit in-process total conservative write-size budget while
+/// preserving `input.max_delta_bytes` as the per-attempt cap. This entry is
+/// ephemeral: it neither reads checkpoints nor reconstructs a resumed budget.
+/// Pending reservations remain charged after ambiguous/unverified effects.
+pub fn run_dgcl_repair_loop_with_total_budget(
+    input: DgclRepairLoopInput<'_>,
+    driver: &mut dyn DgclRepairDriver,
+    max_total_delta_bytes: u64,
+) -> Result<DgclRepairTotalBudgetReport, DgclRepairConfigError> {
+    let mut budget = RepairTotalBudget::new(max_total_delta_bytes)?;
+    let repair = run_dgcl_repair_loop_inner(input, driver, Some(&mut budget))?;
+    Ok(budget.finish(repair))
+}
+
+fn run_dgcl_repair_loop_inner(
+    input: DgclRepairLoopInput<'_>,
+    driver: &mut dyn DgclRepairDriver,
+    mut total_budget: Option<&mut RepairTotalBudget>,
 ) -> Result<DgclRepairLoopReport, DgclRepairConfigError> {
     if !is_digest(input.source_revision) {
         return Err(DgclRepairConfigError::InvalidSourceRevision);
@@ -511,28 +566,55 @@ pub fn run_dgcl_repair_loop(
                 DgclRepairStatus::BudgetExceeded,
             ));
         }
-        attempt_record.effect_state = RepairEffectState::MayHaveApplied;
-        let application = match driver.apply(
-            request,
-            input.authorization.permit,
-            remaining,
-            input.max_delta_bytes,
-        ) {
-            Ok(application) => application,
-            Err(error) => {
-                attempt_record.reason = driver_error_reason(error);
-                attempts.push(attempt_record);
-                return Ok(repair_report(
-                    input.source_revision,
-                    input.plan_digest,
-                    initial_snapshot_digest,
-                    snapshot.snapshot_digest,
-                    attempts,
-                    current_gaps,
-                    DgclRepairStatus::Hold,
-                ));
-            }
+        let allowance = match total_budget.as_deref_mut() {
+            None => input.max_delta_bytes,
+            Some(budget) => match budget.reserve(input.max_delta_bytes) {
+                Ok(allowance) => allowance,
+                Err(error) => {
+                    let (status, reason) = match error {
+                        RepairTotalBudgetError::Exhausted => (
+                            DgclRepairStatus::BudgetExceeded,
+                            "total_delta_budget_exhausted_before_apply",
+                        ),
+                        RepairTotalBudgetError::ActiveReservation
+                        | RepairTotalBudgetError::InvalidAmount => (
+                            DgclRepairStatus::Conflict,
+                            "total_delta_budget_state_invalid_before_apply",
+                        ),
+                    };
+                    attempt_record.outcome = status;
+                    attempt_record.reason = reason;
+                    attempts.push(attempt_record);
+                    return Ok(repair_report(
+                        input.source_revision,
+                        input.plan_digest,
+                        initial_snapshot_digest,
+                        snapshot.snapshot_digest,
+                        attempts,
+                        current_gaps,
+                        status,
+                    ));
+                }
+            },
         };
+        attempt_record.effect_state = RepairEffectState::MayHaveApplied;
+        let application =
+            match driver.apply(request, input.authorization.permit, remaining, allowance) {
+                Ok(application) => application,
+                Err(error) => {
+                    attempt_record.reason = driver_error_reason(error);
+                    attempts.push(attempt_record);
+                    return Ok(repair_report(
+                        input.source_revision,
+                        input.plan_digest,
+                        initial_snapshot_digest,
+                        snapshot.snapshot_digest,
+                        attempts,
+                        current_gaps,
+                        DgclRepairStatus::Hold,
+                    ));
+                }
+            };
         attempt_record.after_snapshot_digest =
             Some(application.after_snapshot.snapshot_digest.clone());
         if started.elapsed() > input.max_wall_time {
@@ -555,7 +637,7 @@ pub fn run_dgcl_repair_loop(
             &snapshot,
             input.source_revision,
             input.plan_digest,
-        ) || application.delta_bytes > input.max_delta_bytes
+        ) || application.delta_bytes > allowance
         {
             attempt_record.outcome = DgclRepairStatus::Conflict;
             attempt_record.reason = "repair_application_binding_or_resource_limit_mismatch";
@@ -598,18 +680,60 @@ pub fn run_dgcl_repair_loop(
                 DgclRepairStatus::Conflict,
             ));
         }
-        if verify_application_receipt(
+        let (validated_receipt, accepted_application_digest) = match verify_application_receipt(
             &application,
             request,
             input.source_revision,
             input.verifier,
             input.replay,
             lifecycle_now,
-        )
-        .is_err()
+        ) {
+            Ok(accepted) => accepted,
+            Err(()) => {
+                attempt_record.outcome = DgclRepairStatus::Conflict;
+                attempt_record.reason = "repair_application_receipt_rejected";
+                attempts.push(attempt_record);
+                return Ok(repair_report(
+                    input.source_revision,
+                    input.plan_digest,
+                    initial_snapshot_digest,
+                    snapshot.snapshot_digest,
+                    attempts,
+                    current_gaps,
+                    DgclRepairStatus::Conflict,
+                ));
+            }
+        };
+        attempt_record.application_receipt_digest = Some(accepted_application_digest.clone());
+        let token = DgclVerifiedRepairApplication::new(
+            request,
+            &application,
+            &validated_receipt,
+            &accepted_application_digest,
+            lifecycle_now,
+        );
+        if driver.on_verified_application(token).is_err() {
+            attempt_record.outcome = DgclRepairStatus::Hold;
+            attempt_record.reason = "verified_application_hook_failed_effect_may_have_applied";
+            attempts.push(attempt_record);
+            return Ok(repair_report(
+                input.source_revision,
+                input.plan_digest,
+                initial_snapshot_digest,
+                snapshot.snapshot_digest,
+                attempts,
+                current_gaps,
+                DgclRepairStatus::Hold,
+            ));
+        }
+        // Only accepted application identity, current target lease and receipt
+        // permit settlement. Every earlier return retains the reservation.
+        if total_budget
+            .as_deref_mut()
+            .is_some_and(|budget| budget.settle_verified(application.delta_bytes).is_err())
         {
             attempt_record.outcome = DgclRepairStatus::Conflict;
-            attempt_record.reason = "repair_application_receipt_rejected";
+            attempt_record.reason = "verified_application_total_budget_settlement_invalid";
             attempts.push(attempt_record);
             return Ok(repair_report(
                 input.source_revision,
@@ -621,10 +745,6 @@ pub fn run_dgcl_repair_loop(
                 DgclRepairStatus::Conflict,
             ));
         }
-        attempt_record.application_receipt_digest = application
-            .attestation
-            .as_ref()
-            .map(UntrustedReceipt::receipt_digest);
         attempt_record.effect_state = RepairEffectState::ReceiptVerified;
         if !application.applied
             || application.target_digest_after == application.target_digest_before
@@ -755,18 +875,42 @@ pub fn run_dgcl_repair_loop(
                 DgclRepairStatus::Conflict,
             ));
         }
-        if verify_validation_receipt(
+        let (verified_validation, accepted_validation_digest) = match verify_validation_receipt(
             &validation,
             request,
             input.source_revision,
             input.verifier,
             input.replay,
             validation_now,
-        )
-        .is_err()
-        {
-            attempt_record.outcome = DgclRepairStatus::Conflict;
-            attempt_record.reason = "repair_validation_receipt_rejected";
+        ) {
+            Ok(accepted) => accepted,
+            Err(()) => {
+                attempt_record.outcome = DgclRepairStatus::Conflict;
+                attempt_record.reason = "repair_validation_receipt_rejected";
+                attempts.push(attempt_record);
+                return Ok(repair_report(
+                    input.source_revision,
+                    input.plan_digest,
+                    initial_snapshot_digest,
+                    snapshot.snapshot_digest,
+                    attempts,
+                    current_gaps,
+                    DgclRepairStatus::Conflict,
+                ));
+            }
+        };
+        attempt_record.validation_receipt_digest = Some(accepted_validation_digest.clone());
+        let token = DgclVerifiedRepairValidation::new(
+            request,
+            &application,
+            &validation,
+            &verified_validation,
+            &accepted_validation_digest,
+            validation_now,
+        );
+        if driver.on_verified_validation(token).is_err() {
+            attempt_record.outcome = DgclRepairStatus::Hold;
+            attempt_record.reason = "verified_validation_consumer_failed_effect_retained";
             attempts.push(attempt_record);
             return Ok(repair_report(
                 input.source_revision,
@@ -775,13 +919,39 @@ pub fn run_dgcl_repair_loop(
                 snapshot.snapshot_digest,
                 attempts,
                 current_gaps,
-                DgclRepairStatus::Conflict,
+                DgclRepairStatus::Hold,
             ));
         }
-        attempt_record.validation_receipt_digest = validation
-            .attestation
-            .as_ref()
-            .map(UntrustedReceipt::receipt_digest);
+        // Additional authorized consumers may take real time. Their completion
+        // cannot carry a previously current closure/permit across expiry or the
+        // original wall cap. Accepted receipts and the actual effect stay visible.
+        let after_consumer_now =
+            sample_repair_epoch(driver, input.authorization.now_epoch, started.elapsed());
+        let stop = if started.elapsed() > input.max_wall_time {
+            Some((DgclRepairStatus::BudgetExceeded, "verified_validation_consumer_exceeded_wall_budget"))
+        } else if !permit_authorizes_repair(
+            &input.authorization, request, input.source_revision, after_consumer_now,
+        ) {
+            Some((DgclRepairStatus::Unauthorized, "authority_expired_after_validation_consumer"))
+        } else if verified_validation.expires_at_epoch().is_some_and(|end| after_consumer_now >= end)
+            || validate_dgcl_target_lease(
+                &application.after_lease, &application.after_snapshot, &request.target_ref,
+                &application.target_digest_after, after_consumer_now,
+            ).state != DgclLifecycleState::Current
+        {
+            Some((DgclRepairStatus::Hold, "validation_or_target_expired_after_consumer"))
+        } else {
+            None
+        };
+        if let Some((status, reason)) = stop {
+            attempt_record.outcome = status;
+            attempt_record.reason = reason;
+            attempts.push(attempt_record);
+            return Ok(repair_report(
+                input.source_revision, input.plan_digest, initial_snapshot_digest,
+                snapshot.snapshot_digest, attempts, current_gaps, status,
+            ));
+        }
         current_gaps = validation.remaining_gap_ids.iter().cloned().collect();
         match validation.outcome {
             DgclRepairValidationOutcome::ImplementationClosed
@@ -1125,7 +1295,7 @@ fn verify_application_receipt(
     verifier: &ReceiptVerifier,
     replay: &mut ReplayGuard,
     now_epoch: u64,
-) -> Result<String, ()> {
+) -> Result<(VerifiedReceipt, String), ()> {
     let Some(attestation) = application.attestation.clone() else {
         return Err(());
     };
@@ -1144,7 +1314,8 @@ fn verify_application_receipt(
             replay,
         )
         .map_err(|_| ())?;
-    Ok(receipt.receipt_digest())
+    let accepted_digest = receipt.receipt_digest();
+    Ok((receipt, accepted_digest))
 }
 
 fn verify_validation_receipt(
@@ -1154,7 +1325,7 @@ fn verify_validation_receipt(
     verifier: &ReceiptVerifier,
     replay: &mut ReplayGuard,
     now_epoch: u64,
-) -> Result<String, ()> {
+) -> Result<(VerifiedReceipt, String), ()> {
     let Some(attestation) = validation.attestation.clone() else {
         return Err(());
     };
@@ -1173,7 +1344,8 @@ fn verify_validation_receipt(
             replay,
         )
         .map_err(|_| ())?;
-    Ok(receipt.receipt_digest())
+    let accepted_digest = receipt.receipt_digest();
+    Ok((receipt, accepted_digest))
 }
 
 fn repair_report(

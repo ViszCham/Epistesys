@@ -4,7 +4,12 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[features]
+default = []
+test-fixtures = []
+
 [dependencies]
+lc631-substrate = { path = "../lc631-substrate" }
 sha2.workspace = true
 
 [target.'cfg(windows)'.dependencies]

@@ -1,0 +1,127 @@
+{
+  "schema_version": "epistesys-tlcx-design-revision-chain.v1",
+  "slice": "TLCX-00",
+  "recorded_at": "2026-10-29",
+  "purpose": "Append-only binding of the initially registered TLCX design to the revised measurement contract and roadmap addendum.",
+  "baseline_registration": {
+    "path": "validation/tlcx/baseline-registration-2026-10-28.json",
+    "sha256": "6949be1c6f1c3f1e096c19aa37e8b19e36419154bf05001704dea1f33545c1b7"
+  },
+  "source_identity": {
+    "version": "6.3.2-alpha.3",
+    "commit": "1fca5165eca21011bcefd6518d3b3c9b93e17d58",
+    "tree": "fa5fffa50a4f512380b4fda2f869e0ff3ad88706"
+  },
+  "history": [
+    {
+      "revision_id": "TLCX-ROADMAP-2026-10-28",
+      "kind": "originally registered design",
+      "path": "docs/epistesys-tlcx-contextual-multilogic-loss-creativity-roadmap-2026-10-28.md",
+      "sha256": "aba6a886d28f43a84ad02c9ed781ce1666ab081869c13c00a583fd44ca17d5fc",
+      "content_available": false,
+      "content_claim": "hash_pin_only"
+    },
+    {
+      "revision_id": "TLCX-MEASUREMENT-2026-10-29-FINITE-FORMAL-V1.1",
+      "kind": "added measurement conventions; original formulas unchanged",
+      "path": "docs/tlcx-tl-screative-measurement-contract-v1-2026-10-29.md",
+      "sha256": "0fae4786111c2cb19a2c3d7746a2371df042103e2d48559ce7667260239a6e7d",
+      "operational_revision": "OperationalMeasurement/finite-formal-v1.1",
+      "original_concept_sha256": "1bd7540cbb53a907ecd84c1fe0ebbd6bcaf5d495bcf69f75170bf155db386d04",
+      "implementation_status": "specification_only"
+    },
+    {
+      "revision_id": "TLCX-ROADMAP-2026-10-29-ADDENDUM",
+      "kind": "append-only measurement-contract precedence and status clarification",
+      "path": "docs/epistesys-tlcx-contextual-multilogic-loss-creativity-roadmap-2026-10-28.md",
+      "sha256": "120e6b263d5c2dae9f65db397410a18753cfb61e66882e64df6d4ebbc05a9778"
+    },
+    {
+      "revision_id": "TLCX-MEASUREMENT-2026-10-29-FINITE-FORMAL-V1.2",
+      "kind": "adversarial numeric and definition corrections; OriginalFormula/F1-v1 and F2-v1 unchanged",
+      "path": "docs/tlcx-tl-screative-measurement-contract-v1-2026-10-29.md",
+      "sha256": "386d4012666e0a29514b3f9499987d8d49db5e9fb24e4a9066cf3e7089b29457",
+      "operational_revision": "OperationalMeasurement/finite-formal-v1.2",
+      "previous_measurement_revision_id": "TLCX-MEASUREMENT-2026-10-29-FINITE-FORMAL-V1.1",
+      "previous_measurement_revision_sha256": "0fae4786111c2cb19a2c3d7746a2371df042103e2d48559ce7667260239a6e7d",
+      "previous_revision_content_available": false,
+      "previous_revision_content_claim": "hash_pin_only",
+      "original_concept_sha256": "1bd7540cbb53a907ecd84c1fe0ebbd6bcaf5d495bcf69f75170bf155db386d04",
+      "implementation_status": "specification_only"
+    },
+    {
+      "revision_id": "TLCX-MEASUREMENT-2026-10-29-FINITE-FORMAL-V1.3",
+      "kind": "K8 endpoint-distance formula and transformation identity made explicit and bilingual; OriginalFormula/F1-v1 and F2-v1 unchanged",
+      "path": "docs/tlcx-tl-screative-measurement-contract-v1-2026-10-29.md",
+      "sha256": "7eb0a90898d1ae2f6f919aa689972e12ecf2ae32a4f6a9679a20ff4bef5b51fd",
+      "operational_revision": "OperationalMeasurement/finite-formal-v1.3",
+      "previous_measurement_revision_id": "TLCX-MEASUREMENT-2026-10-29-FINITE-FORMAL-V1.2",
+      "previous_measurement_revision_sha256": "386d4012666e0a29514b3f9499987d8d49db5e9fb24e4a9066cf3e7089b29457",
+      "previous_revision_content_available": false,
+      "previous_revision_content_claim": "hash_pin_only",
+      "original_concept_sha256": "1bd7540cbb53a907ecd84c1fe0ebbd6bcaf5d495bcf69f75170bf155db386d04",
+      "implementation_status": "specification_only"
+    },
+    {
+      "revision_id": "TLCX-ROADMAP-2026-10-29-MATH-REAUDIT",
+      "kind": "bilingual roadmap addendum reconciling the attached v1.1 mathematical audit against current v1.3 and carrying its accepted corrections into the v1.4 implementation gates",
+      "path": "docs/epistesys-tlcx-contextual-multilogic-loss-creativity-roadmap-2026-10-28.md",
+      "sha256": "2d707930bad207c1bc21e1228607d4d116b271e7d818178c192d7791c6db523d",
+      "audit_source_filename": "epistesys_tlcx_v1_1_mathematical_reaudit_2026-10-29.md",
+      "audit_source_sha256": "c4a6021dfd59303bec73f45f3d50712c33a603781e43f08526605e1c5d76f28b"
+    },
+    {
+      "revision_id": "TLCX-MEASUREMENT-2026-10-29-FINITE-FORMAL-V1.4",
+      "kind": "add dedicated nonnegative interval-square kernel and explicit union-versus-nearest scheduler novelty policies; v1.1 audit F-01 through F-03 were reconciled against current v1.3 and retained as regression goldens; OriginalFormula/F1-v1 and F2-v1 unchanged",
+      "path": "docs/tlcx-tl-screative-measurement-contract-v1-2026-10-29.md",
+      "sha256": "3d1489b7e1320e85e48458c58caad8bd4907116e0d57a277cb94bd7a95dbb7fb",
+      "operational_revision": "OperationalMeasurement/finite-formal-v1.4",
+      "previous_measurement_revision_id": "TLCX-MEASUREMENT-2026-10-29-FINITE-FORMAL-V1.3",
+      "previous_measurement_revision_sha256": "7eb0a90898d1ae2f6f919aa689972e12ecf2ae32a4f6a9679a20ff4bef5b51fd",
+      "previous_revision_content_available": false,
+      "previous_revision_content_claim": "hash_pin_only",
+      "original_concept_sha256": "1bd7540cbb53a907ecd84c1fe0ebbd6bcaf5d495bcf69f75170bf155db386d04",
+      "math_reaudit_source_sha256": "c4a6021dfd59303bec73f45f3d50712c33a603781e43f08526605e1c5d76f28b",
+      "implementation_status": "specification_only"
+    }
+  ],
+  "current_design": {
+    "revision_id": "TLCX-MEASUREMENT-2026-10-29-FINITE-FORMAL-V1.4",
+    "previous_revision_id": "TLCX-MEASUREMENT-2026-10-29-FINITE-FORMAL-V1.3",
+    "previous_revision_sha256": "7eb0a90898d1ae2f6f919aa689972e12ecf2ae32a4f6a9679a20ff4bef5b51fd",
+    "roadmap_revision_id": "TLCX-ROADMAP-2026-10-29-MATH-REAUDIT",
+    "current_roadmap_sha256": "2d707930bad207c1bc21e1228607d4d116b271e7d818178c192d7791c6db523d",
+    "roadmap": {
+      "path": "docs/epistesys-tlcx-contextual-multilogic-loss-creativity-roadmap-2026-10-28.md",
+      "sha256": "2d707930bad207c1bc21e1228607d4d116b271e7d818178c192d7791c6db523d"
+    },
+    "measurement_contract": {
+      "path": "docs/tlcx-tl-screative-measurement-contract-v1-2026-10-29.md",
+      "sha256": "3d1489b7e1320e85e48458c58caad8bd4907116e0d57a277cb94bd7a95dbb7fb",
+      "operational_revision": "OperationalMeasurement/finite-formal-v1.4",
+      "original_concept_sha256": "1bd7540cbb53a907ecd84c1fe0ebbd6bcaf5d495bcf69f75170bf155db386d04",
+      "math_reaudit_source_sha256": "c4a6021dfd59303bec73f45f3d50712c33a603781e43f08526605e1c5d76f28b"
+    },
+    "source_reading_ledger": {
+      "path": "docs/tlcx-source-reading-ledger-2026-10-28.json",
+      "sha256": "c9ce2a9561eb202980f96b0424dc92be04a449b0545b26db17022b5e13a6340f"
+    }
+  },
+  "change_summary": [
+    "Preserve the original baseline registration without overwriting its original roadmap digest.",
+    "Bind the current amended roadmap and the v1.1 operational measurement contract as later design revisions.",
+    "Do not treat a historical digest alone as proof of the unavailable prior document bytes.",
+    "Keep specification work separate from source implementation, calibration, release or host closure.",
+    "Append finite-formal-v1.2: correct numerical supremum versus outward Q enclosure, adapt K8 internal precision, synchronize JA/EN contracts, and bind cross-platform LF checkout; preserve the prior v1.1 hash.",
+    "Append finite-formal-v1.3: state the K8 rational t definition, acosh-to-atanh identity, and 2*atanh(q)/sqrt(kappa) endpoint formula consistently in Japanese and English; preserve the v1.2 snapshot hash.",
+    "Correct the v1.2 predecessor digest metadata and validate the existence, order and hash of every measurement revision predecessor.",
+    "Reconcile the attached v1.1 math re-audit against current v1.3, preserving already-corrected n_geo/K8 endpoint and uncertainty rules while adding the K4 square interval law, explicit novelty-policy IDs, and G31-G37 regressions in v1.4."
+  ],
+  "claims": {
+    "baseline_registration_mutated": false,
+    "source_implementation_completed": false,
+    "measurement_calibrated": false,
+    "formal_proof": false,
+    "real_host_bound": false
+  }
+}

@@ -11,6 +11,10 @@ use std::path::{Component, Path, PathBuf};
 #[cfg(unix)]
 #[path = "filesystem/unix.rs"]
 mod platform;
+mod readonly;
+pub use readonly::ReadOnlyAnchoredFile;
+mod binary_readonly;
+pub use binary_readonly::BinaryReadOnlyAnchoredFile;
 #[cfg(windows)]
 #[path = "filesystem/windows.rs"]
 mod platform;
@@ -24,6 +28,30 @@ pub struct FileIdentity {
 pub struct DirectoryAnchor {
     path: PathBuf,
     directories: Vec<File>,
+}
+
+#[derive(Debug)]
+enum DirectoryValidationStage {
+    Reopen,
+    AncestorCount,
+    HeldDirectoryIdentity(usize),
+    ReopenedDirectoryIdentity(usize),
+    IdentityMismatch(usize),
+}
+impl DirectoryValidationStage {
+    fn component_index(&self) -> Option<usize> {
+        match self {
+            Self::HeldDirectoryIdentity(index)
+            | Self::ReopenedDirectoryIdentity(index)
+            | Self::IdentityMismatch(index) => Some(*index),
+            Self::Reopen | Self::AncestorCount => None,
+        }
+    }
+}
+#[derive(Debug)]
+struct DirectoryValidationFailure {
+    stage: DirectoryValidationStage,
+    error: io::Error,
 }
 
 impl DirectoryAnchor {
@@ -58,6 +86,54 @@ impl DirectoryAnchor {
         &self.path
     }
 
+    /// Reopen with the existing no-follow walk and compare every held ancestor.
+    /// A mismatch is refusal, never an instruction to recreate or repair paths.
+    pub fn validate_current(&self) -> io::Result<()> {
+        self.validate_current_observed().map_err(|failure| {
+            let _component = failure.stage.component_index();
+            failure.error
+        })
+    }
+
+    fn validate_current_observed(&self) -> Result<(), DirectoryValidationFailure> {
+        let current =
+            Self::open_existing(&self.path).map_err(|error| DirectoryValidationFailure {
+                stage: DirectoryValidationStage::Reopen,
+                error,
+            })?;
+        if self.directories.is_empty() || self.directories.len() != current.directories.len() {
+            return Err(DirectoryValidationFailure {
+                stage: DirectoryValidationStage::AncestorCount,
+                error: unsafe_path(),
+            });
+        }
+        for (index, (held, reopened)) in self
+            .directories
+            .iter()
+            .zip(&current.directories)
+            .enumerate()
+        {
+            let held =
+                platform::directory_identity(held).map_err(|error| DirectoryValidationFailure {
+                    stage: DirectoryValidationStage::HeldDirectoryIdentity(index),
+                    error,
+                })?;
+            let reopened = platform::directory_identity(reopened).map_err(|error| {
+                DirectoryValidationFailure {
+                    stage: DirectoryValidationStage::ReopenedDirectoryIdentity(index),
+                    error,
+                }
+            })?;
+            if held != reopened {
+                return Err(DirectoryValidationFailure {
+                    stage: DirectoryValidationStage::IdentityMismatch(index),
+                    error: unsafe_path(),
+                });
+            }
+        }
+        Ok(())
+    }
+
     pub fn directory(&self, relative: &Path, create: bool) -> io::Result<Self> {
         let mut next = self.try_clone()?;
         for name in normal_components(relative)? {
@@ -67,15 +143,29 @@ impl DirectoryAnchor {
     }
 
     pub fn open_read_write(&self, relative: &Path) -> io::Result<AnchoredFile> {
-        self.open_file(relative, false, false)
+        self.open_file(relative, false, false, true)
+    }
+
+    pub fn open_read_only(&self, relative: &Path) -> io::Result<ReadOnlyAnchoredFile> {
+        ReadOnlyAnchoredFile::from_inner(self.open_file(relative, false, false, false)?)
+    }
+
+    /// Binary content observation permits hardlinks, unlike security files.
+    /// One named regular leaf only; never a mutation or executable capability.
+    pub fn open_binary_read_only(&self, relative: &Path) -> io::Result<BinaryReadOnlyAnchoredFile> {
+        let names = normal_components(relative)?;
+        let [name] = names.as_slice() else {
+            return Err(unsafe_path());
+        };
+        BinaryReadOnlyAnchoredFile::from_parent(self.try_clone()?, name.clone())
     }
 
     pub fn open_or_create_file(&self, relative: &Path) -> io::Result<AnchoredFile> {
-        self.open_file(relative, true, false)
+        self.open_file(relative, true, false, true)
     }
 
     pub fn create_private_file(&self, relative: &Path) -> io::Result<AnchoredFile> {
-        self.open_file(relative, true, true)
+        self.open_file(relative, true, true, true)
     }
 
     fn open_file(
@@ -83,6 +173,7 @@ impl DirectoryAnchor {
         relative: &Path,
         create: bool,
         exclusive: bool,
+        writable: bool,
     ) -> io::Result<AnchoredFile> {
         let mut names = normal_components(relative)?;
         let name = names.pop().ok_or_else(unsafe_path)?;
@@ -90,9 +181,17 @@ impl DirectoryAnchor {
         for component in names {
             parent.push_directory(&component, false)?;
         }
-        let file = platform::open_file(&parent, &name, create, exclusive)?;
+        if !writable && (create || exclusive) {
+            return Err(unsafe_path());
+        }
+        let file = platform::open_file(&parent, &name, create, exclusive, writable)?;
         let identity = platform::identity(&file)?;
-        file.try_lock().map_err(|error| match error {
+        let lock = if writable {
+            file.try_lock()
+        } else {
+            file.try_lock_shared()
+        };
+        lock.map_err(|error| match error {
             std::fs::TryLockError::WouldBlock => {
                 io::Error::new(io::ErrorKind::WouldBlock, "anchored_file_busy")
             }
@@ -103,6 +202,7 @@ impl DirectoryAnchor {
             parent,
             name,
             identity,
+            writable,
         })
     }
 
@@ -131,9 +231,20 @@ pub struct AnchoredFile {
     parent: DirectoryAnchor,
     name: OsString,
     identity: FileIdentity,
+    writable: bool,
 }
 
 impl AnchoredFile {
+    fn require_writable(&self) -> io::Result<()> {
+        if self.writable {
+            Ok(())
+        } else {
+            Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "anchored_file_read_only",
+            ))
+        }
+    }
     pub fn path(&self) -> PathBuf {
         self.parent.path.join(&self.name)
     }
@@ -144,6 +255,12 @@ impl AnchoredFile {
 
     pub fn identity(&self) -> FileIdentity {
         self.identity
+    }
+
+    /// Validate owned parent identities and the opened file without writing it.
+    pub fn validate_current(&self) -> io::Result<()> {
+        self.parent.validate_current()?;
+        platform::validate_current(self)
     }
 
     pub fn read_bounded(&mut self, limit: usize) -> io::Result<Vec<u8>> {
@@ -166,6 +283,7 @@ impl AnchoredFile {
     }
 
     pub fn write_and_sync(&mut self, bytes: &[u8]) -> io::Result<()> {
+        self.require_writable()?;
         platform::validate_current(self)?;
         self.file.seek(SeekFrom::Start(0))?;
         self.file.write_all(bytes)?;
@@ -177,6 +295,7 @@ impl AnchoredFile {
     /// replacement never writes through an inode which could gain an alias.
     /// Concurrent, noncooperating same-owner writers remain outside sandbox claims.
     pub fn compare_and_write(&mut self, expected: &[u8], replacement: &[u8]) -> io::Result<()> {
+        self.require_writable()?;
         platform::validate_current(self)?;
         if self.read_bounded(expected.len())? != expected {
             return Err(unsafe_path());
@@ -185,6 +304,7 @@ impl AnchoredFile {
     }
 
     pub fn append_and_sync(&mut self, bytes: &[u8]) -> io::Result<()> {
+        self.require_writable()?;
         platform::validate_current(self)?;
         self.file.seek(SeekFrom::End(0))?;
         self.file.write_all(bytes)?;
@@ -254,6 +374,37 @@ fn budget_exceeded() -> io::Error {
 #[cfg(test)]
 mod admission_tests {
     use super::*;
+
+    #[test]
+    fn tlcx05_readonly_internal_mutators_refuse_before_any_write_or_replace() {
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root =
+            std::env::temp_dir().join(format!("tlcx05-readonly-{}-{stamp}", std::process::id()));
+        std::fs::create_dir(&root).unwrap();
+        std::fs::write(root.join("source.txt"), b"before").unwrap();
+        let anchor = DirectoryAnchor::open_existing(&root).unwrap();
+        let mut file = anchor.open_read_only(Path::new("source.txt")).unwrap();
+        assert_eq!(file.read_bounded(32).unwrap(), b"before");
+        for result in [
+            file.inner.write_and_sync(b"after"),
+            file.inner.append_and_sync(b"after"),
+            file.inner.compare_and_write(b"before", b"after"),
+        ] {
+            assert_eq!(result.unwrap_err().kind(), io::ErrorKind::PermissionDenied);
+            assert_eq!(std::fs::read(root.join("source.txt")).unwrap(), b"before");
+        }
+    }
+
+    #[test]
+    fn tlcx05_directory_identity_diagnostic_identifies_the_failed_layer() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let anchor = DirectoryAnchor::open_existing(root).unwrap();
+        let result = anchor.validate_current_observed();
+        assert!(result.is_ok(), "directory validation stage: {result:?}");
+    }
 
     #[test]
     fn epr_10_superscript_device_names_are_rejected_without_opening_devices() {

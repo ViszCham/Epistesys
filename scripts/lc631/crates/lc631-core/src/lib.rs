@@ -1,5 +1,9 @@
 #![forbid(unsafe_code)]
 
+pub mod context;
+// Pure arithmetic stays below core; world retains its core-only layer edge.
+pub use lc631_substrate::measurement_numeric;
+
 use lc631_receipt_kernel::{ReceiptClass, SubjectRevision, VerifiedReceipt};
 use serde::Serialize;
 use sha2::{Digest, Sha256};

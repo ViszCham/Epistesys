@@ -1,4 +1,7 @@
-use super::dgcl_package::{finalize_with_pipeline, PackageSeedReceipt, PackageValidationBundle};
+use super::dgcl_package::{
+    finalize_with_pipeline, finalize_with_pipeline_with_resources, PackageExecution, PackageIo,
+    PackageSeedReceipt, PackageValidationBundle,
+};
 use super::effect_error::CliFailure;
 use lc631_analysis::*;
 use lc631_core::{
@@ -29,6 +32,7 @@ struct PackageRevalidator<'a> {
     bundle: PackageValidationBundle,
     host: &'a HostReceiptContext,
     author: &'a HostReceiptContext,
+    resources: Option<&'a crate::io::CommandIo>,
 }
 
 fn receipt_epoch() -> u64 {
@@ -42,28 +46,59 @@ impl DgclFileEvidenceValidator for PackageRevalidator<'_> {
         _snapshot: &DgclExecutionSnapshot,
         budget: Duration,
     ) -> Result<Vec<CodingEvidenceClaim>, DgclRepairDriverError> {
-        let report = finalize_with_pipeline(
-            self.root,
-            self.source,
-            self.bundle.clone(),
-            self.host,
-            self.author,
-            self.pipeline,
-            budget,
-        )
+        let report = match self.resources {
+            None => finalize_with_pipeline(
+                self.root,
+                self.source,
+                self.bundle.clone(),
+                self.host,
+                self.author,
+                self.pipeline,
+                budget,
+            ),
+            Some(resources) => finalize_with_pipeline_with_resources(
+                self.root,
+                self.source,
+                self.bundle.clone(),
+                self.host,
+                self.author,
+                self.pipeline,
+                PackageExecution { budget, resources },
+            ),
+        }
         .map_err(|_| DgclRepairDriverError::Failed)?;
         serde_json::from_value(report["claims"].clone()).map_err(|_| DgclRepairDriverError::Failed)
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-pub(super) fn repair_package(
+pub(super) fn repair_package_with_resources(
     root: &Path,
     source: &str,
     bundle: PackageRepairBundle,
     host: &HostReceiptContext,
     author: &HostReceiptContext,
     journal_roots: Option<(&Path, &Path)>,
+    resources: &crate::io::CommandIo,
+) -> Result<serde_json::Value, CliFailure> {
+    repair_package_mode(
+        root,
+        source,
+        bundle,
+        host,
+        author,
+        journal_roots,
+        PackageIo(Some(resources)),
+    )
+}
+
+fn repair_package_mode(
+    root: &Path,
+    source: &str,
+    bundle: PackageRepairBundle,
+    host: &HostReceiptContext,
+    author: &HostReceiptContext,
+    journal_roots: Option<(&Path, &Path)>,
+    io: PackageIo<'_>,
 ) -> Result<serde_json::Value, CliFailure> {
     let request_digest = dgcl_repair_request_digest(&bundle.request);
     if bundle.schema_version != "epistesys-dgcl-package-repair-bundle.v1"
@@ -74,14 +109,7 @@ pub(super) fn repair_package(
     {
         return Err("dgcl_package_repair_shape_or_issuer".into());
     }
-    let pipeline = build_dgcl_pipeline(
-        source,
-        DgclBackendSet {
-            english: None,
-            japanese: None,
-        },
-    )
-    .map_err(|error| format!("dgcl_package_repair_pipeline:{error:?}"))?;
+    let pipeline = io.pipeline(source)?;
     let count = pipeline.completion_plan.requirements.len();
     if count == 0
         || count > 8
@@ -149,8 +177,7 @@ pub(super) fn repair_package(
         caller_origin: CallerOrigin::HostVerifiedUser,
         trusted_host_fingerprint: &fingerprint,
     };
-    let snapshot = capture_dgcl_cargo_snapshot(root, source, &pipeline, &authority)
-        .map_err(|error| format!("dgcl_repair_snapshot:{error:?}"))?;
+    let snapshot = io.snapshot(root, source, &pipeline, &authority)?;
     // Prediction supports independent intent signing, not evidence of a write.
     let predicted = project_dgcl_cargo_target_snapshot(
         root,
@@ -206,8 +233,7 @@ pub(super) fn repair_package(
     }
     let mut preflight_replay = ReplayGuard::default();
     for (plan, seed_input) in bundle.validation.plans.iter().zip(&bundle.validation.seeds) {
-        preflight_dgcl_cargo_plan(root, &pipeline, plan)
-            .map_err(|error| format!("dgcl_repair_plan_preflight:{error:?}"))?;
+        io.preflight(root, source, &pipeline, plan)?;
         if plan.source_revision != pipeline.source_revision
             || plan.completion_plan_digest != pipeline.completion_plan.plan_digest
             || plan.repository_root_digest
@@ -279,6 +305,7 @@ pub(super) fn repair_package(
         bundle: bundle.validation,
         host,
         author,
+        resources: io.0,
     };
     let mut candidates = std::collections::BTreeMap::new();
     candidates.insert(
@@ -287,7 +314,7 @@ pub(super) fn repair_package(
     );
     let initial_lease = issue_dgcl_evidence_lease(&snapshot, execution_now, 300)
         .map_err(|error| format!("dgcl_repair_lease:{error:?}"))?;
-    let mut driver = DgclFileRepairDriver::new(DgclFileRepairConfig {
+    let driver_config = DgclFileRepairConfig {
         root,
         source,
         pipeline: &pipeline,
@@ -298,16 +325,26 @@ pub(super) fn repair_package(
         candidates,
         validator: &mut revalidator,
         epoch_clock: Some(receipt_epoch),
-    })
+    };
+    let mut runner = io.0.map(crate::io::CommandIo::analysis_runner);
+    let mut file_effects = io.0.map(crate::io::CommandIo::file_effect_owner);
+    let mut driver = match (runner.as_mut(), file_effects.as_mut()) {
+        (Some(runner), Some(effects)) => {
+            DgclFileRepairDriver::new_with_runner(driver_config, runner, Some(effects))
+        }
+        (None, None) => DgclFileRepairDriver::new(driver_config),
+        _ => Err(DgclRepairDriverError::Unavailable),
+    }
     .map_err(|error| format!("dgcl_repair_driver:{error:?}"))?;
     let journal = journal_roots
         .map(|(ledger, heads)| {
-            super::dgcl_journal::RepairJournal::new(
+            super::dgcl_journal::RepairJournal::new_in_mode(
                 ledger,
                 heads,
                 host,
                 &bundle.request,
                 authorization.authority_revision.0,
+                io.0.map(|resources| (resources, source)),
             )
         })
         .transpose()?;

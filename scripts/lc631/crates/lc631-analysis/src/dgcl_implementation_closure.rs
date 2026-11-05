@@ -486,7 +486,8 @@ pub fn build_dgcl_implementation_closure(
         duplicate_claim_count,
         requirements: requirement_closures,
         status,
-        evidence_complete_for_declared_requirements: status == DgclImplementationStatus::ImplementationClosed,
+        evidence_complete_for_declared_requirements: status
+            == DgclImplementationStatus::ImplementationClosed,
         implementation_complete_candidate: status == DgclImplementationStatus::ImplementationClosed,
         authority_created: false,
         output_commit_allowed: false,

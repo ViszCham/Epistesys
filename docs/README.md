@@ -2,7 +2,9 @@
 
 ## 日本語
 
-この索引は、現行の仕様、実行条件、検証証跡、評価設計、歴史的な設計記録を区別します。対象は`6.3.2-alpha.3`です。日本語説明の後に、同内容の英語説明を置きます。
+この索引は、仕様、実行条件、検証証跡、評価設計、歴史的な設計記録を区別します。現在の保存版はBeta 6.9（`6.9.0-beta.1`）です。まず[今回の保存記録](epistesys-6.9.0-beta.1-source-snapshot-2026-11-05.md)で未完了点と検証範囲をご確認ください。以下のAlpha.3資料は継承基線の説明・履歴として保持しています。日本語説明の後に、同内容の英語説明を置きます。
+
+TLCXの数式・適用条件は[測定契約](tlcx-tl-screative-measurement-contract-v1-2026-10-29.md)、依存順と完成条件は[ロードマップ](epistesys-tlcx-contextual-multilogic-loss-creativity-roadmap-2026-10-28.md)にまとめています。計画に項目があることを、その実装・配布・host接続の完了とは扱いません。
 
 ### 読者別の参照経路
 
@@ -25,7 +27,7 @@
 | 由来・除外 | [移行契約](migration-contract.md)、[採用manifest](adoption-manifest.md)、[clone検証](clone-verification.md) | sourceの継承範囲、互換名、非開示情報の除外を示す |
 | 補助監査 | [Assurance境界](assurance-compiler-status.md)、[RepoSeiri記録](reposeiri-audit.md) | 監査範囲・未対応・保留を保持する。一般安全性の証明ではない |
 
-現alphaのsource検証、配布検証、実host activation、研究効果は別状態です。candidate／Validated、証拠／権限、出力確定／配信を同一視しません。共通の定義は[用語表](system-architecture.md#terminology-ja)に集約しています。
+各版のsource検証、配布検証、実host activation、研究効果は別状態です。candidate／Validated、証拠／権限、出力確定／配信を同一視しません。共通の定義は[用語表](system-architecture.md#terminology-ja)に集約しています。
 
 Coding支援の説明と実装範囲を照合した今回の所見・修正・検証範囲は[文書改訂の敵対監査記録](../validation/coding-documentation-adversarial-review.md)に記録しています。
 
@@ -78,7 +80,9 @@ Coding支援の説明と実装範囲を照合した今回の所見・修正・�
 
 ## English
 
-This index separates current specifications, operating conditions, verification records, evaluation designs, and historical design notes for `6.3.2-alpha.3`. Equivalent English prose follows Japanese prose.
+This index separates specifications, operating conditions, verification records, evaluation designs, and historical design notes. The current checkpoint is Beta 6.9 (`6.9.0-beta.1`). Start with the [snapshot record](epistesys-6.9.0-beta.1-source-snapshot-2026-11-05.md) for open work and validation scope. The Alpha.3 documents below remain explanations and historical records of the inherited baseline. Equivalent English prose follows Japanese prose.
+
+The [measurement contract](tlcx-tl-screative-measurement-contract-v1-2026-10-29.md) defines TLCX formulas and applicability; the [roadmap](epistesys-tlcx-contextual-multilogic-loss-creativity-roadmap-2026-10-28.md) defines dependencies and completion criteria. Listing an item in a plan does not establish implementation, distribution, or host closure.
 
 ### Reader-oriented routes
 

@@ -9,6 +9,11 @@ use crate::{
 };
 
 const MAX_ASSEMBLY_SOURCE_BYTES: usize = 1024 * 1024;
+mod resources;
+pub(crate) use resources::{
+    capture_codegen_snapshot, finish_codegen_snapshot, from_explicit_source_with_resources,
+    AssemblySnapshot,
+};
 
 pub(crate) fn from_explicit_source(source: &str, prompt: &str) -> AssemblyAnalysisSurface {
     analyze(source, prompt, "explicit_assembly_source", None)
@@ -57,14 +62,91 @@ pub(crate) fn apply_assembly_stages(
         source.clone(),
         &["ISA revision, features, ABI, object format, or privilege may remain unbound"],
     );
-    update(stages, "RPA-33", if assembly.metrics.instructions > 0 { EvidenceState::Candidate } else { EvidenceState::NeedsEvidence }, source.clone(), &["instruction inventory is not assembler acceptance, encoding, pseudo-op expansion, or relaxation evidence"]);
-    update(stages, "RPA-34", if assembly.metrics.instructions > 0 { EvidenceState::Candidate } else { EvidenceState::NeedsEvidence }, source.clone(), &["register, memory, branch, atomic, and privileged inventory is not formal instruction-state semantics"]);
-    update(stages, "RPA-35", if assembly.object_digest.is_some() { EvidenceState::Candidate } else { EvidenceState::NeedsEvidence }, assembly.object_digest.iter().cloned().collect(), &["object digest is observed when supplied by rustc; sections, symbols, relocations, link, unwind, debug, and loader are not decoded"]);
-    update(stages, "RPA-36", if assembly.differential_observed { EvidenceState::Observed } else { EvidenceState::NeedsEvidence }, assembly.tool_capabilities.iter().filter_map(|tool| tool.version_digest.clone()).collect(), &["assembler/decoder version capabilities are not candidate execution or multi-tool differential evidence"]);
-    update(stages, "RPA-37", if assembly.source_origin == "rustc_codegen_assembly" && assembly.object_digest.is_some() { EvidenceState::Candidate } else { EvidenceState::NeedsEvidence }, source, &["Rust source-to-assembly/object linkage is observed; inline-asm contracts, Python native extensions, GPU ISA, and runtime ABI remain unclosed"]);
+    update(
+        stages,
+        "RPA-33",
+        if assembly.metrics.instructions > 0 {
+            EvidenceState::Candidate
+        } else {
+            EvidenceState::NeedsEvidence
+        },
+        source.clone(),
+        &[
+            "instruction inventory is not assembler acceptance, encoding, pseudo-op expansion, or relaxation evidence",
+        ],
+    );
+    update(
+        stages,
+        "RPA-34",
+        if assembly.metrics.instructions > 0 {
+            EvidenceState::Candidate
+        } else {
+            EvidenceState::NeedsEvidence
+        },
+        source.clone(),
+        &[
+            "register, memory, branch, atomic, and privileged inventory is not formal instruction-state semantics",
+        ],
+    );
+    update(
+        stages,
+        "RPA-35",
+        if assembly.object_digest.is_some() {
+            EvidenceState::Candidate
+        } else {
+            EvidenceState::NeedsEvidence
+        },
+        assembly.object_digest.iter().cloned().collect(),
+        &[
+            "object digest is observed when supplied by rustc; sections, symbols, relocations, link, unwind, debug, and loader are not decoded",
+        ],
+    );
+    update(
+        stages,
+        "RPA-36",
+        if assembly.differential_observed {
+            EvidenceState::Observed
+        } else {
+            EvidenceState::NeedsEvidence
+        },
+        assembly
+            .tool_capabilities
+            .iter()
+            .filter_map(|tool| tool.version_digest.clone())
+            .collect(),
+        &[
+            "assembler/decoder version capabilities are not candidate execution or multi-tool differential evidence",
+        ],
+    );
+    update(
+        stages,
+        "RPA-37",
+        if assembly.source_origin == "rustc_codegen_assembly" && assembly.object_digest.is_some() {
+            EvidenceState::Candidate
+        } else {
+            EvidenceState::NeedsEvidence
+        },
+        source,
+        &[
+            "Rust source-to-assembly/object linkage is observed; inline-asm contracts, Python native extensions, GPU ISA, and runtime ABI remain unclosed",
+        ],
+    );
 }
 
 fn analyze(
+    source: &str,
+    prompt: &str,
+    origin: &str,
+    object_digest: Option<String>,
+) -> AssemblyAnalysisSurface {
+    let mut surface = static_inventory(source, prompt, origin, object_digest);
+    if source.len() <= MAX_ASSEMBLY_SOURCE_BYTES {
+        surface.tool_capabilities = probe_tools();
+    }
+    surface
+}
+
+fn static_inventory(
     source: &str,
     prompt: &str,
     origin: &str,
@@ -104,7 +186,6 @@ fn analyze(
     let lower = format!("{}\n{}", prompt, source).to_ascii_lowercase();
     let target = infer_target(&lower);
     let (metrics, mnemonics, risks) = inventory(source);
-    let tools = probe_tools();
     AssemblyAnalysisSurface {
         schema_version: "lc631-assembly-analysis.v1".to_string(),
         source_revision: stable_sha256(source),
@@ -113,7 +194,7 @@ fn analyze(
         metrics,
         mnemonics,
         risk_indicators: risks,
-        tool_capabilities: tools,
+        tool_capabilities: Vec::new(),
         object_digest,
         source_assembled: origin == "rustc_codegen_assembly",
         differential_observed: false,

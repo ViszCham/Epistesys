@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 lc631-core = { path = "../lc631-core" }
+lc631-substrate = { path = "../lc631-substrate" }
 lc631-receipt-kernel = { path = "../lc631-receipt-kernel" }
 lc631-tl = { path = "../lc631-tl" }
 lc631-tldg = { path = "../lc631-tldg" }
