@@ -19,6 +19,12 @@ Epistesys（エピステシス）は、AIシステムの**要求管理、実行�
 
 ソース経路の局所検証は、任意指示の意味的正確性、ハルシネーション抑制、長期対話の性能を実証するものではありません。現在のalphaは長期研究の基盤実装であり、研究目標の達成版ではありません。Epistesys-7はこの版の範囲外です。
 
+### Alpha.3の保守ライン
+
+`main-alpha.3`は、`6.3.2-alpha.3`を後続の開発と分けて参照するための保守ブランチです。保存元は、既存のalpha.3 release PRに含まれるcommit `1fca5165eca21011bcefd6518d3b3c9b93e17d58`です。この文書整理では実装とversionを変更せず、リポジトリの既定ブランチ`main`も変更しません。
+
+最初に[保守ライン案内](docs/alpha3-maintenance.md)で対象revisionと読み順をご確認いただけます。後続のTLCXやBeta-7.0の完成・検証結果を、このAlpha.3へ先取りして記載するものではありません。
+
 ### 制御対象とアーキテクチャ
 
 主要なデータフローは、**入力の保存 → 構文・要求の抽出 → 要求中間表現 → 射影の不整合記録 → 検証計画 → 証拠の再検証 → 出力候補の確定**です。実行権限の検証と実ホストへの送信・受領確認は、別の境界として扱います。
@@ -114,7 +120,9 @@ launcherは自身の配置からrunnerを解決します。別cwdからの起動
 | wire形式・互換性 | [DGCL wire互換性](docs/dgcl-wire-compatibility.md) → [schema契約](schemas/closure-and-receipt-contract.md) |
 | 評価設計・経験的結果 | [研究仮説](docs/research-hypotheses.md) → [GB-CC75研究本文](docs/research/gb-cc75-study.md) |
 | 現行の検証・残存条件 | [alpha.3検証](validation/epr-release-verification-2026-10-27.md) → [既知の制約](docs/known-limitations.md) |
+| Alpha.3の保存元・保守範囲 | [保守ライン案内](docs/alpha3-maintenance.md) |
 | sourceの由来・除外・履歴 | [移行契約](docs/migration-contract.md) → [文書索引](docs/README.md) |
+| CIの定義・作業ファイルの除外 | [workflow定義](.github/workflows/) → [ignore設定](.gitignore)（設定の存在と実行結果は別です） |
 
 初期cloneは独立したGit履歴で保存され、個人状態、credentials、cache、receipt root、replay ledgerを継承していません。`lc631-*`は挙動差を抑える互換識別子です。詳細な実装記録と継承元の設計・監査文書は[文書索引](docs/README.md)で現行仕様から区別しています。
 
@@ -138,6 +146,12 @@ The failure model includes commitment of unsupported generation, omitted constra
 | Research evaluation | Epistesys-specific effects and independent evaluation are pending; independent gold corpus remains `PendingNoCorpus` |
 
 Local source-path verification does not establish arbitrary-instruction semantic accuracy, hallucination containment, or long-session performance. The alpha is a baseline for long-term research, not completion of the research objectives. Epistesys-7 is outside this version.
+
+### Alpha.3 maintenance line
+
+`main-alpha.3` is a maintenance branch for referring to `6.3.2-alpha.3` separately from subsequent development. Its baseline is commit `1fca5165eca21011bcefd6518d3b3c9b93e17d58`, included in the existing alpha.3 release PR. This documentation update changes neither the implementation nor the version, and it leaves the repository's default branch, `main`, unchanged.
+
+The [maintenance guide](docs/alpha3-maintenance.md) provides the target revision and suggested reading order. This Alpha.3 line does not preemptively claim completion or verification results for later TLCX or Beta-7.0 work.
 
 ### Control scope and architecture
 
@@ -234,6 +248,8 @@ The launcher resolves its runner relative to its installation. See the [executio
 | Wire formats and compatibility | [DGCL wire compatibility](docs/dgcl-wire-compatibility.md) → [schema contract](schemas/closure-and-receipt-contract.md) |
 | Evaluation design and observations | [Research hypotheses](docs/research-hypotheses.md) → [GB-CC75 study](docs/research/gb-cc75-study.md) |
 | Current verification and residual conditions | [Alpha.3 verification](validation/epr-release-verification-2026-10-27.md) → [Known limitations](docs/known-limitations.md) |
+| Alpha.3 baseline and maintenance scope | [Maintenance guide](docs/alpha3-maintenance.md) |
 | Source provenance, exclusions, history | [Migration contract](docs/migration-contract.md) → [Documentation index](docs/README.md) |
+| CI definitions and working-file exclusions | [Workflow definitions](.github/workflows/) → [Ignore configuration](.gitignore) (configuration presence and execution results are separate) |
 
 The initial clone uses independent Git history and excludes personal state, credentials, caches, receipt roots, and replay ledgers. `lc631-*` names are compatibility identifiers retained to limit behavior changes. The [documentation index](docs/README.md) separates detailed implementation records and inherited design/audit history from the current specification.
