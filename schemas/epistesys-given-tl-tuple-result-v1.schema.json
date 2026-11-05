@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "epistesys-given-tl-tuple-result-v1.schema.json",
+  "title": "Current actual-owner Given tuple TL result, not VerifiedEligibility",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "profile", "input_basis", "cross_domain_association", "source_semantics_verified", "verified_eligibility", "authority_created", "output_commit_allowed", "host_final_bound", "source_revision_hex", "root_plan_digest_hex", "weights", "denominator", "temporal", "spatial", "total", "gaps", "gates", "actual_temporal_observations", "actual_spatial_observations"],
+  "properties": {
+    "schema_version": {"const": "epistesys-given-tl-tuple-result.v1"},
+    "profile": {"const": "finite-formal-v1.4/TL-TOTAL/given-temporal-spatial-tuple-1-3.v1"},
+    "input_basis": {"const": "given"}, "cross_domain_association": {"const": "given_unverified"},
+    "source_semantics_verified": {"const": false}, "verified_eligibility": {"const": false}, "authority_created": {"const": false}, "output_commit_allowed": {"const": false}, "host_final_bound": {"const": false},
+    "source_revision_hex": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "root_plan_digest_hex": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "weights": {"type": "array", "prefixItems": [{"const": 1}, {"const": 3}], "items": false, "minItems": 2, "maxItems": 2}, "denominator": {"const": 4},
+    "temporal": {"$ref": "#/$defs/maybe_interval"}, "spatial": {"$ref": "#/$defs/maybe_interval"}, "total": {"$ref": "#/$defs/maybe_interval"},
+    "gaps": {"type": "array", "items": {"type": ["string", "null"], "maxLength": 128}, "minItems": 2, "maxItems": 2},
+    "gates": {"type": "array", "items": {"enum": ["pass", "fail", "needs_evidence", "no_scalar"]}, "minItems": 2, "maxItems": 2},
+    "actual_temporal_observations": {"type": "integer", "minimum": 0, "maximum": 2}, "actual_spatial_observations": {"type": "integer", "minimum": 0, "maximum": 8}
+  },
+  "$defs": {"maybe_interval": {"anyOf": [{"type": "null"}, {"type": "object", "additionalProperties": false, "required": ["lower", "upper"], "properties": {"lower": {"type": "string", "maxLength": 128}, "upper": {"type": "string", "maxLength": 128}}}]}},
+  "description": "Exact rational bounds for one declared finite tuple only. Null is NoScalar, not zero. Output cap65536bytes. Current ownership/resource checks precede full bounded encoding and writing; sink error is UnknownDeliveryNoRetry, not host final binding."
+}

@@ -1,11 +1,28 @@
-use crate::{spawn, ManagedChild, SpawnRequest};
+use crate::{spawn_with_state, ManagedChild, SpawnRequest};
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
-use std::io::{self, Read, Write};
+use std::io::{self, Read};
 use std::path::Path;
 use std::sync::{Condvar, Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
+
+mod buffers;
+use buffers::PreparedIoBuffers;
+mod root_exit;
+use root_exit::await_root_exit;
+pub(crate) mod launch;
+pub use launch::required_ram_bytes;
+
+mod read;
+pub use read::{read_bounded_bytes, BoundedBytes};
+mod stdin;
+use stdin::StdinPump;
+mod resources;
+pub use resources::{
+    run_bounded_with_resources, run_bounded_with_resources_observed, ResourceRunError,
+    ResourceRunOutcome,
+};
 
 const MAX_ACTIVE_RUNS: usize = 2;
 const MAX_INPUT_BYTES: usize = 2 * 1024 * 1024;
@@ -71,7 +88,7 @@ impl Drop for Permit {
 struct RetiredRun {
     child: ManagedChild,
     stdin: StdinPump,
-    _permit: Permit,
+    _permit: Option<Permit>,
 }
 
 fn reap_retired() {
@@ -129,6 +146,10 @@ pub fn run_bounded(request: RunRequest<'_>) -> io::Result<RunOutcome> {
 struct Observers {
     poll: fn(&mut ManagedChild) -> io::Result<Option<i32>>,
     tree_empty: fn(&mut ManagedChild) -> io::Result<bool>,
+    prepare_io: fn(&RunRequest<'_>) -> io::Result<PreparedIoBuffers>,
+    before_spawn: fn(&RunRequest<'_>, &PreparedIoBuffers),
+    start_stdin: fn(File, Option<Vec<u8>>) -> io::Result<StdinPump>,
+    terminate_tree: fn(&mut ManagedChild, Duration) -> io::Result<bool>,
 }
 
 impl Default for Observers {
@@ -136,17 +157,48 @@ impl Default for Observers {
         Self {
             poll: |child| child.try_wait(),
             tree_empty: |child| child.wait_for_tree_empty(Duration::ZERO),
+            prepare_io: PreparedIoBuffers::prepare,
+            before_spawn: |_, _| {},
+            start_stdin: StdinPump::new,
+            terminate_tree: |child, timeout| child.terminate_tree(timeout),
         }
     }
 }
 
 fn run_observed(request: RunRequest<'_>, observers: Observers) -> io::Result<RunOutcome> {
-    validate(&request)?;
+    run_controlled(request, observers, None).map_err(RunFailure::into_io)
+}
+
+enum RunFailure {
+    NotStarted(io::Error),
+    StartedUnknown(io::Error),
+}
+impl RunFailure {
+    fn into_io(self) -> io::Error {
+        match self {
+            Self::NotStarted(error) | Self::StartedUnknown(error) => error,
+        }
+    }
+}
+
+fn run_controlled(
+    request: RunRequest<'_>,
+    observers: Observers,
+    resources: Option<&lc631_substrate::resource::ResourceReservationView<'_>>,
+) -> Result<RunOutcome, RunFailure> {
+    validate(&request).map_err(RunFailure::NotStarted)?;
     let started = Instant::now();
     let deadline = started + request.timeout;
     let cleanup = Duration::from_millis(250).min(request.timeout / 3);
     let work_deadline = deadline - cleanup;
-    let Some(permit) = acquire(work_deadline) else {
+    // Common-owner callers already hold an admitted Child claim. Legacy calls
+    // alone use the historical static admission capsule.
+    let permit = if resources.is_some() {
+        None
+    } else {
+        acquire(work_deadline)
+    };
+    if resources.is_none() && permit.is_none() {
         return Ok(RunOutcome {
             exit_code: None,
             timed_out: true,
@@ -162,23 +214,56 @@ fn run_observed(request: RunRequest<'_>, observers: Observers) -> io::Result<Run
             memory_limit_kind: "process_not_started",
             diagnostic: Some("supervisor_admission_deadline_exceeded"),
         });
-    };
-    let launched = spawn(SpawnRequest {
+    }
+    let buffers = (observers.prepare_io)(&request).map_err(RunFailure::NotStarted)?;
+    buffers.validate(&request).map_err(RunFailure::NotStarted)?;
+    (observers.before_spawn)(&request, &buffers);
+    let launched = spawn_with_state(SpawnRequest {
         executable: request.executable,
         arguments: request.arguments,
         current_dir: request.current_dir,
         environment: request.environment,
+    })
+    .map_err(|failure| match failure {
+        crate::spawn_failure::SpawnFailure::BeforeChild(error) => RunFailure::NotStarted(error),
+        crate::spawn_failure::SpawnFailure::MayHaveStarted(error) => {
+            RunFailure::StartedUnknown(error)
+        }
     })?;
     let mut child = launched.child;
     let memory_limit_bytes = child.memory_limit_bytes().unwrap_or(None);
-    let mut stdin = StdinPump::new(launched.stdin, request.stdin);
-    let mut stdout = Reader::new(launched.stdout, request.stdout_limit);
-    let mut stderr = Reader::new(launched.stderr, request.stderr_limit);
+    let mut stdout = Reader::new(launched.stdout, buffers.stdout, request.stdout_limit);
+    let mut stderr = Reader::new(launched.stderr, buffers.stderr, request.stderr_limit);
+    let (mut stdin, stdin_start_failed) =
+        match (observers.start_stdin)(launched.stdin, buffers.stdin) {
+            Ok(stdin) => (stdin, false),
+            Err(_error) => (StdinPump::closed_after_start_failure(), true),
+        };
     let mut exit_code = None;
     let mut timed_out = false;
-    let mut diagnostic = None;
+    let mut diagnostic = if stdin_start_failed {
+        Some("supervisor_stdin_thread_start_failed")
+    } else {
+        None
+    };
     let mut tree_empty = false;
     loop {
+        if stdin_start_failed {
+            break;
+        }
+        if let Some(resources) = resources {
+            if let Err(error) = resources.check() {
+                timed_out = error == lc631_substrate::resource::ResourceError::DeadlineExceeded;
+                diagnostic = Some(if timed_out {
+                    "supervisor_deadline_exceeded"
+                } else if error == lc631_substrate::resource::ResourceError::Cancelled {
+                    "supervisor_cancelled"
+                } else {
+                    "supervisor_resource_scope_failed"
+                });
+                break;
+            }
+        }
         if stdout.drain().is_err() || stderr.drain().is_err() {
             diagnostic = Some("supervisor_pipe_read_failed");
             break;
@@ -222,9 +307,11 @@ fn run_observed(request: RunRequest<'_>, observers: Observers) -> io::Result<Run
     let killed = !tree_empty;
     if killed {
         stdin.cancel();
-        tree_empty = child
-            .terminate_tree(deadline.saturating_duration_since(Instant::now()))
-            .unwrap_or(false);
+        tree_empty = (observers.terminate_tree)(
+            &mut child,
+            deadline.saturating_duration_since(Instant::now()),
+        )
+        .unwrap_or(false);
     }
     while Instant::now() < deadline {
         let _ = stdout.drain();
@@ -235,15 +322,32 @@ fn run_observed(request: RunRequest<'_>, observers: Observers) -> io::Result<Run
         }
         thread::sleep(Duration::from_millis(2));
     }
-    if exit_code.is_none() {
-        exit_code = child.try_wait().ok().flatten();
+    match await_root_exit(
+        exit_code,
+        deadline,
+        || (observers.poll)(&mut child),
+        Instant::now,
+        thread::sleep,
+    ) {
+        Ok(status) => exit_code = status,
+        Err(_) => {
+            exit_code = None;
+            diagnostic = Some("supervisor_process_wait_failed");
+        }
     }
     let cleanup_complete = stdin.finished() && stdout.eof && stderr.eof;
     if stdin.error && diagnostic.is_none() {
         diagnostic = Some("supervisor_stdin_write_failed");
     }
     if !cleanup_complete || !tree_empty {
-        diagnostic = Some("supervisor_cleanup_unverified");
+        if let Some(resources) = resources {
+            resources.record_cleanup_unknown();
+        }
+        diagnostic = Some(if stdin_start_failed {
+            "supervisor_stdin_thread_start_failed_cleanup_unverified"
+        } else {
+            "supervisor_cleanup_unverified"
+        });
         // Retain ownership and its admission slot. Never silently detach a
         // blocked worker or let repeated failures create unbounded resources.
         RETIRED
@@ -280,6 +384,18 @@ fn run_observed(request: RunRequest<'_>, observers: Observers) -> io::Result<Run
 mod tests;
 
 fn validate(request: &RunRequest<'_>) -> io::Result<()> {
+    validate_io(request)?;
+    launch::LaunchPlan::checked(request)
+        .map(|_| ())
+        .map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "supervisor_launch_budget_exceeded",
+            )
+        })
+}
+
+fn validate_io(request: &RunRequest<'_>) -> io::Result<()> {
     if request.timeout.is_zero()
         || request.timeout > Duration::from_secs(1_800)
         || request.stdout_limit > MAX_OUTPUT_BYTES
@@ -319,10 +435,10 @@ struct Reader {
 }
 
 impl Reader {
-    fn new(file: File, limit: usize) -> Self {
+    fn new(file: File, bytes: Vec<u8>, limit: usize) -> Self {
         Self {
             file,
-            bytes: Vec::new(),
+            bytes,
             limit,
             truncated: false,
             eof: false,
@@ -399,132 +515,4 @@ fn read_available(file: &mut File, buffer: &mut [u8]) -> io::Result<usize> {
     // Only this reader owns the endpoint, so the observed bytes cannot be
     // consumed by another reader before this synchronous read.
     file.read(&mut buffer[..length])
-}
-
-struct StdinPump {
-    #[cfg(unix)]
-    file: Option<File>,
-    #[cfg(unix)]
-    bytes: Vec<u8>,
-    #[cfg(unix)]
-    position: usize,
-    #[cfg(windows)]
-    worker: Option<thread::JoinHandle<io::Result<()>>>,
-    #[cfg(windows)]
-    stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
-    error: bool,
-}
-
-impl StdinPump {
-    fn new(file: File, input: Option<&[u8]>) -> Self {
-        #[cfg(unix)]
-        {
-            Self {
-                file: input.map(|_| file),
-                bytes: input.unwrap_or_default().to_vec(),
-                position: 0,
-                error: false,
-            }
-        }
-        #[cfg(windows)]
-        {
-            use std::sync::atomic::{AtomicBool, Ordering};
-            let stop = std::sync::Arc::new(AtomicBool::new(false));
-            let worker = input.map(|input| {
-                let bytes = input.to_vec();
-                let stopped = stop.clone();
-                thread::spawn(move || {
-                    let mut file = file;
-                    let mut position = 0;
-                    while position < bytes.len() && !stopped.load(Ordering::Acquire) {
-                        let count = file.write(&bytes[position..])?;
-                        if count == 0 {
-                            return Err(io::ErrorKind::WriteZero.into());
-                        }
-                        position += count;
-                    }
-                    Ok(())
-                })
-            });
-            Self {
-                worker,
-                stop,
-                error: false,
-            }
-        }
-    }
-
-    fn advance(&mut self) -> io::Result<()> {
-        #[cfg(unix)]
-        if let Some(file) = &mut self.file {
-            if self.position == self.bytes.len() {
-                self.file = None;
-            } else {
-                match file.write(&self.bytes[self.position..]) {
-                    Ok(0) => return Err(io::ErrorKind::WriteZero.into()),
-                    Ok(count) => self.position += count,
-                    Err(error)
-                        if matches!(
-                            error.kind(),
-                            io::ErrorKind::WouldBlock | io::ErrorKind::Interrupted
-                        ) => {}
-                    Err(error) => {
-                        self.error = true;
-                        return Err(error);
-                    }
-                }
-            }
-        }
-        #[cfg(windows)]
-        if self
-            .worker
-            .as_ref()
-            .is_some_and(thread::JoinHandle::is_finished)
-        {
-            self.error = !matches!(
-                self.worker.take().map(thread::JoinHandle::join),
-                Some(Ok(Ok(())))
-            );
-        }
-        if self.error {
-            Err(io::Error::other("stdin writer failed"))
-        } else {
-            Ok(())
-        }
-    }
-
-    fn finished(&mut self) -> bool {
-        let _ = self.advance();
-        #[cfg(unix)]
-        {
-            self.file.is_none()
-        }
-        #[cfg(windows)]
-        {
-            self.worker.is_none()
-        }
-    }
-
-    fn cancel(&mut self) {
-        #[cfg(unix)]
-        {
-            self.file = None;
-        }
-        #[cfg(windows)]
-        {
-            use std::os::windows::io::AsRawHandle;
-            use std::sync::atomic::Ordering;
-            use windows_sys::Win32::System::IO::CancelSynchronousIo;
-            self.stop.store(true, Ordering::Release);
-            if let Some(worker) = &self.worker {
-                // SAFETY: JoinHandle retains an owned thread handle; cancellation
-                // targets only this run's writer and never terminates the thread.
-                let _ = unsafe { CancelSynchronousIo(worker.as_raw_handle().cast()) };
-            }
-        }
-    }
-
-    fn cancel_if_finished_run(&mut self) {
-        self.cancel();
-    }
 }

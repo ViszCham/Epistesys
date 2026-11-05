@@ -1,10 +1,23 @@
 #![forbid(unsafe_code)]
 
+pub mod bounded_reader;
+pub mod persistent_owner;
+pub mod tlcx_output_lifecycle;
+pub use persistent_owner::journal_bundle::{
+    BundlePart, HostJournalBundleReader, HostJournalBundleSession, JournalBundleDescriptor,
+    JournalBundleLimits, JournalBundleOpenError, JournalBundlePartDescriptor,
+    JournalBundleWriteError, OwnedJournalBundleInventory, OwnedJournalBundlePart,
+};
+pub use persistent_owner::{
+    BinaryCheckpointSegmentWriteError, HostBinaryCheckpointLiveSession, HostPersistentStoreOwner,
+    OwnedBinaryCheckpointSegment, PersistentStoreKind, PersistentStoreLimits,
+};
+
 mod stop_hook;
 
 pub use stop_hook::{
     bind_codex_stop_hook, bind_codex_stop_hook_attested, persist_stop_hook_observation,
-    CodexStopHookEvent, StopHookObservation,
+    persist_stop_hook_observation_with_resources, CodexStopHookEvent, StopHookObservation,
 };
 
 use lc631_core::{
@@ -346,7 +359,7 @@ pub struct HostOutputStageRequest<'a> {
     pub attestation: Option<UntrustedReceipt>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct HostOutputStageReceipt {
     schema_version: &'static str,
     artifact_id: ArtifactId,
@@ -360,7 +373,31 @@ pub struct HostOutputStageReceipt {
     host_seed_receipt_digest: String,
     authenticity_receipt_digest: String,
     authenticity_attestation: UntrustedReceipt,
+    // Local verifier-call time, not a signed callback time or trusted clock.
+    #[serde(skip)]
+    observed_at_epoch: u64,
 }
+
+// Preserve equality of the existing twelve signed/report fields. The local
+// ordering witness is neither a wire field nor part of receipt-claim identity.
+impl PartialEq for HostOutputStageReceipt {
+    fn eq(&self, other: &Self) -> bool {
+        self.schema_version == other.schema_version
+            && self.artifact_id == other.artifact_id
+            && self.turn_id == other.turn_id
+            && self.candidate_digest == other.candidate_digest
+            && self.output_digest == other.output_digest
+            && self.stage == other.stage
+            && self.callback_event_digest == other.callback_event_digest
+            && self.sink_id == other.sink_id
+            && self.delivered == other.delivered
+            && self.host_seed_receipt_digest == other.host_seed_receipt_digest
+            && self.authenticity_receipt_digest == other.authenticity_receipt_digest
+            && self.authenticity_attestation == other.authenticity_attestation
+    }
+}
+
+impl Eq for HostOutputStageReceipt {}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -579,6 +616,7 @@ pub fn observe_host_output_stage_attested(
             .ok_or(HostError::MissingHostReceipt)?,
         authenticity_receipt_digest: receipt_digest,
         authenticity_attestation: verified.into_untrusted(),
+        observed_at_epoch: now_epoch,
     })
 }
 
@@ -599,6 +637,13 @@ impl HostOutputStageLedger {
     }
 
     pub fn append(&mut self, receipt: HostOutputStageReceipt) -> Result<(), HostError> {
+        if self
+            .stages
+            .last()
+            .is_some_and(|previous| receipt.observed_at_epoch < previous.observed_at_epoch)
+        {
+            return Err(HostError::HostOutputStageConflict);
+        }
         if self
             .stages
             .first()
@@ -819,16 +864,59 @@ pub fn append_durable_replay_verified(
     replay: &mut ReplayGuard,
     now_epoch: u64,
 ) -> Result<DurableReplayReceipt, HostError> {
-    let hook_origin = matches!(
-        receipt.binding_origin,
-        HostOutputBindingOrigin::CodexStopHook | HostOutputBindingOrigin::ClaudeStopHook
-    );
-    // Report flags are projections of the authenticated origin, not additional
-    // caller-supplied evidence. Durability is observed by this operation below.
+    append_durable_replay_verified_read(
+        owned_root,
+        ledger_path,
+        receipt,
+        verifier,
+        replay,
+        now_epoch,
+        None,
+    )
+}
+
+pub fn append_durable_replay_verified_with_resources(
+    owned_root: &Path,
+    ledger_path: &Path,
+    receipt: &HostOutputReceipt,
+    verifier: &ReceiptVerifier,
+    replay: &mut ReplayGuard,
+    now_epoch: u64,
+    resources: &lc631_process_supervisor::ResourceReservationView<'_>,
+) -> Result<DurableReplayReceipt, HostError> {
+    append_durable_replay_verified_read(
+        owned_root,
+        ledger_path,
+        receipt,
+        verifier,
+        replay,
+        now_epoch,
+        Some(resources),
+    )
+}
+
+fn append_durable_replay_verified_read(
+    owned_root: &Path,
+    ledger_path: &Path,
+    receipt: &HostOutputReceipt,
+    verifier: &ReceiptVerifier,
+    replay: &mut ReplayGuard,
+    now_epoch: u64,
+    resources: Option<&lc631_process_supervisor::ResourceReservationView<'_>>,
+) -> Result<DurableReplayReceipt, HostError> {
+    bounded_reader::require_capacity(resources, 8 * 1024 * 1024)?;
+    bounded_reader::require_disk(resources, 4_096)?;
+    if let Some(view) = resources {
+        view.check()
+            .map_err(|error| HostError::Io(format!("host_resource:{error:?}")))?;
+    }
+    // A format label and a locally issued attestation do not authenticate host
+    // origin or persistent supervision. Historical entries remain readable;
+    // this append path cannot create either claim from caller-supplied data.
     if receipt.schema_version != HOST_CONTRACT_SCHEMA
         || receipt.durable_replay_observed
-        || receipt.automatic_host_callback_observed != hook_origin
-        || receipt.persistent_supervision_observed != hook_origin
+        || receipt.automatic_host_callback_observed
+        || receipt.persistent_supervision_observed
     {
         return Err(HostError::ReceiptRejected);
     }
@@ -868,17 +956,51 @@ pub fn append_durable_replay_verified(
     if &verified.receipt_digest() != expected_digest {
         return Err(HostError::ReceiptRejected);
     }
-    append_durable_replay_inner(owned_root, ledger_path, receipt, expected_digest)
+    append_durable_replay_inner_read(owned_root, ledger_path, receipt, expected_digest, resources)
 }
 
+#[cfg(test)]
 fn append_durable_replay_inner(
     owned_root: &Path,
     ledger_path: &Path,
     receipt: &HostOutputReceipt,
     authenticity_receipt_digest: &str,
 ) -> Result<DurableReplayReceipt, HostError> {
+    append_durable_replay_inner_read(
+        owned_root,
+        ledger_path,
+        receipt,
+        authenticity_receipt_digest,
+        None,
+    )
+}
+
+fn append_durable_replay_inner_read(
+    owned_root: &Path,
+    ledger_path: &Path,
+    receipt: &HostOutputReceipt,
+    authenticity_receipt_digest: &str,
+    resources: Option<&lc631_process_supervisor::ResourceReservationView<'_>>,
+) -> Result<DurableReplayReceipt, HostError> {
     use lc631_process_supervisor::filesystem::DirectoryAnchor;
     const MAX_LEDGER_BYTES: usize = 8 * 1024 * 1024;
+    bounded_reader::require_capacity(resources, MAX_LEDGER_BYTES as u64)?;
+    let mut owner = resources
+        .map(|view| {
+            persistent_owner::HostPersistentStoreOwner::begin(
+                owned_root,
+                ledger_path,
+                persistent_owner::PersistentStoreKind::ReplayLedger,
+                4_096,
+                persistent_owner::PersistentStoreLimits::default(),
+                view,
+            )
+        })
+        .transpose()?;
+    let live_capture = resources
+        .map(|view| view.claim_buffer(lc631_process_supervisor::ResourceKind::Output))
+        .transpose()
+        .map_err(|error| HostError::Io(format!("host_resource:{error:?}")))?;
     // Lexical scope admission precedes every filesystem mutation. Actual
     // traversal then uses anchored no-follow handles rather than this check alone.
     let absolute_root =
@@ -915,7 +1037,7 @@ fn append_durable_replay_inner(
             .map_err(|error| HostError::Io(error.to_string()))?,
     )
     .map_err(|error| HostError::InvalidReplay(error.to_string()))?;
-    let mut entries = parse_and_verify_ledger(&raw)?;
+    let entries = parse_and_verify_ledger(&raw)?;
     if entries.iter().any(|entry| {
         !entry.authenticity_receipt_digest.is_empty()
             && entry.authenticity_receipt_digest == authenticity_receipt_digest
@@ -970,21 +1092,27 @@ fn append_durable_replay_inner(
             "ledger_byte_budget_exceeded".into(),
         ));
     }
+    if let Some(owner) = owner.as_mut() {
+        owner.before_write(encoded.len() as u64)?;
+    }
     file.append_and_sync(&encoded)
         .map_err(|error| HostError::Io(error.to_string()))?;
+    drop(raw);
+    drop(entries);
     let after = String::from_utf8(
         file.read_bounded(MAX_LEDGER_BYTES)
             .map_err(|error| HostError::Io(error.to_string()))?,
     )
     .map_err(|error| HostError::InvalidReplay(error.to_string()))?;
-    entries = parse_and_verify_ledger(&after)?;
+    let entries = parse_and_verify_ledger(&after)?;
     let head = entries
         .last()
         .ok_or_else(|| HostError::InvalidReplay("ledger_empty_after_append".into()))?;
     if head.entry_sha256 != entry_sha256 {
         return Err(HostError::InvalidReplay("post_append_head_mismatch".into()));
     }
-    Ok(DurableReplayReceipt {
+    let stored_digest = stable_sha256(&after);
+    let receipt = DurableReplayReceipt {
         schema_version: HOST_REPLAY_SCHEMA,
         ledger_path: ledger_path.to_path_buf(),
         sequence,
@@ -998,11 +1126,34 @@ fn append_durable_replay_inner(
         authenticity_verified: true,
         authenticity_receipt_digest: authenticity_receipt_digest.to_string(),
         claim_boundary: "durable replay preserves a locally verified, hash-chained candidate/output attestation; same-user key custody, remote delivery, and semantic truth remain separate",
-    })
+    };
+    drop(entries);
+    drop(after);
+    drop(file);
+    drop(live_capture);
+    if let Some(owner) = owner.as_mut() {
+        owner.confirm_handoff(&stored_digest)?;
+    }
+    Ok(receipt)
 }
 
 pub fn verify_durable_replay(ledger_path: &Path) -> Result<usize, HostError> {
     read_and_verify_ledger(ledger_path).map(|entries| entries.len())
+}
+
+pub fn verify_durable_replay_with_resources(
+    ledger_path: &Path,
+    resources: &lc631_process_supervisor::ResourceReservationView<'_>,
+) -> Result<usize, HostError> {
+    if !ledger_path.exists() {
+        resources
+            .check()
+            .map_err(|error| HostError::Io(format!("host_resource:{error:?}")))?;
+        return Ok(0);
+    }
+    bounded_reader::with_path_text(ledger_path, 8 * 1024 * 1024, Some(resources), |raw| {
+        parse_and_verify_ledger(raw).map(|entries| entries.len())
+    })
 }
 
 #[cfg(test)]
@@ -1045,8 +1196,7 @@ fn read_and_verify_ledger(path: &Path) -> Result<Vec<ReplayEntry>, HostError> {
     if !path.exists() {
         return Ok(Vec::new());
     }
-    let raw = fs::read_to_string(path).map_err(|error| HostError::Io(error.to_string()))?;
-    parse_and_verify_ledger(&raw)
+    bounded_reader::with_path_text(path, 8 * 1024 * 1024, None, parse_and_verify_ledger)
 }
 
 fn parse_and_verify_ledger(raw: &str) -> Result<Vec<ReplayEntry>, HostError> {
@@ -1290,6 +1440,28 @@ impl HostReceiptContext {
     }
 
     pub fn load_or_create(owned_root: &Path) -> Result<Self, HostError> {
+        Self::load_or_create_read(owned_root, None)
+    }
+
+    pub fn load_or_create_with_resources(
+        owned_root: &Path,
+        resources: &lc631_process_supervisor::ResourceReservationView<'_>,
+    ) -> Result<Self, HostError> {
+        Self::load_or_create_read(owned_root, Some(resources))
+    }
+
+    fn load_or_create_read(
+        owned_root: &Path,
+        resources: Option<&lc631_process_supervisor::ResourceReservationView<'_>>,
+    ) -> Result<Self, HostError> {
+        bounded_reader::require_capacity(resources, 256)?;
+        if let Some(view) = resources {
+            return Self::load_or_create_owned(owned_root, view);
+        }
+        if let Some(view) = resources {
+            view.check()
+                .map_err(|error| HostError::Io(format!("host_resource:{error:?}")))?;
+        }
         fs::create_dir_all(owned_root).map_err(|error| HostError::Io(error.to_string()))?;
         let root = owned_root
             .canonicalize()
@@ -1301,13 +1473,13 @@ impl HostReceiptContext {
             }
         }
         let key = if key_path.is_file() {
-            read_key(&key_path)?
+            read_key(&key_path, resources)?
         } else {
             let key = generate_key().map_err(|_| HostError::ReceiptRejected)?;
             match create_key_file(&key_path, &key) {
                 Ok(()) => key,
                 Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-                    read_key(&key_path)?
+                    read_key(&key_path, resources)?
                 }
                 Err(error) => return Err(HostError::Io(error.to_string())),
             }
@@ -1322,6 +1494,73 @@ impl HostReceiptContext {
     }
 
     pub fn load_existing(owned_root: &Path) -> Result<Self, HostError> {
+        Self::load_existing_read(owned_root, None)
+    }
+
+    fn load_or_create_owned<'a>(
+        owned_root: &Path,
+        view: &'a lc631_process_supervisor::ResourceReservationView<'a>,
+    ) -> Result<Self, HostError> {
+        let target = owned_root.join("receipt-root-v1.key");
+        let mut owner = persistent_owner::HostPersistentStoreOwner::begin(
+            owned_root,
+            &target,
+            persistent_owner::PersistentStoreKind::ReceiptKey,
+            65,
+            persistent_owner::PersistentStoreLimits::default(),
+            view,
+        )?;
+        let key = if owner.target_exists() {
+            let key = owner.read_key()?;
+            owner.confirm_existing_handoff()?;
+            key
+        } else {
+            let key = generate_key().map_err(|_| HostError::ReceiptRejected)?;
+            let alphabet = b"0123456789abcdef";
+            let mut encoded = [b'\n'; 65];
+            for (index, byte) in key.iter().enumerate() {
+                encoded[index * 2] = alphabet[(byte >> 4) as usize];
+                encoded[index * 2 + 1] = alphabet[(byte & 15) as usize];
+            }
+            owner.before_write(65)?;
+            let mut file = owner.create_target()?;
+            file.write_and_sync(&encoded)
+                .map_err(|error| HostError::Io(error.to_string()))?;
+            file.validate_current()
+                .map_err(|error| HostError::Io(error.to_string()))?;
+            drop(file);
+            let text = std::str::from_utf8(&encoded).map_err(|_| HostError::ReceiptKeyInvalid)?;
+            owner.confirm_handoff(&stable_sha256(text))?;
+            key
+        };
+        Ok(Self {
+            issuer: ReceiptIssuer::from_key_bytes("lc631-host-root", &key)
+                .map_err(|_| HostError::ReceiptRejected)?,
+            verifier: ReceiptVerifier::from_key_bytes("lc631-host-root", &key)
+                .map_err(|_| HostError::ReceiptRejected)?,
+            key_path: owned_root
+                .canonicalize()
+                .map_err(|error| HostError::Io(error.to_string()))?
+                .join("receipt-root-v1.key"),
+        })
+    }
+
+    pub fn load_existing_with_resources(
+        owned_root: &Path,
+        resources: &lc631_process_supervisor::ResourceReservationView<'_>,
+    ) -> Result<Self, HostError> {
+        Self::load_existing_read(owned_root, Some(resources))
+    }
+
+    fn load_existing_read(
+        owned_root: &Path,
+        resources: Option<&lc631_process_supervisor::ResourceReservationView<'_>>,
+    ) -> Result<Self, HostError> {
+        bounded_reader::require_capacity(resources, 256)?;
+        if let Some(view) = resources {
+            view.check()
+                .map_err(|error| HostError::Io(format!("host_resource:{error:?}")))?;
+        }
         let metadata =
             fs::symlink_metadata(owned_root).map_err(|error| HostError::Io(error.to_string()))?;
         if metadata.file_type().is_symlink() || !metadata.file_type().is_dir() {
@@ -1336,7 +1575,7 @@ impl HostReceiptContext {
         if metadata.file_type().is_symlink() || !metadata.file_type().is_file() {
             return Err(HostError::ReceiptKeyPathUnsafe);
         }
-        let key = read_key(&key_path)?;
+        let key = read_key(&key_path, resources)?;
         Ok(Self {
             issuer: ReceiptIssuer::from_key_bytes("lc631-host-root", &key)
                 .map_err(|_| HostError::ReceiptRejected)?,
@@ -1781,9 +2020,11 @@ fn authority_quote_ranges(source: &str) -> Vec<Range<usize>> {
     ranges
 }
 
-fn read_key(path: &Path) -> Result<[u8; 32], HostError> {
-    let encoded = fs::read_to_string(path).map_err(|error| HostError::Io(error.to_string()))?;
-    decode_key(encoded.trim())
+fn read_key(
+    path: &Path,
+    resources: Option<&lc631_process_supervisor::ResourceReservationView<'_>>,
+) -> Result<[u8; 32], HostError> {
+    bounded_reader::with_path_text(path, 256, resources, |encoded| decode_key(encoded.trim()))
 }
 
 fn decode_key(encoded: &str) -> Result<[u8; 32], HostError> {

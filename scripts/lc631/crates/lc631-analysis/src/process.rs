@@ -12,6 +12,13 @@ use lc631_core::stable_sha256;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
+mod resources;
+mod runner;
+pub(crate) use resources::{capture_tool, ToolCapture};
+pub use resources::{run_bounded_tool_with_resources, ResourceToolResult};
+pub use runner::ToolProcessRunner;
+pub(crate) use runner::{with_input_result, with_tool_result};
+
 const MAX_TOOL_ARGUMENTS: usize = 128;
 const MAX_TOOL_ARGUMENT_BYTES: usize = 1024 * 1024;
 const MAX_TOOL_STDIN_BYTES: usize = 2 * 1024 * 1024;
@@ -260,10 +267,17 @@ struct ExecutionProvenance {
 }
 
 fn execution_provenance(program: &str, deadline: Instant) -> ExecutionProvenance {
-    let resolved_path = resolve_executable(program);
+    execution_provenance_read(resolve_executable(program), deadline, None)
+}
+
+fn execution_provenance_read(
+    resolved_path: Option<PathBuf>,
+    deadline: Instant,
+    resources: Option<&lc631_process_supervisor::ResourceReservationView<'_>>,
+) -> ExecutionProvenance {
     let executable_sha256 = resolved_path
         .as_deref()
-        .and_then(|path| digest_file(path, deadline).ok());
+        .and_then(|path| digest_file_read(path, deadline, resources).ok());
     let cwd = env::current_dir()
         .ok()
         .and_then(|path| path.canonicalize().ok())
@@ -348,11 +362,19 @@ fn sanitized_environment() -> BTreeMap<OsString, OsString> {
     output
 }
 
-fn digest_file(path: &Path, deadline: Instant) -> Result<String, std::io::Error> {
+fn digest_file_read(
+    path: &Path,
+    deadline: Instant,
+    resources: Option<&lc631_process_supervisor::ResourceReservationView<'_>>,
+) -> Result<String, std::io::Error> {
     let mut file = File::open(path)?;
     let mut digest = Sha256::new();
     let mut buffer = [0_u8; 64 * 1024];
+    let mut total = 0_u64;
     loop {
+        if let Some(view) = resources {
+            view.check().map_err(crate::bounded_input::resource_io)?;
+        }
         if Instant::now() >= deadline {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::TimedOut,
@@ -362,6 +384,15 @@ fn digest_file(path: &Path, deadline: Instant) -> Result<String, std::io::Error>
         let read = file.read(&mut buffer)?;
         if read == 0 {
             break;
+        }
+        total = total
+            .checked_add(read as u64)
+            .ok_or(std::io::ErrorKind::InvalidData)?;
+        if total > 1024 * 1024 * 1024 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "executable_digest_byte_budget_exceeded",
+            ));
         }
         digest.update(&buffer[..read]);
     }
@@ -464,9 +495,10 @@ mod tests {
     #[test]
     fn expired_executable_fingerprint_budget_returns_visible_timeout() {
         let started = Instant::now();
-        let result = digest_file(
+        let result = digest_file_read(
             &std::env::current_exe().unwrap(),
             started - Duration::from_millis(1),
+            None,
         );
         assert_eq!(result.unwrap_err().kind(), std::io::ErrorKind::TimedOut);
         assert!(started.elapsed() < Duration::from_secs(1));
@@ -552,13 +584,28 @@ mod tests {
     #[test]
     fn lone_root_is_terminated_and_reaped_through_the_production_adapter() {
         let _fixture = process_fixture();
+        #[cfg(windows)]
         let executable = std::env::current_exe().unwrap();
+        #[cfg(windows)]
         let program = executable.to_str().unwrap();
+        #[cfg(windows)]
         let args: &[&str] = &[
             "--exact",
             "process::tests::deadline_helper_child",
             "--nocapture",
         ];
+        #[cfg(windows)]
+        let input = Some(b"sleep".as_slice());
+        // A whole workspace test binary can exceed 80MiB. On a cold mounted
+        // filesystem, hashing it may legitimately exhaust this short deadline
+        // BEFORE spawn. Use a small native shell which execs sleep in-place:
+        // still one root PID, no relaxed timeout and no fabricated kill flags.
+        #[cfg(unix)]
+        let (program, args, input): (&str, &[&str], Option<&[u8]>) = (
+            "/bin/sh",
+            &["-c", "printf 'root-ready\\n'; exec /bin/sleep 4"],
+            None,
+        );
         let started = Instant::now();
         let output = run_bounded_tool(BoundedToolRequest {
             program,
@@ -568,7 +615,7 @@ mod tests {
             // separate short-deadline negative above remains unchanged.
             // The owned Rust helper avoids shell/runtime initialization under
             // the adapter's deliberately sanitized environment and Job limits.
-            stdin: Some(b"sleep"),
+            stdin: input,
             timeout_ms: 1_500,
             stdout_limit: 4_096,
             stderr_limit: 4_096,
@@ -577,6 +624,8 @@ mod tests {
         assert_eq!(output.state, ToolRunState::TimedOut, "{output:?}");
         assert!(output.process_tree_kill_attempted, "{output:?}");
         assert!(output.process_tree_kill_verified, "{output:?}");
+        #[cfg(unix)]
+        assert!(output.stdout.starts_with(b"root-ready\n"), "{output:?}");
         assert!(
             output.orphan_risk.starts_with("none_observed_within_"),
             "{output:?}"

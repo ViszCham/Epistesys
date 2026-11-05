@@ -2,9 +2,9 @@
 
 ## 日本語
 
-Epistesysは、選択したv6.3.1 source snapshotから当初private cloneとして独立初期化された実験的プロジェクトです。現在のsource identityはEpistesys 6.3.2-alpha.3です。`docs/migration-contract.md`の由来・除外契約を保持します。
+Epistesysは、選択したv6.3.1 source snapshotから当初private cloneとして独立初期化された実験的プロジェクトです。現在のsource identityはBeta 6.9（`6.9.0-beta.1`）で、未完成のTLCX実装を保存した中間スナップショットです。`docs/migration-contract.md`の由来・除外契約を保持します。sourceのversion変更を、既存hostのplugin更新や完成判定とは扱わないでください。
 
-除外した継承元固有情報、個人状態、credentials、cache、receipt root、replay ledger、host絶対pathを再導入しません。Unavailable/Hold/Clarify/fallback/未観測は証拠境界であり成功ではありません。日本語の説明を前半、同内容の英語を後半に置きます。Rust source/schema/fixture/command IDの互換名は保持できます。Epistesys-7はこのalphaの範囲外です。
+除外した継承元固有情報、個人状態、credentials、cache、receipt root、replay ledger、host絶対pathを再導入しません。Unavailable/Hold/Clarify/fallback/未観測は証拠境界であり成功ではありません。日本語の説明を前半、同内容の英語を後半に置きます。Rust source/schema/fixture/command IDの互換名は保持できます。この保存版から、後続のBeta-7.0の完成を宣言しないでください。
 
 ## English
 
@@ -17,4 +17,6 @@ Clarify, fallback, and unobserved states as evidence boundaries rather than succ
 
 Japanese explanatory prose precedes equivalent English prose. Rust source, schemas, fixtures,
 and command identifiers may retain their compatibility names while the product identity is
-Epistesys 6.3.2-alpha.3. New Epistesys-7 behavior is outside this alpha.
+Beta 6.9 (`6.9.0-beta.1`), an intermediate checkpoint of unfinished TLCX work.
+Do not treat the source-version change as an existing-host plugin update or a completion decision,
+and do not claim that the later Beta-7.0 work is complete from this checkpoint.

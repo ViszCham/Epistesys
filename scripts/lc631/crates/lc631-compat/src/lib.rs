@@ -1,8 +1,12 @@
 #![forbid(unsafe_code)]
 
+pub mod tlcx_distribution;
+pub mod tlcx_release_gate;
+
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::fs;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 pub const V630_COMMIT: &str = "0d933982fa392043c2fe825644a3a560963b6615";
@@ -41,38 +45,84 @@ pub struct BaselineGuardReport {
 }
 
 pub fn audit_v630_root(repository_root: &Path) -> BaselineGuardReport {
+    audit_v630_root_with_reader(repository_root, &mut |path, _cap| {
+        Ok::<_, std::convert::Infallible>(hash_file(path).ok())
+    })
+    .expect("legacy callback explicitly materializes missing/read-failed files")
+}
+
+/// A resource-aware caller owns admission and actual bounded input. Missing
+/// files may be explicit None; resource/deadline failures propagate unchanged.
+pub fn audit_v630_root_with_reader<E>(
+    repository_root: &Path,
+    reader: &mut impl FnMut(&Path, usize) -> Result<Option<String>, E>,
+) -> Result<BaselineGuardReport, E> {
     let files = PROTECTED_FILES
         .iter()
         .map(|(relative, expected)| {
             let path = repository_root.join(relative);
-            let observed = hash_file(&path).ok();
-            BaselineFileObservation {
+            let observed = reader(&path, 1024 * 1024)?;
+            Ok(BaselineFileObservation {
                 path: relative.to_string(),
                 expected_sha256: expected.to_string(),
                 matches: observed.as_deref() == Some(*expected),
                 observed_sha256: observed,
-            }
+            })
         })
-        .collect::<Vec<_>>();
-    BaselineGuardReport {
+        .collect::<Result<Vec<_>, E>>()?;
+    Ok(BaselineGuardReport {
         schema_version: BASELINE_SCHEMA,
         expected_commit: V630_COMMIT,
         baseline_intact: files.iter().all(|file| file.matches),
         files,
         claim_boundary:
             "matching protected-file digests establish only the frozen compatibility boundary, not repository-wide equivalence or safety",
-    }
+    })
 }
 
 pub fn hash_file(path: &Path) -> Result<String, CompatError> {
-    let bytes = fs::read(path).map_err(|_| CompatError::ReadFailed(path.to_path_buf()))?;
-    let digest = Sha256::digest(bytes);
-    let mut encoded = String::with_capacity(digest.len() * 2);
-    for byte in digest {
-        use std::fmt::Write as _;
-        let _ = write!(encoded, "{byte:02x}");
+    let mut file = fs::File::open(path).map_err(|_| CompatError::ReadFailed(path.to_path_buf()))?;
+    hash_capped_reader(&mut file, 1024 * 1024)
+}
+
+/// Fixed stack scratch and a one-byte sentinel bound actual reads even when a
+/// file grows after its metadata was inspected. No metadata length is trusted.
+/// Every returning read, including Interrupted and EOF, consumes one of 65,536
+/// calls. This does not impose a deadline on an individual blocking read.
+pub fn hash_capped_reader(
+    reader: &mut (impl Read + ?Sized),
+    cap: usize,
+) -> Result<String, CompatError> {
+    if cap == 0 || cap > 1024 * 1024 {
+        return Err(CompatError::InvalidBudget);
     }
-    Ok(encoded)
+    let mut hash = Sha256::new();
+    let mut total = 0_usize;
+    let mut buffer = [0_u8; 8192];
+    for _ in 0..65_536 {
+        let remaining = cap.checked_sub(total).ok_or(CompatError::BudgetExceeded)?;
+        let length = buffer.len().min(remaining.max(1));
+        let count = match reader.read(&mut buffer[..length]) {
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(_) => return Err(CompatError::ReaderFailed),
+            Ok(count) => count,
+        };
+        if count > length || count > remaining {
+            return Err(CompatError::BudgetExceeded);
+        }
+        if count == 0 {
+            let digest = hash.finalize();
+            let mut encoded = String::with_capacity(digest.len() * 2);
+            for byte in digest {
+                use std::fmt::Write as _;
+                let _ = write!(encoded, "{byte:02x}");
+            }
+            return Ok(encoded);
+        }
+        total += count;
+        hash.update(&buffer[..count]);
+    }
+    Err(CompatError::ReadCallLimit)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
@@ -151,6 +201,10 @@ pub fn quarantine_legacy_strong_state(
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub enum CompatError {
     ReadFailed(PathBuf),
+    BudgetExceeded,
+    InvalidBudget,
+    ReaderFailed,
+    ReadCallLimit,
 }
 
 #[cfg(test)]

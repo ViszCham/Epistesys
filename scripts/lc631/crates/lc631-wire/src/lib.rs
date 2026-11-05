@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 mod alpha2_release;
+pub mod legacy_codec;
 
 pub use alpha2_release::{
     alpha2_gate_payload_digest, alpha2_gate_scope, alpha2_required_features, assess_alpha2_release,

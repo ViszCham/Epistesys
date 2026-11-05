@@ -9,6 +9,8 @@ use crate::{
 
 const MAX_RUST_SOURCE_BYTES: usize = 64 * 1024;
 const NIGHTLY_TOOLCHAIN: &str = "+nightly-2026-07-01";
+mod resources;
+pub(crate) use resources::analyze_rust_source_with_resources;
 
 pub(crate) fn analyze_rust_source(source: &str) -> RustAnalysisSurface {
     let _compiler_guard = compiler_lock()
@@ -194,7 +196,15 @@ pub(crate) fn apply_rust_stages(stages: &mut [StageReceipt], rust: &RustAnalysis
     .into_iter()
     .flat_map(&digest)
     .collect::<Vec<_>>();
-    update(stages, "RPA-12", ir_state, ir_digests, &["IR outputs are human/debug formats and mapping across compiler revisions remains unstable"]);
+    update(
+        stages,
+        "RPA-12",
+        ir_state,
+        ir_digests,
+        &[
+            "IR outputs are human/debug formats and mapping across compiler revisions remains unstable",
+        ],
+    );
     update(
         stages,
         "RPA-13",
@@ -206,7 +216,15 @@ pub(crate) fn apply_rust_stages(stages: &mut [StageReceipt], rust: &RustAnalysis
         digest(CompilerArtifactKind::Mir),
         &["compiler acceptance does not establish semantic intent or unsafe validity"],
     );
-    update(stages, "RPA-14", EvidenceState::Candidate, vec![rust.source_revision.clone()], &["unsafe markers are an inventory; all-safe-caller soundness and provenance remain unproved"]);
+    update(
+        stages,
+        "RPA-14",
+        EvidenceState::Candidate,
+        vec![rust.source_revision.clone()],
+        &[
+            "unsafe markers are an inventory; all-safe-caller soundness and provenance remain unproved",
+        ],
+    );
     let backend_digests = [
         CompilerArtifactKind::LlvmIr,
         CompilerArtifactKind::Assembly,
@@ -249,7 +267,15 @@ pub(crate) fn apply_rust_stages(stages: &mut [StageReceipt], rust: &RustAnalysis
         vec![rust.source_revision.clone()],
         &["atomic marker inventory does not explore weak memory, races, or schedules"],
     );
-    update(stages, "RPA-18", backend_state, backend_digests, &["emitted assembly/object digest is not disassembly validation, runtime behavior, or performance evidence"]);
+    update(
+        stages,
+        "RPA-18",
+        backend_state,
+        backend_digests,
+        &[
+            "emitted assembly/object digest is not disassembly validation, runtime behavior, or performance evidence",
+        ],
+    );
     update(
         stages,
         "RPA-11",

@@ -452,6 +452,24 @@ fn dgcl_connection_observation_cannot_mint_compiler_runtime_or_acceptance_eviden
         "epistesys-dgcl-standalone-candidate.v1"
     );
     assert_eq!(candidate["candidate_state"], "exact_candidate_captured");
+    // The resource-aware connection report intentionally omits raw buffers.
+    // Candidate construction must consume the original nonempty borrowed bytes
+    // before that live capture drops, not reconstruct or clone its JSON later.
+    let captured = candidate["candidate_text"]
+        .as_str()
+        .expect("exact candidate bytes");
+    assert!(!captured.is_empty());
+    assert_eq!(candidate["candidate_byte_len"], captured.len());
+    assert_eq!(candidate["candidate_digest"], stable_sha256(captured));
+    let captured_wire: Value = serde_json::from_str(captured).unwrap();
+    assert_eq!(captured_wire["command"], plan.command);
+    assert_eq!(
+        captured_wire["payload"]["source_revision"],
+        plan.source_revision
+    );
+    assert!(wire["payload"]["connection"]["process"]
+        .get("stdout")
+        .is_none());
     assert_eq!(
         candidate["candidate_digest"],
         wire["payload"]["connection"]["process"]["stdout_digest"]

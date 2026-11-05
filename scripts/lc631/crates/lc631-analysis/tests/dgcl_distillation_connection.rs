@@ -91,7 +91,7 @@ fn multiple_constraints_on_one_pair_keep_the_exact_materialized_evidence_origin(
     )
     .unwrap();
     let mut requirements = pipeline.program_ir.requirements.clone();
-    let ast = &mut requirements[0].alternatives[0].ast;
+    let ast = requirements[0].alternatives[0].ast.materialize_mut();
     assert!(ast.constraint_graph.edges.len() >= 2);
     // Explicit adversarial typed-input fixture: two separately retained
     // candidate constraints share a pair. This is not a semantic gold label.
@@ -106,7 +106,10 @@ fn multiple_constraints_on_one_pair_keep_the_exact_materialized_evidence_origin(
         &serde_json::to_string(&requirements[0].alternatives[0].ast).unwrap(),
     );
     let projection = distill_dgcl_constraints(source, &requirements).unwrap();
+    assert!(projection.claim_boundary.contains("legacy DTO"));
     for witness in &projection.constraint_witnesses {
+        assert!(!witness.semantic_truth_claim);
+        assert!(!witness.authority_created);
         // Geometry selects a pair, while the discrete validator materializes
         // the first exact source relation; a pair-map must not overwrite it
         // with a later conflict/requires edge sharing the endpoints.
@@ -117,5 +120,28 @@ fn multiple_constraints_on_one_pair_keep_the_exact_materialized_evidence_origin(
         !pipeline
             .implementation_closure
             .implementation_complete_candidate
+    );
+}
+
+#[test]
+fn legacy_distillation_rejects_region_offset_overflow_without_panicking() {
+    let source = "Please test the parser.";
+    let pipeline = build_dgcl_pipeline(
+        source,
+        DgclBackendSet {
+            english: None,
+            japanese: None,
+        },
+    )
+    .unwrap();
+    let mut requirements = pipeline.program_ir.requirements.clone();
+    requirements[0].alternatives[0].region_offset = usize::MAX;
+    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        distill_dgcl_constraints(source, &requirements)
+    }));
+    assert!(outcome.is_ok(), "untrusted region offset must not panic");
+    assert_eq!(
+        outcome.unwrap(),
+        Err(DgclProjectionError::SourceSpanInvalid)
     );
 }

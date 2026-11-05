@@ -1,10 +1,11 @@
-use crate::{run_bounded_tool, BoundedToolRequest, BoundedToolResult, ToolRunState};
+use crate::bounded_input::{hash_capped, read_text_file};
+use crate::process::capture_tool;
+use crate::{BoundedToolRequest, BoundedToolResult, ToolRunState};
 use lc631_core::stable_sha256;
+use lc631_process_supervisor::ResourceReservationView;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs::{self, File};
-use std::io::Read;
+use std::fs;
 use std::path::{Path, PathBuf};
 
 const SCHEMA: &str = "epistesys-dgcl-nlp.v1";
@@ -110,6 +111,21 @@ impl DgclRuntimePins {
 }
 
 pub fn load_dgcl_runtime_pins(repo_root: &Path) -> Result<DgclRuntimePins, LanguageWorkerError> {
+    load_dgcl_runtime_pins_read(repo_root, None)
+}
+
+pub fn load_dgcl_runtime_pins_with_resources(
+    repo_root: &Path,
+    resources: &ResourceReservationView<'_>,
+) -> Result<DgclRuntimePins, LanguageWorkerError> {
+    resources.check().map_err(worker_resource)?;
+    load_dgcl_runtime_pins_read(repo_root, Some(resources))
+}
+
+fn load_dgcl_runtime_pins_read(
+    repo_root: &Path,
+    resources: Option<&ResourceReservationView<'_>>,
+) -> Result<DgclRuntimePins, LanguageWorkerError> {
     if !cfg!(windows) {
         return Err(LanguageWorkerError::RuntimeManifest(
             "alpha2_runtime_profile_requires_windows_x86_64".into(),
@@ -125,9 +141,14 @@ pub fn load_dgcl_runtime_pins(repo_root: &Path) -> Result<DgclRuntimePins, Langu
         ));
     }
     let pin_path = checked_relative_path(&root, "validation/dgcl-nlp-model-pins.v1.json")?;
-    let pin_raw = read_bounded_text(&pin_path, MAX_MANIFEST_BYTES)?;
-    let pins: DgclPinFile = serde_json::from_str(&pin_raw)
+    let pin_input = read_text_file(&pin_path, MAX_MANIFEST_BYTES as usize, resources)
+        .map_err(|_| LanguageWorkerError::RuntimeManifest("pinned_file_unreadable".into()))?;
+    let pin_raw = pin_input
+        .as_str()
+        .map_err(|_| LanguageWorkerError::RuntimeManifest("pinned_file_not_utf8".into()))?;
+    let pins: DgclPinFile = serde_json::from_str(pin_raw)
         .map_err(|_| LanguageWorkerError::RuntimeManifest("pin_manifest_invalid".into()))?;
+    drop(pin_input);
     if pins.schema_version != "epistesys-dgcl-model-pins.v1"
         || pins.stanza_version != "1.14.0"
         || !valid_digest(&pins.worker_script_digest)
@@ -151,23 +172,35 @@ pub fn load_dgcl_runtime_pins(repo_root: &Path) -> Result<DgclRuntimePins, Langu
     }
 
     let runtime_manifest = checked_relative_path(&root, &pins.runtime_manifest.path)?;
-    let runtime_raw = read_bounded_text(&runtime_manifest, MAX_MANIFEST_BYTES)?;
-    if stable_sha256(&runtime_raw) != pins.runtime_manifest.sha256 {
+    let runtime_input =
+        read_text_file(&runtime_manifest, MAX_MANIFEST_BYTES as usize, resources)
+            .map_err(|_| LanguageWorkerError::RuntimeManifest("pinned_file_unreadable".into()))?;
+    let runtime_raw = runtime_input
+        .as_str()
+        .map_err(|_| LanguageWorkerError::RuntimeManifest("pinned_file_not_utf8".into()))?;
+    if stable_sha256(runtime_raw) != pins.runtime_manifest.sha256 {
         return Err(LanguageWorkerError::RuntimeManifest(
             "runtime_manifest_digest_mismatch".into(),
         ));
     }
-    let runtime: RuntimeManifest = serde_json::from_str(&runtime_raw)
+    let runtime: RuntimeManifest = serde_json::from_str(runtime_raw)
         .map_err(|_| LanguageWorkerError::RuntimeManifest("runtime_manifest_invalid".into()))?;
+    drop(runtime_input);
     let requirements_lock = checked_relative_path(&root, &pins.requirements_lock.path)?;
-    if stable_sha256(&read_bounded_text(&requirements_lock, 65_536)?)
-        != pins.requirements_lock.sha256
-    {
+    let requirements_input = read_text_file(
+        &requirements_lock,
+        MAX_REQUIREMENTS_BYTES as usize,
+        resources,
+    )
+    .map_err(worker_io)?;
+    let requirements_raw = requirements_input.as_str().map_err(worker_io)?;
+    if stable_sha256(requirements_raw) != pins.requirements_lock.sha256 {
         return Err(LanguageWorkerError::RuntimeManifest(
             "requirements_lock_digest_mismatch".into(),
         ));
     }
-    let requirements_count = validate_requirements_lock(&requirements_lock)?;
+    let requirements_count = parse_distribution_lines(requirements_raw)?.len();
+    drop(requirements_input);
     let python = checked_relative_path(&root, &runtime.python.executable_path)?;
     let worker = checked_relative_path(&root, &runtime.worker.path)?;
     let model_root = checked_relative_path(&root, &pins.model_root)?;
@@ -209,10 +242,10 @@ pub fn load_dgcl_runtime_pins(repo_root: &Path) -> Result<DgclRuntimePins, Langu
         || !runtime.network_boundary.offline_environment_hints
         || runtime.network_boundary.os_network_isolation_enforced
         || runtime.claim_boundary.trim().is_empty()
-        || digest_file(&python).map_err(|_| {
+        || hash_file_read(&python, resources).map_err(|_| {
             LanguageWorkerError::RuntimeManifest("python_executable_unreadable".into())
         })? != pins.python_executable_observed_digest
-        || digest_file(&worker)
+        || hash_file_read(&worker, resources)
             .map_err(|_| LanguageWorkerError::RuntimeManifest("worker_script_unreadable".into()))?
             != pins.worker_script_digest
     {
@@ -445,6 +478,7 @@ pub struct LanguageObservation {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub enum LanguageWorkerError {
+    Resource(String),
     InvalidLanguage,
     SourceBudget,
     Manifest(String),
@@ -463,16 +497,40 @@ pub fn run_language_worker(
     language: &str,
     config: &LanguageWorkerConfig,
 ) -> Result<LanguageObservation, LanguageWorkerError> {
+    run_language_worker_read(source, language, config, None)
+}
+
+pub fn run_language_worker_with_resources(
+    source: &str,
+    language: &str,
+    config: &LanguageWorkerConfig,
+    resources: &ResourceReservationView<'_>,
+) -> Result<LanguageObservation, LanguageWorkerError> {
+    resources.check().map_err(worker_resource)?;
+    if resources.source_revision() != lc631_core::context::SourceRevision::of(source).digest() {
+        return Err(worker_resource(
+            lc631_process_supervisor::ResourceError::SourceMismatch,
+        ));
+    }
+    run_language_worker_read(source, language, config, Some(resources))
+}
+
+fn run_language_worker_read(
+    source: &str,
+    language: &str,
+    config: &LanguageWorkerConfig,
+    resources: Option<&ResourceReservationView<'_>>,
+) -> Result<LanguageObservation, LanguageWorkerError> {
     if !matches!(language, "ja" | "en") {
         return Err(LanguageWorkerError::InvalidLanguage);
     }
     if source.len() > MAX_SOURCE_BYTES {
         return Err(LanguageWorkerError::SourceBudget);
     }
-    let python_version = validate_runtime_binding(config)?;
-    let manifest = validate_manifest(config, language)?;
+    let python_version = validate_runtime_binding_read(config, resources)?;
+    let manifest = validate_manifest_read(config, language, resources)?;
     if !valid_digest(&config.expected_script_digest)
-        || hash_file(&config.script)
+        || hash_file_read(&config.script, resources)
             .map_err(|_| LanguageWorkerError::Manifest("script_unavailable".into()))?
             != config.expected_script_digest
     {
@@ -510,6 +568,7 @@ pub fn run_language_worker(
     let mut framed = Vec::with_capacity(payload.len() + 4);
     framed.extend_from_slice(&length.to_be_bytes());
     framed.extend_from_slice(&payload);
+    drop(payload);
     let python = config
         .python
         .to_str()
@@ -531,20 +590,26 @@ pub fn run_language_worker(
         .requirements_lock
         .to_str()
         .ok_or(LanguageWorkerError::RequestEncoding)?;
-    let process = run_bounded_tool(BoundedToolRequest {
-        program: python,
-        args: &[
-            isolated_flag,
-            script,
-            model_dir,
-            runtime_manifest,
-            requirements_lock,
-        ],
-        stdin: Some(&framed),
-        timeout_ms: config.timeout_ms,
-        stdout_limit: MAX_RESPONSE_BYTES + 4,
-        stderr_limit: 4_096,
-    });
+    let capture = capture_tool(
+        BoundedToolRequest {
+            program: python,
+            args: &[
+                isolated_flag,
+                "-B",
+                script,
+                model_dir,
+                runtime_manifest,
+                requirements_lock,
+            ],
+            stdin: Some(&framed),
+            timeout_ms: config.timeout_ms,
+            stdout_limit: MAX_RESPONSE_BYTES + 4,
+            stderr_limit: 4_096,
+        },
+        resources,
+    )
+    .map_err(worker_resource)?;
+    let process = capture.reported();
     if process.state != ToolRunState::Observed
         || process.stdout_truncated
         || process.stderr_truncated
@@ -559,15 +624,15 @@ pub fn run_language_worker(
     if process.executable_sha256.as_ref() != Some(&config.expected_python_digest) {
         return Err(LanguageWorkerError::ResponseBinding);
     }
-    if hash_file(&config.script)
+    if hash_file_read(&config.script, resources)
         .map_err(|_| LanguageWorkerError::Manifest("script_unavailable_after_run".into()))?
         != config.expected_script_digest
-        || validate_manifest(config, language).is_err()
-        || validate_runtime_binding(config).as_ref() != Ok(&python_version)
+        || validate_manifest_read(config, language, resources).is_err()
+        || validate_runtime_binding_read(config, resources).as_ref() != Ok(&python_version)
     {
         return Err(LanguageWorkerError::ResponseBinding);
     }
-    let response = decode_response(&process.stdout)?;
+    let response = decode_response(capture.stdout())?;
     if response.schema_version != SCHEMA
         || response.request_id != request_id
         || response.language != language
@@ -602,7 +667,7 @@ pub fn run_language_worker(
         python_version,
         payload_digest: stable_sha256(&canonical),
         sentences,
-        process,
+        process: capture.into_report(),
         semantic_truth_claim: false,
     })
 }
@@ -839,30 +904,31 @@ fn has_observed_tokens(source: &str, sentences: &[WorkerSentence]) -> bool {
             .any(|token| !token.text.trim().is_empty())
 }
 
-fn validate_manifest(
+fn validate_manifest_read(
     config: &LanguageWorkerConfig,
     language: &str,
+    resources: Option<&ResourceReservationView<'_>>,
 ) -> Result<ModelManifest, LanguageWorkerError> {
     let model_root = config
         .model_dir
         .canonicalize()
         .map_err(|_| LanguageWorkerError::Manifest("model_dir_unavailable".into()))?;
-    let metadata = fs::metadata(&config.manifest)
-        .map_err(|_| LanguageWorkerError::Manifest("manifest_unavailable".into()))?;
-    if metadata.len() == 0 || metadata.len() > MAX_MANIFEST_BYTES {
+    let input = read_text_file(&config.manifest, MAX_MANIFEST_BYTES as usize, resources)
+        .map_err(worker_io)?;
+    let raw = input.as_str().map_err(worker_io)?;
+    if raw.is_empty() {
         return Err(LanguageWorkerError::Manifest(
             "manifest_size_invalid".into(),
         ));
     }
-    let raw = fs::read_to_string(&config.manifest)
-        .map_err(|_| LanguageWorkerError::Manifest("manifest_invalid_utf8".into()))?;
-    if stable_sha256(&raw) != config.expected_manifest_digest {
+    if stable_sha256(raw) != config.expected_manifest_digest {
         return Err(LanguageWorkerError::Manifest(
             "manifest_digest_mismatch".into(),
         ));
     }
-    let manifest: ModelManifest = serde_json::from_str(&raw)
+    let manifest: ModelManifest = serde_json::from_str(raw)
         .map_err(|_| LanguageWorkerError::Manifest("manifest_shape_invalid".into()))?;
+    drop(input);
     if manifest.schema_version != "epistesys-dgcl-model-manifest.v1"
         || manifest.stanza_version != "1.14.0"
         || manifest.language != language
@@ -899,7 +965,7 @@ fn validate_manifest(
                 "model_file_outside_root".into(),
             ));
         }
-        if hash_file(&resolved)
+        if hash_file_read(&resolved, resources)
             .map_err(|_| LanguageWorkerError::ModelFile("model_file_unreadable".into()))?
             != entry.sha256
         {
@@ -911,23 +977,18 @@ fn validate_manifest(
     Ok(manifest)
 }
 
-fn hash_file(path: &Path) -> std::io::Result<String> {
-    let mut file = File::open(path)?;
-    let mut hasher = Sha256::new();
-    let mut buffer = [0_u8; 65_536];
-    loop {
-        let count = file.read(&mut buffer)?;
-        if count == 0 {
-            break;
-        }
-        hasher.update(&buffer[..count]);
-    }
-    let mut output = String::from("sha256:");
-    for byte in hasher.finalize() {
-        use std::fmt::Write as _;
-        let _ = write!(output, "{byte:02x}");
-    }
-    Ok(output)
+fn hash_file_read(
+    path: &Path,
+    resources: Option<&ResourceReservationView<'_>>,
+) -> std::io::Result<String> {
+    // Explicit 1GiB/file hashing profile, fixed-buffer RAM; not a model cache quota.
+    hash_capped(path, 1024 * 1024 * 1024, resources)
+}
+fn worker_resource(error: lc631_process_supervisor::ResourceError) -> LanguageWorkerError {
+    LanguageWorkerError::Resource(format!("{error:?}"))
+}
+fn worker_io(error: std::io::Error) -> LanguageWorkerError {
+    LanguageWorkerError::Resource(error.to_string())
 }
 
 fn valid_digest(value: &str) -> bool {
@@ -1000,22 +1061,6 @@ fn is_reparse_point(metadata: &fs::Metadata) -> bool {
 #[cfg(not(windows))]
 fn is_reparse_point(_metadata: &fs::Metadata) -> bool {
     false
-}
-
-fn read_bounded_text(path: &Path, limit: u64) -> Result<String, LanguageWorkerError> {
-    let file = File::open(path)
-        .map_err(|_| LanguageWorkerError::RuntimeManifest("pinned_file_unavailable".into()))?;
-    let mut bytes = Vec::new();
-    file.take(limit.saturating_add(1))
-        .read_to_end(&mut bytes)
-        .map_err(|_| LanguageWorkerError::RuntimeManifest("pinned_file_unreadable".into()))?;
-    if bytes.is_empty() || bytes.len() as u64 > limit {
-        return Err(LanguageWorkerError::RuntimeManifest(
-            "pinned_file_size_invalid".into(),
-        ));
-    }
-    String::from_utf8(bytes)
-        .map_err(|_| LanguageWorkerError::RuntimeManifest("pinned_file_not_utf8".into()))
 }
 
 fn normalize_distribution_name(name: &str) -> Option<String> {
@@ -1123,16 +1168,10 @@ fn validate_installed_distribution_set(
     Ok(expected.len())
 }
 
-fn validate_requirements_lock(path: &Path) -> Result<usize, LanguageWorkerError> {
-    let contents = read_bounded_text(path, MAX_REQUIREMENTS_BYTES)?;
-    Ok(parse_distribution_lines(&contents)?.len())
-}
-
-fn digest_file(path: &Path) -> std::io::Result<String> {
-    hash_file(path)
-}
-
-fn validate_runtime_binding(config: &LanguageWorkerConfig) -> Result<String, LanguageWorkerError> {
+fn validate_runtime_binding_read(
+    config: &LanguageWorkerConfig,
+    resources: Option<&ResourceReservationView<'_>>,
+) -> Result<String, LanguageWorkerError> {
     if !(1..=60_000).contains(&config.timeout_ms)
         || !valid_digest(&config.expected_python_digest)
         || !valid_digest(&config.expected_script_digest)
@@ -1159,21 +1198,35 @@ fn validate_runtime_binding(config: &LanguageWorkerConfig) -> Result<String, Lan
             ));
         }
     }
-    let runtime_raw = read_bounded_text(&config.runtime_manifest, MAX_MANIFEST_BYTES)?;
-    if stable_sha256(&runtime_raw) != config.expected_runtime_manifest_digest {
+    let runtime_input = read_text_file(
+        &config.runtime_manifest,
+        MAX_MANIFEST_BYTES as usize,
+        resources,
+    )
+    .map_err(worker_io)?;
+    let runtime_raw = runtime_input.as_str().map_err(worker_io)?;
+    if stable_sha256(runtime_raw) != config.expected_runtime_manifest_digest {
         return Err(LanguageWorkerError::RuntimeManifest(
             "runtime_manifest_digest_mismatch".into(),
         ));
     }
-    let runtime: RuntimeManifest = serde_json::from_str(&runtime_raw)
+    let runtime: RuntimeManifest = serde_json::from_str(runtime_raw)
         .map_err(|_| LanguageWorkerError::RuntimeManifest("runtime_manifest_invalid".into()))?;
-    let requirements_raw = read_bounded_text(&config.requirements_lock, MAX_REQUIREMENTS_BYTES)?;
-    if stable_sha256(&requirements_raw) != config.expected_requirements_lock_digest {
+    drop(runtime_input);
+    let requirements_input = read_text_file(
+        &config.requirements_lock,
+        MAX_REQUIREMENTS_BYTES as usize,
+        resources,
+    )
+    .map_err(worker_io)?;
+    let requirements_raw = requirements_input.as_str().map_err(worker_io)?;
+    if stable_sha256(requirements_raw) != config.expected_requirements_lock_digest {
         return Err(LanguageWorkerError::RuntimeManifest(
             "requirements_lock_digest_mismatch".into(),
         ));
     }
-    let requirements_count = parse_distribution_lines(&requirements_raw)?.len();
+    let requirements_count = parse_distribution_lines(requirements_raw)?.len();
+    drop(requirements_input);
     if runtime.schema_version != "epistesys-dgcl-python-runtime.v1"
         || runtime.target_platform != "windows_x86_64"
         || runtime.python.implementation != "CPython"
@@ -1195,10 +1248,10 @@ fn validate_runtime_binding(config: &LanguageWorkerConfig) -> Result<String, Lan
         || !runtime.network_boundary.offline_environment_hints
         || runtime.network_boundary.os_network_isolation_enforced
         || runtime.claim_boundary.trim().is_empty()
-        || digest_file(&config.python).map_err(|_| {
+        || hash_file_read(&config.python, resources).map_err(|_| {
             LanguageWorkerError::RuntimeManifest("python_executable_unreadable".into())
         })? != config.expected_python_digest
-        || digest_file(&config.script)
+        || hash_file_read(&config.script, resources)
             .map_err(|_| LanguageWorkerError::RuntimeManifest("worker_script_unreadable".into()))?
             != config.expected_script_digest
     {

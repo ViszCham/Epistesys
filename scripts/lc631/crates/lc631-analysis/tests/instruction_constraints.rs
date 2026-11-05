@@ -43,7 +43,7 @@ fn pronoun_references_are_not_fabricated_into_a_unique_target() {
         InstructionParseBudget::default(),
     )
     .unwrap();
-    let references = prior_action.selected.unwrap().references;
+    let references = prior_action.selected.unwrap().into_legacy().references;
     assert!(references.iter().any(|reference| {
         reference.text == "it."
             && reference.candidate_action_indices == vec![0]
@@ -58,7 +58,7 @@ fn resource_branch_and_time_scopes_keep_their_own_values_and_spans() {
         InstructionParseBudget::default(),
     )
     .unwrap();
-    let scopes = report.selected.unwrap().scopes;
+    let scopes = report.selected.unwrap().into_legacy().scopes;
     assert!(scopes.iter().any(|scope| {
         scope.kind == InstructionScopeKind::Resource && scope.value == "readme.md"
     }));
@@ -89,6 +89,7 @@ fn temporal_requires_and_conflict_edges_are_candidates_not_action_permits() {
     let before = temporal
         .selected
         .unwrap()
+        .into_legacy()
         .constraint_graph
         .edges
         .into_iter()

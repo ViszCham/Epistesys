@@ -1,5 +1,13 @@
 #![forbid(unsafe_code)]
 
+pub mod binary_checkpoint_resume;
+mod build_profile;
+pub mod bundle_inspect;
+pub mod io;
+mod tlcx_checked_tl_command;
+pub mod tlcx_commands;
+mod tlcx_path_command;
+
 mod dgcl_journal;
 mod dgcl_package;
 mod dgcl_repair;
@@ -10,30 +18,32 @@ use effect_error::CliFailure;
 use lc631_accelerator::{compare_lane_digests, CubeClWgpuBackend, MeasurementState};
 use lc631_accelerator::{input_from_evaluations, AcceleratorBroker, CpuBackend, ExecutionReceipt};
 use lc631_analysis::{
-    analyze as analyze_program, analyze_path as analyze_program_path, append_checkpoint,
-    build_coding_closure, build_dgcl_pipeline, build_dgcl_standalone_candidate, evaluate_gold,
-    inspect_resume, inspect_resume_with_anchor, issue_checkpoint_head_anchor,
-    issue_observed_connection_evidence, load_checkpoint_head, load_dgcl_runtime_pins,
-    observe_connection_plan_from_cli, parse_controlled_instruction, persist_checkpoint_head,
-    run_language_worker, verify_connection_plan_from_cli, AnalysisRequest, CheckpointBody,
-    CheckpointEventKind, CheckpointHeadRequest, CodingConnectionPlan, DeliveryState,
-    DgclBackendSet, GoldCorpus, InstructionParseBudget, ProgramAnalysisReport,
+    analyze_path_with_resources as analyze_program_path, analyze_with_resources as analyze_program,
+    build_coding_closure, build_dgcl_pipeline_with_runner as build_dgcl_pipeline,
+    build_dgcl_standalone_candidate, evaluate_gold, issue_checkpoint_head_anchor,
+    issue_observed_connection_evidence, load_dgcl_runtime_pins_with_resources,
+    observe_connection_plan_from_cli_with_consumer, parse_controlled_instruction,
+    run_language_worker_with_resources, verify_connection_plan_from_cli_with_resources,
+    AnalysisRequest, CheckpointBody, CheckpointEventKind, CheckpointHeadRequest,
+    CodingConnectionPlan, DeliveryState, DgclBackendSet, GoldCorpus, InstructionParseBudget,
+    ProgramAnalysisReport,
 };
-use lc631_compat::{audit_v630_root, BaselineGuardReport, DivergenceKind, PairedObservation};
+use lc631_compat::{BaselineGuardReport, DivergenceKind, PairedObservation};
 use lc631_core::{
     stable_sha256, ArtifactId, AuthorityRevision, EpochId, RevisionBinding, SourceSpan,
     LC631_VERSION,
 };
 use lc631_host::{
-    append_durable_replay_verified, bind_codex_stop_hook_attested, bind_host_output_attested,
-    persist_stop_hook_observation, CodexStopHookEvent, DurableReplayReceipt, HostBindingState,
-    HostOutputCandidate, HostOutputReceipt, HostReceiptContext, HostSeedEnvelope,
+    append_durable_replay_verified_with_resources, bind_codex_stop_hook_attested,
+    bind_host_output_attested, persist_stop_hook_observation_with_resources, CodexStopHookEvent,
+    DurableReplayReceipt, HostBindingState, HostOutputCandidate, HostOutputReceipt,
+    HostSeedEnvelope,
 };
 use lc631_media::{
-    authorize_media_source, authorize_media_source_attested, default_method_catalog,
-    execute_local_media_backend_attested, model_cache_manifest_sha256, BackendDescriptor,
-    BackendFamily, BackendRegistry, MediaAnalysisGate, MediaBackendConfig, MediaResourceBudget,
-    MediaSourceKind, MediaSourceRequest,
+    authorize_media_source, authorize_media_source_attested_with_resources, default_method_catalog,
+    execute_local_media_backend_attested_with_resources, model_cache_manifest_sha256_bounded,
+    BackendDescriptor, BackendFamily, BackendRegistry, MediaAnalysisGate, MediaBackendConfig,
+    MediaResourceBudget, MediaSourceKind, MediaSourceRequest, ModelScanLimits,
 };
 use lc631_receipt_kernel::{
     ReceiptClass, ReceiptPolicy, ReceiptScope, ReplayGuard, SubjectRevision, UntrustedReceipt,
@@ -45,9 +55,7 @@ use lc631_tldg::{
     run_adversarial_evaluation, run_tldg_geometry_accelerator, CalibrationPartition, Dg1Budget,
     TldgPipelineReport,
 };
-use lc631_wire::{
-    PromotionGate, ResidualRiskLedger, WireEnvelope, PROMOTION_PREDICATES, WIRE_SCHEMA,
-};
+use lc631_wire::{PromotionGate, ResidualRiskLedger, PROMOTION_PREDICATES, WIRE_SCHEMA};
 use lc631_world::{
     evaluation_matrix, generate_distinct_worlds, materialize_evaluations, WorldArena, WorldBudget,
 };
@@ -55,10 +63,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::env;
 use std::fs;
-use std::io::{Read, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
-#[cfg(feature = "gpu-cubecl-wgpu")]
-use std::process::Command;
 #[cfg(feature = "gpu-cubecl-wgpu")]
 use std::sync::atomic::{AtomicBool, Ordering};
 #[cfg(feature = "gpu-cubecl-wgpu")]
@@ -77,27 +83,105 @@ const PROMOTION_EVIDENCE_SCHEMA: &str = "lc631-promotion-evidence.v1";
 const V630_FROZEN_COMMIT: &str = "0d933982fa392043c2fe825644a3a560963b6615";
 
 pub fn main_entry() {
-    if let Err(error) = run() {
-        let payload = serde_json::json!({
-            "schema_version": "lc631-cli-error.v1",
-            "error": &error.message,
-            "effect_state": &error,
-            "claim_boundary": "diagnostic failure; effect state is explicit or unknown; no fallback success is implied"
+    report_failure(CliFailure::not_attempted("cli_resource_owner_required"));
+}
+
+pub fn main_entry_with_resources(owner: &lc631_runtime::resource::ResourceBroker) {
+    let result = io::CommandIo::begin(owner)
+        .map_err(CliFailure::not_attempted)
+        .and_then(|resources| {
+            let result = run(&resources);
+            let cleanup = resources.finish();
+            match (result, cleanup) {
+                (Err(error), _) => Err(error),
+                (Ok(()), Err(error)) => Err(CliFailure::from(error)),
+                (Ok(()), Ok(())) => Ok(()),
+            }
         });
-        eprintln!(
-            "{}",
-            serde_json::to_string_pretty(&payload).unwrap_or_default()
-        );
-        std::process::exit(2);
+    if let Err(error) = result {
+        report_failure(error);
     }
 }
 
-fn run() -> Result<(), CliFailure> {
+fn report_failure(error: CliFailure) {
+    #[derive(Serialize)]
+    struct FailureEnvelope<'a> {
+        schema_version: &'static str,
+        error: &'a str,
+        effect_state: &'a CliFailure,
+        claim_boundary: &'static str,
+    }
+    let encode = |error: &CliFailure| {
+        io::encode_pretty_bounded(&FailureEnvelope {
+        schema_version: "lc631-cli-error.v1", error: &error.message, effect_state: error,
+        claim_boundary: "diagnostic failure; effect state is explicit or unknown; no fallback success is implied",
+    }, 16_384, None)
+    };
+    let bytes = match encode(&error) {
+        Ok(bytes) => Ok(bytes),
+        Err(_) => {
+            let compact = CliFailure {
+                message: "diagnostic exceeds fixed 16KiB budget; oversized references omitted"
+                    .into(),
+                request_digest: error.request_digest.filter(|value| value.len() <= 256),
+                journal_location: error.journal_location.filter(|value| value.len() <= 4096),
+                ..error
+            };
+            encode(&compact)
+        }
+    };
+    let mut stderr = std::io::stderr().lock();
+    match bytes {
+        Ok(bytes) => {
+            let _ = stderr.write_all(&bytes);
+        }
+        Err(_) => {
+            let _ = stderr.write_all(b"{\"schema_version\":\"lc631-cli-error.v1\",\"error\":\"bounded diagnostic unavailable\",\"effect_state\":{\"message\":\"bounded diagnostic unavailable\",\"source_effect\":\"unknown\",\"persistence_effect\":\"unknown\",\"request_digest\":null,\"journal_location\":null},\"claim_boundary\":\"diagnostic failure; effects unresolved\"}\n");
+        }
+    }
+    std::process::exit(2);
+}
+
+fn run(resources: &io::CommandIo) -> Result<(), CliFailure> {
     let mut args = env::args().skip(1).collect::<Vec<_>>();
     if args.is_empty() {
         return Err(CliFailure::not_attempted("missing_lc631_command"));
     }
     let command = args.remove(0);
+    if command == "epistesys-build-profile" {
+        return build_profile::run(resources, &args);
+    }
+    if command == "epistesys-path-check" {
+        if args.len() != 1 || args[0] != "--config-stdin" {
+            return Err(CliFailure::not_attempted("path_expected_config_stdin"));
+        }
+        return tlcx_path_command::run(resources);
+    }
+    if command == "epistesys-tl-check" {
+        if args.len() != 1 || args[0] != "--config-stdin" {
+            return Err(CliFailure::not_attempted("tl_expected_config_stdin"));
+        }
+        return tlcx_checked_tl_command::run(resources);
+    }
+    if tlcx_commands::is_canonical_command(&command) {
+        args.insert(0, command);
+        return tlcx_commands::run(resources, &args);
+    }
+    if command == "lc631-journal-bundle-inspect" {
+        let inspect_args = bundle_inspect::parse_args(&args).map_err(|error| {
+            CliFailure::not_attempted(format!("bundle_inspect_arguments:{error:?}"))
+        })?;
+        return bundle_inspect::run(resources, &command, inspect_args);
+    }
+    if command == "lc631-checkpoint-resume-inspect" {
+        let inspect_args = binary_checkpoint_resume::parse_binary_checkpoint_resume_inspect_args(
+            &args,
+        )
+        .map_err(|error| {
+            CliFailure::not_attempted(format!("checkpoint_resume_inspect_arguments:{error:?}"))
+        })?;
+        return run_checkpoint_resume_inspect(resources, &command, inspect_args);
+    }
     let repo = take_option(&mut args, "--repo").map(PathBuf::from);
     let execute = take_flag(&mut args, "--execute");
     let prompt = take_option(&mut args, "--prompt");
@@ -105,7 +189,7 @@ fn run() -> Result<(), CliFailure> {
     let prompt = match (prompt, prompt_stdin) {
         (Some(_), true) => return Err("use_exactly_one_of_--prompt_or_--prompt-stdin".into()),
         (Some(prompt), false) => Some(prompt),
-        (None, true) => Some(read_prompt_stdin()?),
+        (None, true) => Some(read_prompt_stdin(resources)?),
         (None, false) => None,
     };
     let v630_digest = take_option(&mut args, "--v630-digest");
@@ -117,6 +201,19 @@ fn run() -> Result<(), CliFailure> {
         .map(|value| value.parse::<usize>().map_err(|_| "invalid_--workers"))
         .transpose()?;
     let media = take_option(&mut args, "--media").map(PathBuf::from);
+    let media_temp_bytes = take_option(&mut args, "--media-temp-bytes")
+        .map(|value| {
+            value
+                .parse::<u64>()
+                .map_err(|_| "invalid_--media-temp-bytes")
+        })
+        .transpose()?
+        .unwrap_or(io::MEDIA_TEMP_DISK_CAP);
+    if media_temp_bytes == 0 || media_temp_bytes > io::MEDIA_TEMP_DISK_CAP {
+        return Err(CliFailure::not_attempted(
+            "media_temp_profile_requires_receipt_key_headroom_within_256_mib_run_cap",
+        ));
+    }
     let python = take_option(&mut args, "--python").map(PathBuf::from);
     let ffmpeg = take_option(&mut args, "--ffmpeg").map(PathBuf::from);
     let backend_script = take_option(&mut args, "--backend-script").map(PathBuf::from);
@@ -162,21 +259,21 @@ fn run() -> Result<(), CliFailure> {
     match command.as_str() {
         "lc631-doctor" => {
             let repo = repo.ok_or("lc631-doctor_requires_--repo")?;
-            emit(&command, build_doctor(&repo)?)
+            emit(resources, &command, build_doctor(&repo, resources)?)
         }
         "lc631-v630-guard" => {
             let repo = repo.ok_or("lc631-v630-guard_requires_--repo")?;
-            emit(&command, audit_v630_root(&repo))
+            emit(resources, &command, resources.baseline_guard(&repo)?)
         }
-        "lc631-tl-doctor" => emit(
+        "lc631-tl-doctor" => emit(resources,
             &command,
             build_tl_doctor(prompt.as_deref().unwrap_or("Do not delete files."))?,
         ),
-        "lc631-world-doctor" => emit(
+        "lc631-world-doctor" => emit(resources,
             &command,
             build_world_doctor(prompt.as_deref().unwrap_or("2 + 2 = 4"))?,
         ),
-        "lc631-tldg-doctor" => emit(
+        "lc631-tldg-doctor" => emit(resources,
             &command,
             build_tldg_pipeline(
                 prompt
@@ -189,7 +286,7 @@ fn run() -> Result<(), CliFailure> {
         ),
         "lc631-dg1-doctor" => {
             let source = prompt.as_deref().unwrap_or("");
-            emit(
+            emit(resources,
                 &command,
                 analyze_dg1(source, Dg1Budget::default())
                     .map_err(|error| format!("dg1:{error:?}"))?,
@@ -198,11 +295,11 @@ fn run() -> Result<(), CliFailure> {
         "lc631-instruction-parse" => {
             let source = source_file
                 .as_ref()
-                .map(|path| read_bounded_rpa_source(path))
+                .map(|path| read_bounded_rpa_source(path, resources))
                 .transpose()?
                 .or(prompt)
                 .ok_or("lc631-instruction-parse_requires_source")?;
-            emit(
+            emit(resources,
                 &command,
                 parse_controlled_instruction(&source, InstructionParseBudget::default())
                     .map_err(|error| format!("instruction_parse:{error:?}"))?,
@@ -211,11 +308,11 @@ fn run() -> Result<(), CliFailure> {
         "lc631-dgcl-shadow-parse" => {
             let source = source_file
                 .as_ref()
-                .map(|path| read_bounded_rpa_source(path))
+                .map(|path| read_bounded_rpa_source(path, resources))
                 .transpose()?
                 .or(prompt)
                 .ok_or("lc631-dgcl-shadow-parse_requires_source")?;
-            emit(
+            emit(resources,
                 &command,
                 build_dgcl_pipeline(
                     &source,
@@ -223,6 +320,7 @@ fn run() -> Result<(), CliFailure> {
                         english: None,
                         japanese: None,
                     },
+                    &mut resources.analysis_runner(),
                 )
                 .map_err(|error| format!("dgcl_shadow_parse:{error:?}"))?,
             )
@@ -248,14 +346,16 @@ fn run() -> Result<(), CliFailure> {
             let source = prompt.ok_or("dgcl_package_finalize_requires_--prompt")?;
             let bundle_path =
                 evidence_file.ok_or("dgcl_package_finalize_requires_--evidence-file")?;
-            let raw = read_bounded_rpa_source(&bundle_path)?;
-            let context = HostReceiptContext::load_existing(
+            let raw = read_bounded_rpa_source(&bundle_path, resources)?;
+            let context = resources.host_context(
                 &receipt_root.ok_or("dgcl_package_finalize_requires_--receipt-root")?,
+                false,
             )
             .map_err(|error| format!("dgcl_package_receipt_root:{error:?}"))?;
-            let author = HostReceiptContext::load_existing(
+            let author = resources.host_context(
                 &author_receipt_root
                     .ok_or("dgcl_package_finalize_requires_--author-receipt-root")?,
+                false,
             )
             .map_err(|error| format!("dgcl_package_author_root:{error:?}"))?;
             let result = if command == "lc631-dgcl-package-repair"
@@ -270,31 +370,32 @@ fn run() -> Result<(), CliFailure> {
                     .as_deref()
                     .ok_or("dgcl_package_repair_requires_--head-root")?;
                 if command == "lc631-dgcl-package-resume" {
-                    dgcl_journal::resume_package(
-                        &root, &source, bundle, &context, &author, ledger, heads,
+                    dgcl_journal::resume_package_with_resources(
+                        &root, &source, bundle, &context, &author, (ledger, heads), resources,
                     )?
                 } else {
-                    dgcl_repair::repair_package(
+                    dgcl_repair::repair_package_with_resources(
                         &root,
                         &source,
                         bundle,
                         &context,
                         &author,
                         Some((ledger, heads)),
+                        resources,
                     )?
                 }
             } else {
                 let bundle = serde_json::from_str::<dgcl_package::PackageValidationBundle>(&raw)
                     .map_err(|error| format!("dgcl_package_bundle:{error}"))?;
-                dgcl_package::finalize_package(&root, &source, bundle, &context, &author)?
+                dgcl_package::finalize_package_with_resources(&root, &source, bundle, &context, &author, resources)?
             };
-            emit(&command, &result).map_err(|message| CliFailure::output_failure(message, &result))?;
+            emit(resources, &command, &result).map_err(|message| CliFailure::output_failure(message, &result))?;
             Ok(())
         }
         "lc631-dgcl-run" => {
             let source = source_file
                 .as_ref()
-                .map(|path| read_bounded_rpa_source(path))
+                .map(|path| read_bounded_rpa_source(path, resources))
                 .transpose()?
                 .or(prompt)
                 .ok_or("lc631-dgcl-run_requires_source")?;
@@ -308,8 +409,8 @@ fn run() -> Result<(), CliFailure> {
                 let root = repo
                     .as_deref()
                     .ok_or("lc631-dgcl-run_configured_profile_requires_--repo")?;
-                let pins = load_dgcl_runtime_pins(root)
-                    .map_err(|error| format!("dgcl_runtime_pins:{error:?}"))?;
+                let pins = resources.with_view(262_144, |view| load_dgcl_runtime_pins_with_resources(root, view)
+                    .map_err(|error| format!("dgcl_runtime_pins:{error:?}")))?;
                 let python = python
                     .as_deref()
                     .ok_or("lc631-dgcl-run_configured_profile_requires_--python")?;
@@ -364,6 +465,7 @@ fn run() -> Result<(), CliFailure> {
                         english: Some(&en_config),
                         japanese: Some(&ja_config),
                     },
+                    &mut resources.analysis_runner(),
                 )
                 .map_err(|error| format!("dgcl_run_pipeline:{error:?}"))?;
                 (pipeline, "dgcl-rust-cli-ja-en-alpha2-configured-stanza.v1")
@@ -374,6 +476,7 @@ fn run() -> Result<(), CliFailure> {
                         english: None,
                         japanese: None,
                     },
+                    &mut resources.analysis_runner(),
                 )
                 .map_err(|error| format!("dgcl_run_pipeline:{error:?}"))?;
                 (pipeline, "dgcl-rust-cli-ja-en-alpha2-no-external-models.v1")
@@ -387,7 +490,7 @@ fn run() -> Result<(), CliFailure> {
                 "epistesys-dgcl-pipeline.v1",
             )
             .map_err(|error| format!("dgcl_run_candidate:{error:?}"))?;
-            emit(
+            emit(resources,
                 &command,
                 serde_json::json!({
                     "schema_version": "epistesys-dgcl-standalone-run.v1",
@@ -405,11 +508,11 @@ fn run() -> Result<(), CliFailure> {
             let root = repo
                 .as_deref()
                 .ok_or("lc631-dgcl-language_requires_--repo")?;
-            let pins = load_dgcl_runtime_pins(root)
-                .map_err(|error| format!("dgcl_runtime_pins:{error:?}"))?;
+            let pins = resources.with_view(262_144, |view| load_dgcl_runtime_pins_with_resources(root, view)
+                .map_err(|error| format!("dgcl_runtime_pins:{error:?}")))?;
             let source = source_file
                 .as_ref()
-                .map(|path| read_bounded_rpa_source(path))
+                .map(|path| read_bounded_rpa_source(path, resources))
                 .transpose()?
                 .or(prompt)
                 .ok_or("lc631-dgcl-language_requires_source")?;
@@ -439,19 +542,20 @@ fn run() -> Result<(), CliFailure> {
                     60_000,
                 )
                 .map_err(|error| format!("dgcl_runtime_binding:{error:?}"))?;
-            emit(
+            emit(resources,
                 &command,
-                run_language_worker(&source, language, &config)
-                    .map_err(|error| format!("dgcl_language:{error:?}"))?,
+                resources.with_source_process_view(&source, 2_101_252, |view|
+                    run_language_worker_with_resources(&source, language, &config, view)
+                        .map_err(|error| format!("dgcl_language:{error:?}")))?,
             )
         }
         "lc631-dgcl-parse" => {
             let root = repo.as_deref().ok_or("lc631-dgcl-parse_requires_--repo")?;
-            let pins = load_dgcl_runtime_pins(root)
-                .map_err(|error| format!("dgcl_runtime_pins:{error:?}"))?;
+            let pins = resources.with_view(262_144, |view| load_dgcl_runtime_pins_with_resources(root, view)
+                .map_err(|error| format!("dgcl_runtime_pins:{error:?}")))?;
             let source = source_file
                 .as_ref()
-                .map(|path| read_bounded_rpa_source(path))
+                .map(|path| read_bounded_rpa_source(path, resources))
                 .transpose()?
                 .or(prompt)
                 .ok_or("lc631-dgcl-parse_requires_source")?;
@@ -494,7 +598,7 @@ fn run() -> Result<(), CliFailure> {
                     60_000,
                 )
                 .map_err(|error| format!("dgcl_runtime_binding_ja:{error:?}"))?;
-            emit(
+            emit(resources,
                 &command,
                 build_dgcl_pipeline(
                     &source,
@@ -502,6 +606,7 @@ fn run() -> Result<(), CliFailure> {
                         english: Some(&en_config),
                         japanese: Some(&ja_config),
                     },
+                    &mut resources.analysis_runner(),
                 )
                 .map_err(|error| format!("dgcl_parse:{error:?}"))?,
             )
@@ -512,10 +617,10 @@ fn run() -> Result<(), CliFailure> {
             if metadata.len() == 0 || metadata.len() > 16 * 1024 * 1024 {
                 return Err("dgcl_gold_size_invalid".into());
             }
-            let raw = fs::read_to_string(&path).map_err(|error| format!("gold_read:{error}"))?;
+            let raw = resources.read_path(&path, 16 * 1024 * 1024)?;
             let corpus: GoldCorpus =
                 serde_json::from_str(&raw).map_err(|error| format!("gold_json:{error}"))?;
-            emit(
+            emit(resources,
                 &command,
                 evaluate_gold(&corpus).map_err(|error| format!("gold_eval:{error:?}"))?,
             )
@@ -532,14 +637,14 @@ fn run() -> Result<(), CliFailure> {
             if metadata.len() == 0 || metadata.len() > 1_048_576 {
                 return Err("dgcl_connection_plan_size_invalid".into());
             }
-            let raw = fs::read_to_string(&path)
-                .map_err(|error| format!("connection_plan_read:{error}"))?;
+            let raw = resources.read_path(&path, 1_048_576)?;
             let plan: CodingConnectionPlan = serde_json::from_str(&raw)
                 .map_err(|error| format!("connection_plan_json:{error}"))?;
-            emit(
+            emit(resources,
                 &command,
-                verify_connection_plan_from_cli(&root, &plan)
-                    .map_err(|error| format!("dgcl_connection:{error:?}"))?,
+                resources.with_source_process_view(&plan.source, 1_052_672, |view|
+                    verify_connection_plan_from_cli_with_resources(&root, &plan, view)
+                        .map_err(|error| format!("dgcl_connection:{error:?}")))?,
             )
         }
         "lc631-dgcl-finalize" => {
@@ -554,8 +659,7 @@ fn run() -> Result<(), CliFailure> {
             if metadata.len() == 0 || metadata.len() > 1_048_576 {
                 return Err("dgcl_connection_plan_size_invalid".into());
             }
-            let raw = fs::read_to_string(&path)
-                .map_err(|error| format!("connection_plan_read:{error}"))?;
+            let raw = resources.read_path(&path, 1_048_576)?;
             let plan: CodingConnectionPlan = serde_json::from_str(&raw)
                 .map_err(|error| format!("connection_plan_json:{error}"))?;
             let dgcl_pipeline = build_dgcl_pipeline(
@@ -564,30 +668,32 @@ fn run() -> Result<(), CliFailure> {
                     english: None,
                     japanese: None,
                 },
-            )
+                    &mut resources.analysis_runner(),
+                )
             .map_err(|error| format!("dgcl_finalization_pipeline:{error:?}"))?;
             let ledger_root = ledger_root.ok_or("lc631-dgcl-finalize_requires_--ledger-root")?;
             let authority_revision =
                 authority_revision.ok_or("lc631-dgcl-finalize_requires_--authority-revision")?;
             let receipt_root = receipt_root.ok_or("lc631-dgcl-finalize_requires_--receipt-root")?;
             let plan_digest = stable_sha256(&raw);
-            let prior = inspect_resume(
+            let prior = journal_read(resources, &plan.source, |view| lc631_analysis::inspect_resume_with_resources(
                 &ledger_root,
                 &plan.source_revision,
                 &plan_digest,
                 &authority_revision,
-            )
-            .map_err(|error| format!("dgcl_resume:{error:?}"))?;
+                view,
+            ))?;
             if prior.latest_sequence.is_some() {
                 return Err("dgcl_prior_delivery_requires_manual_revalidation".into());
             }
-            let context = HostReceiptContext::load_existing(&receipt_root)
+            let context = resources.host_context(&receipt_root, false)
                 .map_err(|error| format!("dgcl_receipt_root:{error:?}"))?;
             let action_key = stable_sha256(&format!(
                 "{}\0{}\0{}",
                 plan.source_revision, plan_digest, authority_revision
             ));
-            let first_digest = append_checkpoint(
+            let first_digest = journal_write(resources, &plan.source, &ledger_root,
+                &ledger_root.join("checkpoint-00000000000000000000.json"), lc631_host::PersistentStoreKind::Checkpoint, |view| lc631_analysis::append_checkpoint_with_resources(
                 &ledger_root,
                 CheckpointBody {
                     schema_version: "epistesys-dgcl-checkpoint.v2".into(),
@@ -601,8 +707,8 @@ fn run() -> Result<(), CliFailure> {
                     result_digest: None,
                     parent_digest: None,
                 },
-            )
-            .map_err(|error| format!("dgcl_checkpoint:{error:?}"))?;
+                view,
+            ))?;
             if let Some(heads) = head_root.as_deref() {
                 let anchor = issue_checkpoint_head_anchor(
                     context.issuer(),
@@ -617,17 +723,23 @@ fn run() -> Result<(), CliFailure> {
                     },
                 )
                 .map_err(|error| format!("dgcl_head:{error:?}"))?;
-                persist_checkpoint_head(
+                let persist_epoch = current_epoch_seconds()?;
+                journal_write(resources, &plan.source, heads, &checkpoint_head_target(heads, &anchor)?, lc631_host::PersistentStoreKind::CheckpointHead,
+                    |view| lc631_analysis::persist_checkpoint_head_with_resources(
                     &ledger_root,
                     heads,
                     &anchor,
                     context.verifier(),
-                    current_epoch_seconds()?,
-                )
-                .map_err(|error| format!("dgcl_head_persist:{error:?}"))?;
+                    persist_epoch,
+                    view,
+                ))?;
             }
-            let observation = observe_connection_plan_from_cli(&root, &plan)
-                .map_err(|error| format!("dgcl_connection:{error:?}"))?;
+            let (observation, standalone_candidate) = resources.with_source_process_view(&plan.source, 1_052_672, |view|
+                observe_connection_plan_from_cli_with_consumer(&root, &plan, view, |_, stdout| {
+                    build_dgcl_standalone_candidate(&plan.source, &dgcl_pipeline, stdout, WIRE_SCHEMA)
+                        .map_err(|error| lc631_analysis::ConnectionError::Resource(format!("standalone_candidate:{error:?}")))
+                })
+                    .map_err(|error| format!("dgcl_connection:{error:?}")))?;
             let connection = observation.report().clone();
             if connection.status != lc631_analysis::ConnectionStatus::Observed {
                 return Err("dgcl_delivery_unconfirmed_requires_manual_revalidation".into());
@@ -640,7 +752,8 @@ fn run() -> Result<(), CliFailure> {
                 now_epoch,
             )
             .map_err(|error| format!("dgcl_evidence:{error:?}"))?;
-            let observed_digest = append_checkpoint(
+            let observed_digest = journal_write(resources, &plan.source, &ledger_root,
+                &ledger_root.join("checkpoint-00000000000000000001.json"), lc631_host::PersistentStoreKind::Checkpoint, |view| lc631_analysis::append_checkpoint_with_resources(
                 &ledger_root,
                 CheckpointBody {
                     schema_version: "epistesys-dgcl-checkpoint.v2".into(),
@@ -654,8 +767,8 @@ fn run() -> Result<(), CliFailure> {
                     result_digest: Some(connection.process.stdout_digest.clone()),
                     parent_digest: Some(first_digest),
                 },
-            )
-            .map_err(|error| format!("dgcl_checkpoint:{error:?}"))?;
+                view,
+            ))?;
             if let Some(heads) = head_root.as_deref() {
                 let anchor = issue_checkpoint_head_anchor(
                     context.issuer(),
@@ -670,14 +783,15 @@ fn run() -> Result<(), CliFailure> {
                     },
                 )
                 .map_err(|error| format!("dgcl_head:{error:?}"))?;
-                persist_checkpoint_head(
+                journal_write(resources, &plan.source, heads, &checkpoint_head_target(heads, &anchor)?, lc631_host::PersistentStoreKind::CheckpointHead,
+                    |view| lc631_analysis::persist_checkpoint_head_with_resources(
                     &ledger_root,
                     heads,
                     &anchor,
                     context.verifier(),
                     now_epoch,
-                )
-                .map_err(|error| format!("dgcl_head_persist:{error:?}"))?;
+                    view,
+                ))?;
             }
             let closure = build_coding_closure(
                 &plan.source,
@@ -688,14 +802,7 @@ fn run() -> Result<(), CliFailure> {
                 now_epoch,
             )
             .map_err(|error| format!("dgcl_closure:{error:?}"))?;
-            let standalone_candidate = build_dgcl_standalone_candidate(
-                &plan.source,
-                &dgcl_pipeline,
-                &connection.process.stdout,
-                WIRE_SCHEMA,
-            )
-            .map_err(|error| format!("dgcl_standalone_candidate:{error:?}"))?;
-            emit(
+            emit(resources,
                 &command,
                 serde_json::json!({
                     "schema_version": "epistesys-dgcl-finalization.v1",
@@ -713,8 +820,7 @@ fn run() -> Result<(), CliFailure> {
         "lc631-dgcl-resume" => {
             let path =
                 connection_plan_file.ok_or("lc631-dgcl-resume_requires_--connection-plan")?;
-            let raw = fs::read_to_string(&path)
-                .map_err(|error| format!("connection_plan_read:{error}"))?;
+            let raw = resources.read_path(&path, 1_048_576)?;
             if raw.len() > 1_048_576 {
                 return Err("dgcl_connection_plan_size_invalid".into());
             }
@@ -724,32 +830,32 @@ fn run() -> Result<(), CliFailure> {
             let authority =
                 authority_revision.ok_or("lc631-dgcl-resume_requires_--authority-revision")?;
             let resumed = if let Some(heads) = head_root.as_deref() {
-                let context = HostReceiptContext::load_existing(
+                let context = resources.host_context(
                     &receipt_root.ok_or("dgcl_anchored_resume_requires_--receipt-root")?,
+                    false,
                 )
                 .map_err(|error| format!("dgcl_receipt_root:{error:?}"))?;
                 let now = current_epoch_seconds()?;
-                let anchor = load_checkpoint_head(&root, heads, context.verifier(), now)
-                    .map_err(|error| format!("dgcl_head_load:{error:?}"))?;
-                inspect_resume_with_anchor(
+                let anchor = journal_read(resources, &plan.source, |view| lc631_analysis::load_checkpoint_head_with_resources(&root, heads, context.verifier(), now, view))?;
+                journal_read(resources, &plan.source, |view| lc631_analysis::inspect_resume_with_anchor_with_resources(
                     &root,
-                    &plan.source_revision,
-                    &stable_sha256(&raw),
-                    &authority,
+                    lc631_analysis::CheckpointReadIdentity { source_revision: &plan.source_revision, plan_digest: &stable_sha256(&raw), authority_revision: &authority },
                     Some(&anchor),
                     Some(context.verifier()),
                     now,
-                )
+                    view,
+                ))
             } else {
-                inspect_resume(
+                journal_read(resources, &plan.source, |view| lc631_analysis::inspect_resume_with_resources(
                     &root,
                     &plan.source_revision,
                     &stable_sha256(&raw),
                     &authority,
-                )
+                    view,
+                ))
             }
-            .map_err(|error| format!("dgcl_resume:{error:?}"))?;
-            emit(&command, resumed)
+            ?;
+            emit(resources, &command, resumed)
         }
         "lc631-coding-closure" => {
             let source = prompt.as_deref().unwrap_or("");
@@ -764,19 +870,19 @@ fn run() -> Result<(), CliFailure> {
                 current_epoch_seconds()?,
             )
             .map_err(|error| format!("coding_closure:{error:?}"))?;
-            emit(&command, closure)
+            emit(resources, &command, closure)
         }
         "lc631-rpa-doctor" => {
             let source = source_file
                 .as_ref()
-                .map(|path| read_bounded_rpa_source(path))
+                .map(|path| read_bounded_rpa_source(path, resources))
                 .transpose()?;
             let source_name = source_file
                 .as_ref()
                 .and_then(|path| path.file_name())
                 .and_then(|name| name.to_str());
             let repo_text = repo.as_ref().map(|path| path.to_string_lossy().to_string());
-            emit(
+            emit(resources,
                 &command,
                 analyze_program_path(
                     AnalysisRequest {
@@ -789,10 +895,11 @@ fn run() -> Result<(), CliFailure> {
                     },
                     source_file.as_deref(),
                     execute,
-                ),
+                    &mut resources.analysis_runner(),
+                ).map_err(|error| format!("rpa_resource:{error:?}"))?,
             )
         }
-        "lc631-tldg-adversarial" => emit(
+        "lc631-tldg-adversarial" => emit(resources,
             &command,
             run_adversarial_evaluation().map_err(|error| format!("tldg_adversarial:{error}"))?,
         ),
@@ -803,7 +910,7 @@ fn run() -> Result<(), CliFailure> {
             let artifact = analyze_tldg(source).map_err(|error| format!("{error:?}"))?;
             let kernel =
                 build_tldg_structural_kernel(&artifact).map_err(|error| format!("{error:?}"))?;
-            emit(
+            emit(resources,
                 &command,
                 run_tldg_geometry_accelerator(&kernel, execute)
                     .map_err(|error| format!("{error:?}"))?,
@@ -823,7 +930,7 @@ fn run() -> Result<(), CliFailure> {
                     .map_err(|error| format!("{error:?}"))?;
                 let acceleration = run_tldg_geometry_accelerator(&kernel, true)
                     .map_err(|error| format!("{error:?}"))?;
-                emit(
+                emit(resources,
                     &command,
                     build_tldg_release_gate_with_receipts(
                         &report,
@@ -834,16 +941,16 @@ fn run() -> Result<(), CliFailure> {
                     ),
                 )
             } else {
-                emit(&command, build_tldg_release_gate(&report, &adversarial))
+                emit(resources, &command, build_tldg_release_gate(&report, &adversarial))
             }
         }
-        "lc631-gpu-doctor" => emit(&command, build_accelerator_doctor(execute)?),
-        "lc631-gpu-stress" => emit(
+        "lc631-gpu-doctor" => emit(resources, &command, build_accelerator_doctor(execute)?),
+        "lc631-gpu-stress" => emit(resources,
             &command,
-            build_gpu_stress(iterations.unwrap_or(16), workers.unwrap_or(4))?,
+            build_gpu_stress(iterations.unwrap_or(16), workers.unwrap_or(4), resources)?,
         ),
-        "lc631-media-doctor" => emit(&command, build_media_doctor()),
-        "lc631-media-execute" => {
+        "lc631-media-doctor" => emit(resources, &command, build_media_doctor()),
+        "lc631-media-execute" | "lc631-media-execute-v3" => {
             let media = media.ok_or("lc631-media-execute_requires_--media")?;
             let request = MediaSourceRequest {
                 kind: MediaSourceKind::LocalUserProvided,
@@ -855,22 +962,22 @@ fn run() -> Result<(), CliFailure> {
             let source_receipt_file =
                 source_receipt_file.ok_or("lc631-media-execute_requires_--source-receipt-file")?;
             let source_receipt: UntrustedReceipt = serde_json::from_str(
-                &fs::read_to_string(source_receipt_file)
-                    .map_err(|error| format!("source_receipt_read:{error}"))?,
+                &resources.read_path(&source_receipt_file, 65_536)?,
             )
             .map_err(|error| format!("source_receipt_json:{error}"))?;
             let receipt_root = receipt_root.ok_or("lc631-media-execute_requires_--receipt-root")?;
-            let context = HostReceiptContext::load_or_create(&receipt_root)
+            let context = resources.host_context(&receipt_root, true)
                 .map_err(|error| format!("media_receipt_root:{error:?}"))?;
             let now_epoch = current_epoch_seconds()?;
-            let authority = authorize_media_source_attested(
+            let authority = resources.with_view(65_536, |view| authorize_media_source_attested_with_resources(
                 &request,
                 source_receipt,
                 context.verifier(),
                 &mut ReplayGuard::default(),
                 now_epoch,
+                view,
             )
-            .map_err(|error| format!("media_source_authority:{error:?}"))?;
+            .map_err(|error| format!("media_source_authority:{error:?}")))?;
             let config = MediaBackendConfig {
                 python_executable: python
                     .or_else(|| configured_path("LC631_PYTHON"))
@@ -893,34 +1000,46 @@ fn run() -> Result<(), CliFailure> {
                 backend_id.ok_or("lc631-media-execute_requires_--backend-id")?,
                 Some(config.backend_script.clone()),
                 Some(
-                    model_cache_manifest_sha256(&config.model_cache)
-                        .map_err(|error| format!("model_cache_manifest:{error:?}"))?,
+                    resources.with_view(8 * 1024 * 1024, |view|
+                        model_cache_manifest_sha256_bounded(&config.model_cache, ModelScanLimits::default(), Some(view))
+                            .map_err(|error| format!("model_cache_manifest:{error:?}")))?,
                 ),
                 Some(
                     model_license_receipt
                         .ok_or("lc631-media-execute_requires_--model-license-receipt")?,
                 ),
             );
-            emit(
+            let budget = MediaResourceBudget { max_temporary_bytes: media_temp_bytes, ..MediaResourceBudget::default() };
+            let source_digest = io::parse_source_digest(authority.source_snapshot_sha256.as_deref().ok_or("media_source_digest_missing")?)?;
+            let output_bytes = budget.max_stdout_bytes.checked_add(budget.max_stderr_bytes).ok_or("media_output_budget_overflow")? as u64;
+            emit(resources,
                 &command,
-                execute_local_media_backend_attested(
-                    &authority,
-                    &descriptor,
-                    &config,
-                    &MediaResourceBudget::default(),
-                    context.issuer(),
-                    context.verifier(),
-                    &mut ReplayGuard::default(),
-                    now_epoch,
-                )
-                .map_err(|error| format!("{error:?}"))?,
+                resources.with_media_process_view(source_digest, output_bytes, media_temp_bytes, |view| {
+                    let mut replay = ReplayGuard::default();
+                    let receipt = if command == "lc631-media-execute-v3" {
+                        // Source authorization and model inventory can consume
+                        // time. The v3 execution anchor must start at entry,
+                        // not at the earlier CLI preparation timestamp.
+                        let execution_epoch = current_epoch_seconds()?;
+                        lc631_media::execute_local_media_backend_attested_v3_with_resources(
+                            &authority, &descriptor, &config, &budget,
+                            context.issuer(), context.verifier(), &mut replay, execution_epoch, view,
+                        )
+                    } else {
+                        execute_local_media_backend_attested_with_resources(
+                            &authority, &descriptor, &config, &budget,
+                            context.issuer(), context.verifier(), &mut replay, now_epoch, view,
+                        )
+                    };
+                    receipt.map_err(|error| format!("{error:?}"))
+                })?,
             )
         }
         "lc631-paired-shadow" => {
             let prompt = prompt.ok_or("lc631-paired-shadow_requires_--prompt")?;
             let v630 = v630_digest.ok_or("lc631-paired-shadow_requires_--v630-digest")?;
             let v631 = v631_digest.ok_or("lc631-paired-shadow_requires_--v631-digest")?;
-            emit(
+            emit(resources,
                 &command,
                 PairedObservation::shadow(
                     stable_sha256(&prompt),
@@ -934,7 +1053,7 @@ fn run() -> Result<(), CliFailure> {
                 ),
             )
         }
-        "lc631-host-bind" => emit(
+        "lc631-host-bind" => emit(resources,
             &command,
             build_host_bind(HostBindInput {
                 seed_file: seed_file.ok_or("lc631-host-bind_requires_--seed-file")?,
@@ -946,27 +1065,57 @@ fn run() -> Result<(), CliFailure> {
                 ledger: ledger.ok_or("lc631-host-bind_requires_--ledger")?,
                 artifact: ArtifactId(artifact.ok_or("lc631-host-bind_requires_--artifact")?),
                 turn: lc631_core::TurnId(turn.ok_or("lc631-host-bind_requires_--turn")?),
-            })?,
+            }, resources)?,
         ),
-        "lc631-host-stop-hook" => run_host_stop_hook(),
+        "lc631-host-stop-hook" => run_host_stop_hook(resources),
         "lc631-promotion-gate" => match (evidence_file, receipt_root) {
-            (None, None) => emit(&command, PromotionGate::alpha_default()),
+            (None, None) => emit(resources, &command, PromotionGate::alpha_default()),
             (Some(_), None) => Err("lc631-promotion-gate_requires_--receipt-root".into()),
             (None, Some(_)) => Err("lc631-promotion-gate_requires_--evidence-file".into()),
-            (Some(evidence_file), Some(receipt_root)) => emit(
+            (Some(evidence_file), Some(receipt_root)) => emit(resources,
                 &command,
-                build_promotion_gate_from_evidence(&evidence_file, &receipt_root)?,
+                build_promotion_gate_from_evidence(&evidence_file, &receipt_root, resources)?,
             ),
         },
         _ => Err(format!("unknown_lc631_command:{command}")),
     }.map_err(CliFailure::from)
 }
 
-fn run_host_stop_hook() -> Result<(), String> {
-    let mut raw = String::new();
-    std::io::stdin()
-        .read_to_string(&mut raw)
-        .map_err(|error| format!("stop_hook_stdin:{error}"))?;
+fn run_checkpoint_resume_inspect(
+    resources: &io::CommandIo,
+    command: &str,
+    args: binary_checkpoint_resume::BinaryCheckpointResumeInspectArgs,
+) -> Result<(), CliFailure> {
+    let identity = lc631_analysis::CheckpointReadIdentity {
+        source_revision: &args.source_revision,
+        plan_digest: &args.plan_digest,
+        authority_revision: &args.authority_revision,
+    };
+    let report = resources
+        .with_view(18 * 1024 * 1024, |view| {
+            let decision = binary_checkpoint_resume::inspect_existing_binary_checkpoint_root(
+                &args.ledger_root,
+                view,
+                lc631_runtime::journal::JournalChainLimits::default(),
+                identity,
+            );
+            Ok::<_, String>(
+                binary_checkpoint_resume::report_binary_checkpoint_resume_inspection(&decision),
+            )
+        })
+        .map_err(CliFailure::from)?;
+
+    let envelope = lc631_wire::WireEnvelope::shadow(command, report);
+    resources
+        .with_view(4 * 1024, |view| {
+            io::write_pretty_json(&envelope, view, &mut std::io::stdout().lock())
+                .map_err(|error| format!("checkpoint_resume_inspect_output:{error:?}"))
+        })
+        .map_err(CliFailure::from)
+}
+
+fn run_host_stop_hook(resources: &io::CommandIo) -> Result<(), String> {
+    let raw = resources.read_from(&mut std::io::stdin().lock(), MAX_PROMPT_STDIN_BYTES as u64)?;
     let event: CodexStopHookEvent =
         serde_json::from_str(&raw).map_err(|error| format!("stop_hook_json:{error}"))?;
     if event.stop_hook_active {
@@ -978,7 +1127,8 @@ fn run_host_stop_hook() -> Result<(), String> {
         .map(PathBuf::from)
         .ok_or("stop_hook_PLUGIN_DATA_unavailable")?;
     let replay_root = plugin_data.join("host-output-hook");
-    let context = HostReceiptContext::load_or_create(&replay_root.join("receipt-root"))
+    let context = resources
+        .host_context(&replay_root.join("receipt-root"), true)
         .map_err(|error| format!("stop_hook_receipt_root:{error:?}"))?;
     let now_epoch = current_epoch_seconds()?;
     let (receipt, observation) = bind_codex_stop_hook_attested(
@@ -991,20 +1141,26 @@ fn run_host_stop_hook() -> Result<(), String> {
     )
     .map_err(|error| format!("stop_hook_bind:{error:?}"))?;
     let ledger = replay_root.join("host-output-v2.jsonl");
-    let replay = append_durable_replay_verified(
-        &replay_root,
-        &ledger,
-        &receipt,
-        context.verifier(),
-        &mut ReplayGuard::default(),
-        now_epoch,
-    )
-    .map_err(|error| format!("stop_hook_replay:{error:?}"))?;
-    if !replay.automatic_host_callback_observed || !replay.chain_verified {
-        return Err("stop_hook_replay_not_automatic_or_unverified".into());
+    // Shared-root scans include an 8 MiB ledger plus a one-byte sentinel.
+    let replay = resources.with_storage_view(8 * 1024 * 1024 + 1, 4_096, |view| {
+        append_durable_replay_verified_with_resources(
+            &replay_root,
+            &ledger,
+            &receipt,
+            context.verifier(),
+            &mut ReplayGuard::default(),
+            now_epoch,
+            view,
+        )
+        .map_err(|error| format!("stop_hook_replay:{error:?}"))
+    })?;
+    if !replay.chain_verified {
+        return Err("stop_hook_replay_unverified".into());
     }
-    persist_stop_hook_observation(&replay_root, &observation)
-        .map_err(|error| format!("stop_hook_observation:{error:?}"))?;
+    resources.with_storage_view(8 * 1024 * 1024 + 1, 1_048_576, |view| {
+        persist_stop_hook_observation_with_resources(&replay_root, &observation, view)
+            .map_err(|error| format!("stop_hook_observation:{error:?}"))
+    })?;
     write_stdout("{\"continue\":true}")?;
     Ok(())
 }
@@ -1016,21 +1172,59 @@ fn current_epoch_seconds() -> Result<u64, String> {
         .map(|duration| duration.as_secs())
 }
 
-fn emit<T: Serialize>(command: &str, payload: T) -> Result<(), String> {
-    let envelope = WireEnvelope::shadow(command, payload);
-    let rendered = envelope
-        .to_pretty_json()
-        .map_err(|error| error.to_string())?;
-    write_stdout(&rendered)
+fn journal_read<T, E: std::fmt::Debug>(
+    resources: &io::CommandIo,
+    source: &str,
+    operation: impl FnOnce(&lc631_runtime::resource::ResourceReservationView<'_>) -> Result<T, E>,
+) -> Result<T, String> {
+    dgcl_journal::resources::read(Some((resources, source)), |view| {
+        let view = view.ok_or("journal_resource_view_missing")?;
+        operation(view).map_err(|error| format!("journal_read:{error:?}"))
+    })
+}
+
+fn journal_write<T, E: std::fmt::Debug>(
+    resources: &io::CommandIo,
+    source: &str,
+    root: &Path,
+    target: &Path,
+    kind: lc631_host::PersistentStoreKind,
+    operation: impl FnOnce(&lc631_runtime::resource::ResourceReservationView<'_>) -> Result<T, E>,
+) -> Result<T, String> {
+    dgcl_journal::resources::write((resources, source), root, target, kind, |view| {
+        operation(view).map_err(|error| format!("journal_write:{error:?}"))
+    })
+}
+
+fn checkpoint_head_target(
+    root: &Path,
+    anchor: &lc631_analysis::CheckpointHeadAnchor,
+) -> Result<PathBuf, String> {
+    let index = match anchor.sequence {
+        None => 0,
+        Some(sequence) => sequence
+            .checked_add(1)
+            .ok_or("checkpoint_sequence_exhausted")?,
+    };
+    Ok(root.join(format!("head-{index:020}.json")))
+}
+
+fn emit<T: Serialize>(resources: &io::CommandIo, command: &str, payload: T) -> Result<(), String> {
+    resources.write_public(command, payload)
 }
 
 fn write_stdout(value: &str) -> Result<(), String> {
+    // Only the fixed stop-hook control response uses this compatibility path.
+    // Check the complete value before writing, including its trailing LF.
+    if value.len() >= 1024 {
+        return Err("fixed_stdout_budget_exceeded".into());
+    }
     let stdout = std::io::stdout();
     let mut output = stdout.lock();
     writeln!(output, "{value}").map_err(|error| format!("stdout_write:{error}"))
 }
 
-fn read_bounded_rpa_source(path: &Path) -> Result<String, String> {
+fn read_bounded_rpa_source(path: &Path, resources: &io::CommandIo) -> Result<String, String> {
     let metadata = fs::metadata(path).map_err(|error| format!("rpa_source_metadata:{error}"))?;
     if !metadata.is_file() {
         return Err("rpa_source_not_regular_file".to_string());
@@ -1041,7 +1235,7 @@ fn read_bounded_rpa_source(path: &Path) -> Result<String, String> {
             metadata.len()
         ));
     }
-    fs::read_to_string(path).map_err(|error| format!("rpa_source_file_read:{error}"))
+    resources.read_path(path, MAX_RPA_SOURCE_FILE_BYTES)
 }
 
 #[derive(Deserialize)]
@@ -1080,15 +1274,17 @@ struct PromotionEvidenceReceipt {
 fn build_promotion_gate_from_evidence(
     evidence_file: &Path,
     receipt_root: &Path,
+    resources: &io::CommandIo,
 ) -> Result<PromotionGate, String> {
-    let evidence = read_bounded_promotion_evidence(evidence_file)?;
+    let evidence = read_bounded_promotion_evidence(evidence_file, resources)?;
     if evidence.schema_version != PROMOTION_EVIDENCE_SCHEMA {
         return Err("promotion_evidence_schema_version".into());
     }
     let binding_digest = promotion_binding_digest(&evidence.binding)?;
     let subject = SubjectRevision::checked(binding_digest.clone())
         .map_err(|_| "promotion_evidence_subject_revision")?;
-    let context = HostReceiptContext::load_existing(receipt_root)
+    let context = resources
+        .host_context(receipt_root, false)
         .map_err(|error| format!("promotion_receipt_root:{error:?}"))?;
     let now_epoch = current_epoch_seconds()?;
     let mut replay = ReplayGuard::default();
@@ -1208,7 +1404,10 @@ fn build_promotion_gate_from_evidence(
     ))
 }
 
-fn read_bounded_promotion_evidence(path: &Path) -> Result<PromotionEvidenceFile, String> {
+fn read_bounded_promotion_evidence(
+    path: &Path,
+    resources: &io::CommandIo,
+) -> Result<PromotionEvidenceFile, String> {
     let metadata = fs::symlink_metadata(path)
         .map_err(|error| format!("promotion_evidence_metadata:{error}"))?;
     if metadata.file_type().is_symlink() || !metadata.file_type().is_file() {
@@ -1220,10 +1419,8 @@ fn read_bounded_promotion_evidence(path: &Path) -> Result<PromotionEvidenceFile,
             metadata.len()
         ));
     }
-    serde_json::from_str(
-        &fs::read_to_string(path).map_err(|error| format!("promotion_evidence_read:{error}"))?,
-    )
-    .map_err(|error| format!("promotion_evidence_json:{error}"))
+    serde_json::from_str(&resources.read_path(path, MAX_PROMOTION_EVIDENCE_FILE_BYTES)?)
+        .map_err(|error| format!("promotion_evidence_json:{error}"))
 }
 
 #[derive(Clone, Copy)]
@@ -1372,16 +1569,9 @@ fn is_lower_sha256(value: &str) -> bool {
             .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
 }
 
-fn read_prompt_stdin() -> Result<String, String> {
-    let mut bytes = Vec::new();
-    std::io::stdin()
-        .take((MAX_PROMPT_STDIN_BYTES + 1) as u64)
-        .read_to_end(&mut bytes)
-        .map_err(|_| "prompt_stdin_read_failed")?;
-    if bytes.len() > MAX_PROMPT_STDIN_BYTES {
-        return Err("prompt_stdin_exceeds_2_mib".into());
-    }
-    let prompt = String::from_utf8(bytes).map_err(|_| "prompt_stdin_is_not_utf8")?;
+fn read_prompt_stdin(resources: &io::CommandIo) -> Result<String, String> {
+    let prompt =
+        resources.read_from(&mut std::io::stdin().lock(), MAX_PROMPT_STDIN_BYTES as u64)?;
     if prompt.trim().is_empty() {
         return Err("prompt_stdin_is_empty".into());
     }
@@ -1601,7 +1791,11 @@ struct GpuStressReport {
 }
 
 #[cfg(feature = "gpu-cubecl-wgpu")]
-fn build_gpu_stress(iterations: usize, workers: usize) -> Result<GpuStressReport, String> {
+fn build_gpu_stress(
+    iterations: usize,
+    workers: usize,
+    resources: &io::CommandIo,
+) -> Result<GpuStressReport, String> {
     if iterations == 0 || iterations > 1_024 {
         return Err("gpu_stress_iterations_out_of_range".into());
     }
@@ -1625,8 +1819,12 @@ fn build_gpu_stress(iterations: usize, workers: usize) -> Result<GpuStressReport
     .map_err(|error| format!("gpu_stress_warmup:{error:?}"))?;
 
     let stop = Arc::new(AtomicBool::new(false));
-    let samples = Arc::new(Mutex::new(Vec::<[u64; 4]>::new()));
-    let sampler = spawn_nvidia_sampler(Arc::clone(&stop), Arc::clone(&samples));
+    let samples = resources.sample_storage()?;
+    let sampler = spawn_nvidia_sampler(
+        Arc::clone(&stop),
+        Arc::clone(&samples),
+        resources.reserve_sampler()?,
+    );
     let barrier = Arc::new(Barrier::new(workers));
     let started = Instant::now();
     let mut handles = Vec::with_capacity(workers);
@@ -1664,7 +1862,7 @@ fn build_gpu_stress(iterations: usize, workers: usize) -> Result<GpuStressReport
     }
     let wall_elapsed_ms = started.elapsed().as_millis();
     stop.store(true, Ordering::Release);
-    let _ = sampler.join();
+    sampler.join().map_err(|_| "nvidia_sampler_panicked")??;
     let utilization = summarize_nvidia_samples(&samples);
     let host_inflight_overlap_observed = receipts.iter().any(|receipt| {
         receipt.overlap_observed || receipt.telemetry.host_inflight_overlap_observed
@@ -1704,25 +1902,58 @@ fn build_gpu_stress(iterations: usize, workers: usize) -> Result<GpuStressReport
 fn spawn_nvidia_sampler(
     stop: Arc<AtomicBool>,
     samples: Arc<Mutex<Vec<[u64; 4]>>>,
-) -> thread::JoinHandle<()> {
+    mut reservation: lc631_runtime::resource::Reservation,
+) -> thread::JoinHandle<Result<(), String>> {
     thread::spawn(move || {
         while !stop.load(Ordering::Acquire) {
-            if let Ok(output) = Command::new("nvidia-smi")
-                .args([
+            let arguments = [
+                std::ffi::OsString::from(
                     "--query-gpu=utilization.gpu,utilization.memory,memory.used,memory.total",
-                    "--format=csv,noheader,nounits",
-                ])
-                .output()
-            {
-                if output.status.success() {
-                    if let Some(line) = String::from_utf8_lossy(&output.stdout).lines().next() {
-                        let parsed = line
-                            .split(',')
-                            .map(|value| value.trim().parse::<u64>())
-                            .collect::<Result<Vec<_>, _>>();
-                        if let Ok(values) = parsed {
-                            if values.len() == 4 {
-                                if let Ok(mut guard) = samples.lock() {
+                ),
+                std::ffi::OsString::from("--format=csv,noheader,nounits"),
+            ];
+            let cwd = std::env::current_dir().map_err(|error| format!("sampler_cwd:{error}"))?;
+            let environment = std::env::vars_os()
+                .filter(|(key, _)| {
+                    matches!(
+                        key.to_str(),
+                        Some("PATH" | "PATHEXT" | "SystemRoot" | "WINDIR")
+                    )
+                })
+                .collect::<Vec<_>>();
+            let view = reservation.lease();
+            let observed = lc631_process_supervisor::run_bounded_with_resources(
+                lc631_process_supervisor::RunRequest {
+                    executable: std::ffi::OsStr::new("nvidia-smi"),
+                    arguments: &arguments,
+                    current_dir: &cwd,
+                    environment: &environment,
+                    stdin: None,
+                    timeout: Duration::from_secs(2),
+                    stdout_limit: 65_536,
+                    stderr_limit: 16_384,
+                },
+                &view,
+            )
+            .map_err(|error| format!("sampler_resource:{error:?}"))?;
+            if !observed.cleanup_complete() {
+                view.record_cleanup_unknown();
+                return Err("sampler_cleanup_unverified".into());
+            }
+            if observed.cancelled() {
+                return Err("sampler_cancelled".into());
+            }
+            let output = observed.outcome();
+            if output.exit_code == Some(0) && !output.stdout_truncated && !output.stderr_truncated {
+                if let Some(line) = String::from_utf8_lossy(&output.stdout).lines().next() {
+                    let parsed = line
+                        .split(',')
+                        .map(|value| value.trim().parse::<u64>())
+                        .collect::<Result<Vec<_>, _>>();
+                    if let Ok(values) = parsed {
+                        if values.len() == 4 {
+                            if let Ok(mut guard) = samples.lock() {
+                                if guard.len() < MAX_NVIDIA_SAMPLES {
                                     guard.push([values[0], values[1], values[2], values[3]]);
                                 }
                             }
@@ -1732,8 +1963,14 @@ fn spawn_nvidia_sampler(
             }
             thread::sleep(Duration::from_millis(100));
         }
+        reservation
+            .release_confirmed()
+            .map_err(|error| format!("sampler_release:{error:?}"))
     })
 }
+
+#[cfg(feature = "gpu-cubecl-wgpu")]
+use io::MAX_NVIDIA_SAMPLES;
 
 #[cfg(feature = "gpu-cubecl-wgpu")]
 fn summarize_nvidia_samples(samples: &Arc<Mutex<Vec<[u64; 4]>>>) -> NvidiaUtilizationReceipt {
@@ -1761,7 +1998,11 @@ fn summarize_nvidia_samples(samples: &Arc<Mutex<Vec<[u64; 4]>>>) -> NvidiaUtiliz
 }
 
 #[cfg(not(feature = "gpu-cubecl-wgpu"))]
-fn build_gpu_stress(_iterations: usize, _workers: usize) -> Result<serde_json::Value, String> {
+fn build_gpu_stress(
+    _iterations: usize,
+    _workers: usize,
+    _resources: &io::CommandIo,
+) -> Result<serde_json::Value, String> {
     Err("gpu_feature_not_compiled".into())
 }
 
@@ -1897,18 +2138,19 @@ struct HostBindAttestations {
     output: UntrustedReceipt,
 }
 
-fn build_host_bind(input: HostBindInput) -> Result<HostBindReport, String> {
-    let seed_text =
-        fs::read_to_string(&input.seed_file).map_err(|error| format!("seed_file_read:{error}"))?;
-    let output_text = fs::read_to_string(&input.output_file)
-        .map_err(|error| format!("output_file_read:{error}"))?;
-    let callback_payload = fs::read_to_string(&input.callback_file)
-        .map_err(|error| format!("callback_file_read:{error}"))?;
-    let host_receipt = fs::read_to_string(&input.host_receipt_file)
-        .map_err(|error| format!("host_receipt_file_read:{error}"))?;
+fn build_host_bind(
+    input: HostBindInput,
+    resources: &io::CommandIo,
+) -> Result<HostBindReport, String> {
+    let seed_text = resources.read_path(&input.seed_file, MAX_PROMPT_STDIN_BYTES as u64)?;
+    let output_text = resources.read_path(&input.output_file, MAX_PROMPT_STDIN_BYTES as u64)?;
+    let callback_payload =
+        resources.read_path(&input.callback_file, MAX_PROMPT_STDIN_BYTES as u64)?;
+    let host_receipt = resources.read_path(&input.host_receipt_file, 65_536)?;
     let attestations: HostBindAttestations = serde_json::from_str(&host_receipt)
         .map_err(|error| format!("host_receipt_json:{error}"))?;
-    let context = HostReceiptContext::load_or_create(&input.ledger_root.join("receipt-root"))
+    let context = resources
+        .host_context(&input.ledger_root.join("receipt-root"), true)
         .map_err(|error| format!("host_receipt_root:{error:?}"))?;
     let now_epoch = current_epoch_seconds()?;
     let source_span = SourceSpan::checked(&seed_text, 0, seed_text.len())
@@ -1939,15 +2181,18 @@ fn build_host_bind(input: HostBindInput) -> Result<HostBindReport, String> {
         now_epoch,
     )
     .map_err(|error| format!("host_output:{error:?}"))?;
-    let replay = append_durable_replay_verified(
-        &input.ledger_root,
-        &input.ledger,
-        &output,
-        context.verifier(),
-        &mut ReplayGuard::default(),
-        now_epoch,
-    )
-    .map_err(|error| format!("host_replay:{error:?}"))?;
+    let replay = resources.with_storage_view(8 * 1024 * 1024 + 1, 4_096, |view| {
+        append_durable_replay_verified_with_resources(
+            &input.ledger_root,
+            &input.ledger,
+            &output,
+            context.verifier(),
+            &mut ReplayGuard::default(),
+            now_epoch,
+            view,
+        )
+        .map_err(|error| format!("host_replay:{error:?}"))
+    })?;
     Ok(HostBindReport {
         exact_candidate_output_binding: output.exact_binding,
         automatic_host_callback_observed: output.automatic_host_callback_observed,
@@ -1971,8 +2216,8 @@ struct DoctorReport {
     residual_risks: ResidualRiskLedger,
 }
 
-fn build_doctor(repo: &Path) -> Result<DoctorReport, String> {
-    let baseline = audit_v630_root(repo);
+fn build_doctor(repo: &Path, resources: &io::CommandIo) -> Result<DoctorReport, String> {
+    let baseline = resources.baseline_guard(repo)?;
     let tl = build_tl_doctor("Do not delete files.")?;
     let tldg = build_tldg_pipeline(
         "Explain and parse fn main() { return; }",
@@ -1982,14 +2227,18 @@ fn build_doctor(repo: &Path) -> Result<DoctorReport, String> {
     .map_err(|error| format!("tldg_doctor:{error:?}"))?;
     let world = build_world_doctor("2 + 2 = 4 under an unspecified algebra")?;
     let repo_text = repo.to_string_lossy();
-    let program_analysis = analyze_program(AnalysisRequest {
-        prompt: "audit Rust Python assembly program-analysis wiring",
-        repo: Some(repo_text.as_ref()),
-        validation: None,
-        release: None,
-        source_name: None,
-        source: None,
-    });
+    let program_analysis = analyze_program(
+        AnalysisRequest {
+            prompt: "audit Rust Python assembly program-analysis wiring",
+            repo: Some(repo_text.as_ref()),
+            validation: None,
+            release: None,
+            source_name: None,
+            source: None,
+        },
+        &mut resources.analysis_runner(),
+    )
+    .map_err(|error| format!("doctor_resource:{error:?}"))?;
     let accelerator = build_accelerator_doctor(false)?;
     let media = build_media_doctor();
     let host =

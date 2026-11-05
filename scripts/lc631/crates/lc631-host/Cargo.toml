@@ -11,3 +11,6 @@ lc631-receipt-kernel = { path = "../lc631-receipt-kernel" }
 serde.workspace = true
 serde_json.workspace = true
 pulldown-cmark.workspace = true
+
+[dev-dependencies]
+lc631-process-supervisor = { path = "../lc631-process-supervisor", features = ["test-fixtures"] }

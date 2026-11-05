@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:epistesys:given-k6-path-result:v1",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "profile", "input_basis", "semantic_validation", "source_revision_hex", "artifact_digest_scheme", "root_artifact_digest_hex", "final_artifact_digest_hex", "original_text_to_k6_verified", "host_final_bound", "authority_created", "output_commit_allowed", "history", "final_observation", "actual_evaluation_count", "unique_defect_count", "defects", "uncertainty_count", "gate"],
+  "properties": {
+    "schema_version": {"const": "epistesys-given-k6-path-result.v1"}, "profile": {"const": "given-k6-path-v1"},
+    "input_basis": {"const": "given"}, "semantic_validation": {"const": "unverified"},
+    "source_revision_hex": {"$ref": "#/$defs/id"}, "artifact_digest_scheme": {"const": "sha256-domain-nul-lowercase-hex-v1"},
+    "root_artifact_digest_hex": {"$ref": "#/$defs/id"}, "final_artifact_digest_hex": {"$ref": "#/$defs/id"}, "original_text_to_k6_verified": {"const": false},
+    "host_final_bound": {"const": false}, "authority_created": {"const": false}, "output_commit_allowed": {"const": false},
+    "history": {"type": "array", "maxItems": 2, "items": {"$ref": "#/$defs/observation"}},
+    "final_observation": {"$ref": "#/$defs/observation"}, "actual_evaluation_count": {"type": "integer", "minimum": 0, "maximum": 12},
+    "unique_defect_count": {"type": "integer", "minimum": 0, "maximum": 12},
+    "defects": {"type": "array", "maxItems": 12, "items": {"$ref": "#/$defs/defect"}},
+    "uncertainty_count": {"type": "integer", "minimum": 0, "maximum": 3},
+    "gate": {"enum": ["pass_in_given_finite_profile", "fail_in_given_finite_profile", "needs_evidence"]}
+  },
+  "$defs": {
+    "id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "interval": {"type": "object", "additionalProperties": false, "required": ["lower", "upper"],
+      "properties": {"lower": {"type": "string"}, "upper": {"type": "string"}}},
+    "observation": {"type": "object", "additionalProperties": false, "required": ["target_artifact_digest_hex", "loss", "gap"],
+      "properties": {"target_artifact_digest_hex": {"$ref": "#/$defs/id"}, "loss": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/interval"}]}, "gap": {"enum": [null, "unsupported", "invalid_target", "missing_decoder_cost"]}}},
+    "defect": {"type": "object", "additionalProperties": false, "required": ["obligation_hex", "property_hex", "root_revision_hex", "target_revision_hex"],
+      "properties": {"obligation_hex": {"$ref": "#/$defs/id"}, "property_hex": {"$ref": "#/$defs/id"}, "root_revision_hex": {"$ref": "#/$defs/id"}, "target_revision_hex": {"$ref": "#/$defs/id"}}}
+  },
+  "$comment": "Schema validity is not semantic verification, a current lease, authority or host-final binding. Defect and uncertainty counts are not TL scalars."
+}

@@ -1,7 +1,13 @@
 use lc631_core::stable_sha256;
+use lc631_substrate::arena::Arena;
+use lc631_substrate::ids::{ArenaKey, AstId, ContextId, LogicalId};
+use lc631_substrate::source::{SourceSpan, SourceStore};
+use lc631_substrate::Digest32;
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
-use std::ops::Range;
+use std::ops::{Deref, Range};
+use std::sync::Arc;
 
 pub const INSTRUCTION_GRAMMAR_REVISION: &str = "controlled-ja-en-instruction-earley.v3";
 const INSTRUCTION_SCHEMA: &str = "epistesys-instruction-parse.v1";
@@ -334,6 +340,249 @@ pub struct InstructionAst {
     pub shared_argument_state: SharedArgumentState,
 }
 
+struct InstructionAstArena {
+    source: SourceStore,
+    anchor: SourceSpan,
+    nodes: Arena<InstructionAst>,
+}
+
+#[derive(Clone)]
+enum InstructionAstStorage {
+    Canonical {
+        owner: Arc<InstructionAstArena>,
+        key: ArenaKey,
+        id: AstId,
+    },
+    Legacy(Box<InstructionAst>),
+}
+
+/// An immutable canonical AST reference, not an authority or evidence token.
+/// Serialization materializes the original DTO shape, never arena internals.
+#[derive(Clone)]
+pub struct SharedInstructionAst(InstructionAstStorage);
+
+impl SharedInstructionAst {
+    fn intern(
+        source: &SourceStore,
+        anchor: SourceSpan,
+        alternatives: Vec<InstructionAst>,
+    ) -> Result<Vec<Self>, InstructionGrammarError> {
+        source
+            .slice(anchor)
+            .map_err(|_| InstructionGrammarError::SourceSpanInvalid)?;
+        if alternatives.is_empty() {
+            return Ok(Vec::new());
+        }
+        let context = instruction_arena_context(source, anchor)?;
+        let mut nodes = Arena::new(context, alternatives.len())
+            .map_err(|_| InstructionGrammarError::PostprocessBudgetExceeded)?;
+        let mut identities = Vec::new();
+        identities
+            .try_reserve_exact(alternatives.len())
+            .map_err(|_| InstructionGrammarError::PostprocessBudgetExceeded)?;
+        for (ordinal, ast) in alternatives.into_iter().enumerate() {
+            let id = instruction_derivation_id(context, ordinal, &ast)?;
+            let key = nodes
+                .insert(LogicalId::from_digest(id.digest()), ast)
+                .map_err(|_| InstructionGrammarError::PostprocessBudgetExceeded)?;
+            identities.push((key, id));
+        }
+        let owner = Arc::new(InstructionAstArena {
+            source: source.clone(),
+            anchor,
+            nodes,
+        });
+        Ok(identities
+            .into_iter()
+            .map(|(key, id)| {
+                Self(InstructionAstStorage::Canonical {
+                    owner: Arc::clone(&owner),
+                    key,
+                    id,
+                })
+            })
+            .collect())
+    }
+
+    pub fn canonical_id(&self) -> Option<AstId> {
+        match &self.0 {
+            InstructionAstStorage::Canonical { id, .. } => Some(*id),
+            InstructionAstStorage::Legacy(_) => None,
+        }
+    }
+
+    pub fn root_source_span(&self) -> Option<SourceSpan> {
+        match &self.0 {
+            InstructionAstStorage::Canonical { owner, .. } => Some(owner.anchor),
+            InstructionAstStorage::Legacy(_) => None,
+        }
+    }
+
+    pub fn source_store(&self) -> Option<&SourceStore> {
+        match &self.0 {
+            InstructionAstStorage::Canonical { owner, .. } => Some(&owner.source),
+            InstructionAstStorage::Legacy(_) => None,
+        }
+    }
+
+    /// Explicit compatibility boundary. A mutable DTO is no longer canonical.
+    pub fn materialize_mut(&mut self) -> &mut InstructionAst {
+        if matches!(&self.0, InstructionAstStorage::Canonical { .. }) {
+            let legacy = InstructionAst::clone(<Self as Deref>::deref(self));
+            self.0 = InstructionAstStorage::Legacy(Box::new(legacy));
+        }
+        match &mut self.0 {
+            InstructionAstStorage::Legacy(ast) => ast,
+            InstructionAstStorage::Canonical { .. } => unreachable!("materialized above"),
+        }
+    }
+
+    /// Explicit owned-DTO boundary; the normal projection path only borrows.
+    pub fn into_legacy(self) -> InstructionAst {
+        match self.0 {
+            InstructionAstStorage::Legacy(ast) => *ast,
+            InstructionAstStorage::Canonical { owner, key, .. } => owner
+                .nodes
+                .get(key)
+                .expect("private immutable arena retains every published AST")
+                .clone(),
+        }
+    }
+}
+
+fn hash_offset(hasher: &mut Sha256, offset: usize) -> Result<(), InstructionGrammarError> {
+    let offset = u64::try_from(offset).map_err(|_| InstructionGrammarError::SourceSpanInvalid)?;
+    hasher.update(offset.to_le_bytes());
+    Ok(())
+}
+
+fn instruction_arena_context(
+    source: &SourceStore,
+    anchor: SourceSpan,
+) -> Result<ContextId, InstructionGrammarError> {
+    let mut hasher = Sha256::new();
+    hasher.update(b"epistesys-instruction-arena.v1\0");
+    hasher.update(source.id().digest().as_bytes());
+    hash_offset(&mut hasher, anchor.start())?;
+    hash_offset(&mut hasher, anchor.end())?;
+    hash_offset(&mut hasher, INSTRUCTION_GRAMMAR_REVISION.len())?;
+    hasher.update(INSTRUCTION_GRAMMAR_REVISION.as_bytes());
+    Ok(ContextId::from_digest(Digest32::from_bytes(
+        hasher.finalize().into(),
+    )))
+}
+
+/// A source-bound derivation label, not verification of an arbitrary AST payload.
+/// Only the private parser interner publishes canonical handles. The ordinal
+/// distinguishes ordered derivations even when their root production is equal.
+fn instruction_derivation_id(
+    context: ContextId,
+    ordinal: usize,
+    ast: &InstructionAst,
+) -> Result<AstId, InstructionGrammarError> {
+    let mut hasher = Sha256::new();
+    hasher.update(b"epistesys-instruction-derivation.v1\0");
+    hasher.update(context.digest().as_bytes());
+    hash_offset(&mut hasher, ordinal)?;
+    hasher.update(ast.production_id.to_le_bytes());
+    hasher.update([match ast.language {
+        InstructionLanguage::English => 1,
+        InstructionLanguage::Japanese => 2,
+    }]);
+    hasher.update([match ast.marker {
+        InstructionMarker::Please => 1,
+        InstructionMarker::Must => 2,
+        InstructionMarker::MustNot => 3,
+        InstructionMarker::Should => 4,
+        InstructionMarker::ShouldNot => 5,
+        InstructionMarker::May => 6,
+        InstructionMarker::DoNot => 7,
+        InstructionMarker::JapaneseRequest => 8,
+        InstructionMarker::JapaneseForbidden => 9,
+        InstructionMarker::JapanesePermission => 10,
+        InstructionMarker::JapaneseMust => 11,
+    }]);
+    for span in [&ast.source_span, &ast.marker_span, &ast.body_span] {
+        hash_offset(&mut hasher, span.start)?;
+        hash_offset(&mut hasher, span.end)?;
+    }
+    Ok(AstId::from_digest(Digest32::from_bytes(
+        hasher.finalize().into(),
+    )))
+}
+
+/// Legacy compatibility hash: exactly compact serde_json AST bytes, streamed
+/// without allocating a JSON String. This is not the typed AstId domain.
+pub(crate) fn legacy_instruction_ast_digest(
+    ast: &InstructionAst,
+) -> Result<String, serde_json::Error> {
+    legacy_json_digest(ast)
+}
+
+/// Compatibility-only serializer domain. Hash the same compact JSON bytes as
+/// the old String preimage without retaining another copy of the payload.
+pub(crate) fn legacy_json_digest<T: Serialize + ?Sized>(
+    value: &T,
+) -> Result<String, serde_json::Error> {
+    struct DigestWriter(Sha256);
+
+    impl std::io::Write for DigestWriter {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.0.update(bytes);
+            Ok(bytes.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    let mut writer = DigestWriter(Sha256::new());
+    serde_json::to_writer(&mut writer, value)?;
+    let digest = writer.0.finalize();
+    let mut encoded = String::with_capacity(71);
+    encoded.push_str("sha256:");
+    for byte in digest {
+        use std::fmt::Write as _;
+        let _ = write!(encoded, "{byte:02x}");
+    }
+    Ok(encoded)
+}
+
+impl Deref for SharedInstructionAst {
+    type Target = InstructionAst;
+
+    fn deref(&self) -> &Self::Target {
+        match &self.0 {
+            InstructionAstStorage::Canonical { owner, key, .. } => owner
+                .nodes
+                .get(*key)
+                .expect("private immutable arena retains every published AST"),
+            InstructionAstStorage::Legacy(ast) => ast,
+        }
+    }
+}
+
+impl std::fmt::Debug for SharedInstructionAst {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.deref().fmt(formatter)
+    }
+}
+
+impl PartialEq for SharedInstructionAst {
+    fn eq(&self, other: &Self) -> bool {
+        self.deref() == other.deref()
+    }
+}
+
+impl Eq for SharedInstructionAst {}
+
+impl Serialize for SharedInstructionAst {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.deref().serialize(serializer)
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct PackedInstructionNode {
     pub id: u32,
@@ -356,8 +605,8 @@ pub struct InstructionParseReport {
     pub source_revision: String,
     pub grammar_revision: &'static str,
     pub state: InstructionParseState,
-    pub selected: Option<InstructionAst>,
-    pub alternatives: Vec<InstructionAst>,
+    pub selected: Option<SharedInstructionAst>,
+    pub alternatives: Vec<SharedInstructionAst>,
     pub forest: PackedInstructionForest,
     pub chart_item_count: usize,
     pub claim_boundary: &'static str,
@@ -468,6 +717,25 @@ pub fn parse_controlled_instruction(
     budget: InstructionParseBudget,
 ) -> Result<InstructionParseReport, InstructionGrammarError> {
     validate_budget(budget)?;
+    if source.len() > budget.max_source_bytes {
+        return Err(InstructionGrammarError::SourceBudgetExceeded);
+    }
+    let store = SourceStore::new(Arc::from(source), budget.max_source_bytes)
+        .map_err(|_| InstructionGrammarError::SourceSpanInvalid)?;
+    let anchor = SourceSpan::checked(&store, 0, source.len())
+        .map_err(|_| InstructionGrammarError::SourceSpanInvalid)?;
+    parse_controlled_instruction_span(&store, anchor, budget)
+}
+
+pub(crate) fn parse_controlled_instruction_span(
+    store: &SourceStore,
+    anchor: SourceSpan,
+    budget: InstructionParseBudget,
+) -> Result<InstructionParseReport, InstructionGrammarError> {
+    validate_budget(budget)?;
+    let source = store
+        .slice(anchor)
+        .map_err(|_| InstructionGrammarError::SourceSpanInvalid)?;
     if source.len() > budget.max_source_bytes {
         return Err(InstructionGrammarError::SourceBudgetExceeded);
     }
@@ -593,6 +861,7 @@ pub fn parse_controlled_instruction(
         1 => InstructionParseState::Unresolved,
         _ => InstructionParseState::Ambiguous,
     };
+    let alternatives = SharedInstructionAst::intern(store, anchor, alternatives)?;
     let selected = (state == InstructionParseState::Parsed)
         .then(|| alternatives.first().cloned())
         .flatten();
@@ -2761,5 +3030,49 @@ mod dependency_cycle_tests {
             ..edges[0].clone()
         }];
         assert!(detect_dependency_cycles(2, &conflict_only).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod tlcx02_storage_tests {
+    use super::*;
+
+    #[test]
+    fn tlcx02_streamed_legacy_digest_preserves_compact_json_bytes() {
+        for source in ["Please test the parser.", "公開しないでください。"] {
+            let report =
+                parse_controlled_instruction(source, InstructionParseBudget::default()).unwrap();
+            let ast = report.selected.as_ref().unwrap();
+            let legacy = serde_json::to_string(&**ast).unwrap();
+            assert_eq!(
+                legacy_instruction_ast_digest(ast).unwrap(),
+                stable_sha256(&legacy)
+            );
+        }
+    }
+
+    #[test]
+    fn tlcx02_same_root_production_with_distinct_derivations_does_not_alias() {
+        let source = "Please test the parser.";
+        let store = SourceStore::new(Arc::from(source), source.len()).unwrap();
+        let anchor = SourceSpan::checked(&store, 0, source.len()).unwrap();
+        let report =
+            parse_controlled_instruction(source, InstructionParseBudget::default()).unwrap();
+        let first = report.selected.unwrap().into_legacy();
+        let mut second = first.clone();
+        // Adversarial private-interner fixture, not a claim that the changed
+        // polarity is a correct interpretation of this source.
+        second.actions[0].polarity = InstructionPolarity::Forbidden;
+        assert_eq!(first.production_id, second.production_id);
+        assert_eq!(first.source_span, second.source_span);
+        assert_ne!(first.actions, second.actions);
+        let alternatives =
+            SharedInstructionAst::intern(&store, anchor, vec![first, second]).unwrap();
+        assert_eq!(alternatives.len(), 2);
+        assert_ne!(
+            alternatives[0].canonical_id(),
+            alternatives[1].canonical_id()
+        );
+        assert!(!std::ptr::eq(&*alternatives[0], &*alternatives[1]));
     }
 }

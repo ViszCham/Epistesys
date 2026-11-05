@@ -1,0 +1,36 @@
+[package]
+name = "lc631-runtime"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+test-fixtures = []
+semantic-gpu = ["dep:lc631-accelerator", "lc631-accelerator/gpu-cubecl-wgpu"]
+
+[dependencies]
+lc631-accelerator = { path = "../lc631-accelerator", optional = true, default-features = false }
+lc631-analysis = { path = "../lc631-analysis" }
+lc631-core = { path = "../lc631-core" }
+lc631-host = { path = "../lc631-host" }
+lc631-media = { path = "../lc631-media" }
+lc631-process-supervisor = { path = "../lc631-process-supervisor" }
+lc631-receipt-kernel = { path = "../lc631-receipt-kernel" }
+lc631-substrate = { path = "../lc631-substrate" }
+lc631-solvers = { path = "../lc631-solvers" }
+lc631-world = { path = "../lc631-world" }
+sha2.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[[bin]]
+name = "tlcx10_solver_child"
+path = "tests/fixtures/tlcx10_solver_child.rs"
+test = false
+required-features = ["test-fixtures"]
+
+[[test]]
+name = "tlcx10_solver_supervision"
+path = "tests/tlcx10_solver_supervision.rs"
+required-features = ["test-fixtures"]

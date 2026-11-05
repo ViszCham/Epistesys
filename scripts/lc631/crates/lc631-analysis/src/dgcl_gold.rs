@@ -416,9 +416,13 @@ pub fn evaluate_gold(corpus: &GoldCorpus) -> Result<GoldEvaluationReport, GoldEr
         schema_version: "epistesys-dgcl-gold-evaluation.v1",
         corpus_digest: stable_sha256(&canonical),
         metrics: metrics.to_vec(),
-        gate: if !sufficient { GoldGateState::CorpusInsufficient }
-            else if !thresholds { GoldGateState::ThresholdUnmet }
-            else { GoldGateState::PendingIndependentReview },
+        gate: if !sufficient {
+            GoldGateState::CorpusInsufficient
+        } else if !thresholds {
+            GoldGateState::ThresholdUnmet
+        } else {
+            GoldGateState::PendingIndependentReview
+        },
         independent_review_verified: false,
         claim_boundary: "metrics cover the supplied corpus only; annotator identity and independent adjudication metadata are not authenticated",
     })

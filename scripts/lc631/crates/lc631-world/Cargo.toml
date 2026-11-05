@@ -6,4 +6,5 @@ license.workspace = true
 
 [dependencies]
 lc631-core = { path = "../lc631-core" }
+num-traits.workspace = true
 serde.workspace = true

@@ -128,7 +128,10 @@ fn arc631_20_21_arbitrary_script_output_stays_candidate_and_enters_tl_envelope()
         ),
     )
     .unwrap();
-    let python = Command::new("python")
+    // Ubuntu provides python3 without a python alias. This remains an actual
+    // interpreter execution, not a skipped positive or a fabricated report.
+    let interpreter = if cfg!(windows) { "python" } else { "python3" };
+    let python = Command::new(interpreter)
         .args(["-c", "import sys;print(sys.executable)"])
         .output()
         .unwrap();
@@ -181,6 +184,29 @@ fn arc631_20_21_arbitrary_script_output_stays_candidate_and_enters_tl_envelope()
         "media"
     );
     assert!(receipt.authenticity_receipt_digest.is_some());
+    // The fixture executes a real local Python process, not a real media model.
+    // Its returned report must verify against its actual source receipt under v2.
+    let parent = authority.attestation_receipt_digest.as_deref().unwrap();
+    lc631_media::attestation_v2::verify_media_backend_attestation_v2(
+        &receipt,
+        &verifier,
+        &mut ReplayGuard::default(),
+        120,
+        parent,
+    )
+    .unwrap();
+    let mut altered = receipt.clone();
+    altered.execution_plan.source_bytes += 1;
+    assert!(
+        lc631_media::attestation_v2::verify_media_backend_attestation_v2(
+            &altered,
+            &verifier,
+            &mut ReplayGuard::default(),
+            120,
+            parent,
+        )
+        .is_err()
+    );
     let mut wrong_family = payload.clone();
     wrong_family["executed_families"] = serde_json::json!(["decode"]);
     wrong_family["executed_methods"] = serde_json::json!({"decode":"ffmpeg-cli"});

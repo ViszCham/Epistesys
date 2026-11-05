@@ -119,62 +119,81 @@ impl Drop for ManagedChild {
 }
 
 pub fn spawn(request: SpawnRequest<'_>) -> io::Result<SpawnedProcess> {
-    if request.executable.is_empty() || !request.current_dir.is_absolute() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "invalid process input",
-        ));
-    }
-    let mut command = Command::new(request.executable);
-    command
-        .args(request.arguments)
-        .current_dir(request.current_dir)
-        .env_clear()
-        .envs(request.environment.iter().cloned())
-        .process_group(0)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    let mut root = command.spawn()?;
-    let group_id = match libc::pid_t::try_from(root.id()) {
-        Ok(id) => id,
-        Err(_) => {
-            let _ = root.kill();
-            let _ = root.wait();
-            return Err(io::Error::other("process id outside pid_t"));
+    spawn_observed(request).map_err(crate::spawn_failure::SpawnFailure::into_io)
+}
+
+pub(crate) fn spawn_observed(
+    request: SpawnRequest<'_>,
+) -> Result<SpawnedProcess, crate::spawn_failure::SpawnFailure> {
+    let mut child_created = false;
+    let result = (|| -> io::Result<SpawnedProcess> {
+        if request.executable.is_empty() || !request.current_dir.is_absolute() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "invalid process input",
+            ));
         }
-    };
-    let mut child = ManagedChild {
-        child: root,
-        group_id,
-        cleaned: false,
-    };
-    let stdin = child
-        .child
-        .stdin
-        .take()
-        .ok_or_else(|| io::Error::other("missing stdin"))?;
-    let stdout = child
-        .child
-        .stdout
-        .take()
-        .ok_or_else(|| io::Error::other("missing stdout"))?;
-    let stderr = child
-        .child
-        .stderr
-        .take()
-        .ok_or_else(|| io::Error::other("missing stderr"))?;
-    let stdin = File::from(OwnedFd::from(stdin));
-    let stdout = File::from(OwnedFd::from(stdout));
-    let stderr = File::from(OwnedFd::from(stderr));
-    for pipe in [&stdin, &stdout, &stderr] {
-        set_nonblocking(pipe)?;
-    }
-    Ok(SpawnedProcess {
-        child,
-        stdin,
-        stdout,
-        stderr,
+        let mut command = Command::new(request.executable);
+        command
+            .args(request.arguments)
+            .current_dir(request.current_dir)
+            .env_clear()
+            .envs(request.environment.iter().cloned())
+            .process_group(0)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        let mut root = command.spawn()?;
+        child_created = true;
+        crate::native_dispatch::record_started(root.id());
+        let group_id = match libc::pid_t::try_from(root.id()) {
+            Ok(id) => id,
+            Err(_) => {
+                let _ = root.kill();
+                let _ = root.wait();
+                return Err(io::Error::other("process id outside pid_t"));
+            }
+        };
+        let mut child = ManagedChild {
+            child: root,
+            group_id,
+            cleaned: false,
+        };
+        let stdin = child
+            .child
+            .stdin
+            .take()
+            .ok_or_else(|| io::Error::other("missing stdin"))?;
+        let stdout = child
+            .child
+            .stdout
+            .take()
+            .ok_or_else(|| io::Error::other("missing stdout"))?;
+        let stderr = child
+            .child
+            .stderr
+            .take()
+            .ok_or_else(|| io::Error::other("missing stderr"))?;
+        let stdin = File::from(OwnedFd::from(stdin));
+        let stdout = File::from(OwnedFd::from(stdout));
+        let stderr = File::from(OwnedFd::from(stderr));
+        for pipe in [&stdin, &stdout, &stderr] {
+            set_nonblocking(pipe)?;
+        }
+        Ok(SpawnedProcess {
+            child,
+            stdin,
+            stdout,
+            stderr,
+        })
+    })();
+    result.map_err(|error| {
+        if child_created {
+            crate::native_dispatch::record_may_have_started();
+            crate::spawn_failure::SpawnFailure::MayHaveStarted(error)
+        } else {
+            crate::spawn_failure::SpawnFailure::BeforeChild(error)
+        }
     })
 }
 

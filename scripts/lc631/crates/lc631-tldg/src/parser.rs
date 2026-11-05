@@ -1,14 +1,18 @@
+use crate::dg1::{analyze_dg1_store, source_parse_error};
+use crate::source::{SourceRevision, SourceTextView};
 use crate::{
-    analyze_dg1, default_profile_registry, BoundaryLedger, ConstraintEdge, ConstraintKind,
-    ConstraintState, DeepGrammarArtifact, Dg1Error, Dg1Language, Dg1Region, Dg1RegionKind,
-    Dg1Report, GrammarProduction, GrammarProfileId, PackedDerivation, ParseDefect, RegionCandidate,
-    RegionLattice, RelationKind, RelationState, SyntaxNode, SyntaxNodeId, SyntaxNodeKind,
-    SyntaxRelation, Token, TokenKind, TokenLattice, TokenSyntaxBinding, TypedConstraintGraph,
-    UnifiedGrammarIr, UnifiedSyntaxHypergraph,
+    default_profile_registry, ConstraintEdge, ConstraintKind, ConstraintState, DeepGrammarArtifact,
+    Dg1Error, Dg1Language, Dg1Region, Dg1RegionKind, Dg1Report, GrammarProduction,
+    GrammarProfileId, PackedDerivation, ParseDefect, RegionCandidate, RegionLattice, RelationKind,
+    RelationState, SyntaxNode, SyntaxNodeId, SyntaxNodeKind, SyntaxRelation, Token, TokenKind,
+    TokenLattice, TokenSyntaxBinding, TypedConstraintGraph, UnifiedGrammarIr,
+    UnifiedSyntaxHypergraph,
 };
 use lc631_core::SourceSpan;
+use lc631_substrate::source::SourceStore;
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub enum TldgError {
@@ -20,7 +24,7 @@ pub enum TldgError {
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize)]
 pub struct UnifiedParseReport {
-    pub source_roundtrip: String,
+    pub source_roundtrip: SourceTextView,
     pub profile_count: usize,
     pub region_count: usize,
     pub token_count: usize,
@@ -69,26 +73,36 @@ pub fn analyze(source: &str) -> Result<DeepGrammarArtifact, TldgError> {
 pub(crate) fn analyze_with_dg1(
     source: &str,
 ) -> Result<(DeepGrammarArtifact, Dg1Report), TldgError> {
-    let boundary = BoundaryLedger::build(source);
-    if boundary.roundtrip() != source || !boundary.covers_source() {
-        return Err(TldgError::SourceRoundtripMismatch);
+    let limit = crate::Dg1Budget::default().max_source_bytes;
+    if source.len() > limit {
+        return Err(TldgError::Dg1(Dg1Error::SourceBudgetExceeded));
     }
-    let dg1 = analyze_dg1(source, crate::Dg1Budget::default()).map_err(TldgError::Dg1)?;
+    let store = SourceStore::new(Arc::from(source), limit)
+        .map_err(|error| TldgError::Dg1(source_parse_error(error)))?;
+    analyze_with_dg1_store(&store)
+}
+
+fn analyze_with_dg1_store(
+    store: &SourceStore,
+) -> Result<(DeepGrammarArtifact, Dg1Report), TldgError> {
+    let source = store.text();
+    let dg1 = analyze_dg1_store(store, crate::Dg1Budget::default()).map_err(TldgError::Dg1)?;
     if !dg1.exact_source_roundtrip {
         return Err(TldgError::SourceRoundtripMismatch);
     }
     let regions = build_regions(&dg1);
-    let tokens = tokenize(source)?;
+    let tokens = tokenize(store)?;
     let grammar = builtin_grammar();
     let mut syntax = build_syntax(source, &dg1, &regions)?;
     let constraints = build_constraints(&tokens, &mut syntax)?;
     constraints
         .validate_source_bindings(source, &tokens, &syntax)
         .map_err(TldgError::ConstraintBinding)?;
-    let boundary_roundtrip = boundary.roundtrip();
+    let boundary_roundtrip =
+        SourceTextView::full(store).map_err(|error| TldgError::Dg1(source_parse_error(error)))?;
     Ok((
         DeepGrammarArtifact {
-            source: boundary.source,
+            source: SourceRevision::from_store(store),
             boundary_roundtrip,
             regions,
             tokens,
@@ -152,7 +166,8 @@ fn profile_for_region(region: &Dg1Region) -> GrammarProfileId {
     }
 }
 
-fn tokenize(source: &str) -> Result<TokenLattice, TldgError> {
+fn tokenize(store: &SourceStore) -> Result<TokenLattice, TldgError> {
+    let source = store.text();
     let mut tokens = Vec::new();
     let mut start = 0;
     while start < source.len() {
@@ -177,7 +192,8 @@ fn tokenize(source: &str) -> Result<TokenLattice, TldgError> {
             id: tokens.len() as u32,
             span: SourceSpan { start, end },
             kind,
-            surface: source[start..end].to_string(),
+            surface: SourceTextView::checked(store, start, end)
+                .map_err(|error| TldgError::Dg1(source_parse_error(error)))?,
         });
         start = end;
     }
@@ -481,5 +497,50 @@ mod tests {
         let artifact = analyze("").unwrap();
         assert_eq!(artifact.boundary_roundtrip, "");
         assert_eq!(artifact.syntax.derivations.len(), 1);
+    }
+
+    #[test]
+    fn tlcx_02_parser_uses_the_same_store_for_dg1_and_the_legacy_artifact() {
+        let store = SourceStore::new(Arc::from("Please preserve 日本語.\r\n"), 64).unwrap();
+        let (artifact, dg1) = analyze_with_dg1_store(&store).unwrap();
+        assert_eq!(artifact.source, SourceRevision::from_store(&store));
+        assert_eq!(artifact.boundary_roundtrip, store.text());
+        assert_eq!(artifact.source.revision, dg1.source_revision);
+        assert!(dg1.exact_source_roundtrip);
+    }
+
+    #[test]
+    fn tlcx_02_parser_rejects_oversized_source_before_boundary_allocation() {
+        let source = " ".repeat(crate::Dg1Budget::default().max_source_bytes + 1);
+        assert!(matches!(
+            analyze(&source),
+            Err(TldgError::Dg1(Dg1Error::SourceBudgetExceeded))
+        ));
+    }
+
+    #[test]
+    fn tlcx_02_shared_text_artifact_keeps_the_admitted_source_allocation() {
+        let store = SourceStore::new(Arc::from("alpha 日本語\r\n"), 64).unwrap();
+        let (artifact, _) = analyze_with_dg1_store(&store).unwrap();
+        assert_eq!(artifact.boundary_roundtrip.as_ptr(), store.text().as_ptr());
+    }
+
+    #[test]
+    fn tlcx_02_shared_text_summary_does_not_clone_the_source_bytes() {
+        let store = SourceStore::new(Arc::from("alpha 日本語\r\n"), 64).unwrap();
+        let (artifact, _) = analyze_with_dg1_store(&store).unwrap();
+        let report = report_for_artifact(&artifact);
+        assert_eq!(report.source_roundtrip.as_ptr(), store.text().as_ptr());
+    }
+
+    #[test]
+    fn tlcx_02_shared_text_token_surfaces_borrow_the_admitted_source() {
+        let store = SourceStore::new(Arc::from("alpha 日本語\r\n"), 64).unwrap();
+        let (artifact, _) = analyze_with_dg1_store(&store).unwrap();
+        assert!(!artifact.tokens.tokens.is_empty());
+        for token in &artifact.tokens.tokens {
+            let expected = &store.text()[token.span.start..token.span.end];
+            assert_eq!(token.surface.as_ptr(), expected.as_ptr());
+        }
     }
 }

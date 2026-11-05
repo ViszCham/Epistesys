@@ -2,6 +2,18 @@
 
 pub const PROGRAM_ANALYSIS_SCHEMA: &str = "lc631-program-analysis.v1";
 
+pub mod bounded_input;
+pub mod breakcost_measurement;
+pub mod context_lowering;
+pub mod creative_candidates;
+pub mod creativity_measurement;
+pub mod declared_build_capture;
+pub mod logical_lowering;
+pub mod reconstruction_loss;
+pub mod solver_coding_bridge;
+pub mod spatiotemporal_loss;
+pub use cargo_world::observe_cargo_world_with_resources;
+
 mod assembly;
 mod cargo_world;
 mod closure;
@@ -35,10 +47,12 @@ mod validation;
 mod validation_producer;
 
 pub use validation_producer::{
-    capture_dgcl_cargo_snapshot, check_cargo_test_result, dgcl_cargo_registration_payload,
-    dgcl_cargo_validation_scope, dgcl_implementation_binding_payload, dgcl_repository_root_digest,
-    dgcl_validator_revision, issue_dgcl_cargo_evidence, issue_dgcl_implementation_binding,
-    observe_dgcl_cargo_validation, preflight_dgcl_cargo_plan, project_dgcl_cargo_target_snapshot,
+    capture_dgcl_cargo_snapshot, capture_dgcl_cargo_snapshot_with_runner, check_cargo_test_result,
+    dgcl_cargo_registration_payload, dgcl_cargo_validation_scope,
+    dgcl_implementation_binding_payload, dgcl_repository_root_digest, dgcl_validator_revision,
+    issue_dgcl_cargo_evidence, issue_dgcl_implementation_binding, observe_dgcl_cargo_validation,
+    observe_dgcl_cargo_validation_with_runner, preflight_dgcl_cargo_plan,
+    preflight_dgcl_cargo_plan_with_runner, project_dgcl_cargo_target_snapshot,
     verify_dgcl_cargo_registration, CheckedDgclCargoObservation, DgclBindingIssuerContext,
     DgclCargoExecutionContext, DgclCargoValidationPlan, DgclValidationProducerError,
 };
@@ -56,17 +70,25 @@ pub use closure::{
 };
 pub use closure_connection::{
     issue_connection_evidence, issue_observed_connection_evidence,
-    observe_connection_plan_from_cli, verify_connection_plan, verify_connection_plan_from_cli,
-    CodingConnectionPlan, CodingConnectionReport, ConnectionError, ConnectionStatus,
-    VerifiedConnectionObservation,
+    observe_connection_plan_from_cli, observe_connection_plan_from_cli_with_consumer,
+    observe_connection_plan_from_cli_with_resources, verify_connection_plan,
+    verify_connection_plan_from_cli, verify_connection_plan_from_cli_with_resources,
+    verify_connection_plan_with_resources, CodingConnectionPlan, CodingConnectionReport,
+    ConnectionError, ConnectionStatus, VerifiedConnectionObservation,
 };
 pub use closure_resume::{
-    append_checkpoint, inspect_resume, inspect_resume_with_anchor,
-    inspect_resume_with_historical_anchor, issue_checkpoint_head_anchor, load_checkpoint_head,
-    load_checkpoint_head_historical, persist_checkpoint_head, persist_checkpoint_head_renewal,
-    CheckpointBody, CheckpointEventKind, CheckpointHeadAnchor, CheckpointHeadRequest,
-    CheckpointIntegrityState, DeliveryState, ResumeError, ResumeObservation,
-    DGCL_CHECKPOINT_V1_SCHEMA, DGCL_CHECKPOINT_V2_SCHEMA,
+    append_checkpoint, append_checkpoint_with_resources, inspect_checkpoint_record_bytes,
+    inspect_resume, inspect_resume_with_anchor, inspect_resume_with_anchor_with_resources,
+    inspect_resume_with_historical_anchor, inspect_resume_with_historical_anchor_with_resources,
+    inspect_resume_with_resources, issue_checkpoint_head_anchor, load_checkpoint_head,
+    load_checkpoint_head_historical, load_checkpoint_head_historical_with_resources,
+    load_checkpoint_head_with_resources, persist_checkpoint_head, persist_checkpoint_head_renewal,
+    persist_checkpoint_head_renewal_with_resources, persist_checkpoint_head_with_resources,
+    read_checkpoint_record_with_resources, CheckpointBody, CheckpointEventKind,
+    CheckpointHeadAnchor, CheckpointHeadRequest, CheckpointIntegrityState, CheckpointReadIdentity,
+    DeliveryState, ResumeError, ResumeObservation, DGCL_CHECKPOINT_V1_SCHEMA,
+    DGCL_CHECKPOINT_V2_SCHEMA, MAX_CHECKPOINT_CHAIN_BYTES, MAX_CHECKPOINT_RECORDS,
+    MAX_CHECKPOINT_RECORD_BYTES,
 };
 pub use completion_plan::{
     audit_completion_assignments, build_dgcl_completion_plan, verify_dgcl_completion_plan,
@@ -113,9 +135,10 @@ pub use dgcl_implementation_closure::{
     DGCL_IMPLEMENTATION_CLOSURE_SCHEMA,
 };
 pub use dgcl_pipeline::{
-    build_dgcl_pipeline, verify_dgcl_pipeline_identity, DgclBackendSet, DgclBindingState,
-    DgclInstructionParse, DgclInstructionParseState, DgclLanguageRegion, DgclPipelineError,
-    DgclPipelineReport, DgclRequirementBinding,
+    build_dgcl_pipeline, build_dgcl_pipeline_with_runner, build_dgcl_pipeline_with_source_observer,
+    verify_dgcl_pipeline_identity, DgclBackendSet, DgclBindingState, DgclInstructionParse,
+    DgclInstructionParseState, DgclLanguageRegion, DgclPipelineError, DgclPipelineReport,
+    DgclRequirementBinding, DgclSourceObserver, DgclWorkerRunner,
 };
 pub use dgcl_projection::{
     build_dgcl_projection, verify_dgcl_projection, DgclProgramAlternative, DgclProgramDependency,
@@ -129,7 +152,10 @@ pub use evidence_lifecycle::{
     DgclEvidenceLease, DgclExecutionSnapshot, DgclLifecycleError, DgclLifecycleObservation,
     DgclLifecycleState, DgclTargetIdentity, DGCL_EVIDENCE_LIFECYCLE_SCHEMA,
 };
-pub use file_repair::{DgclFileEvidenceValidator, DgclFileRepairConfig, DgclFileRepairDriver};
+pub use file_repair::{
+    DgclFileEffectOwner, DgclFileEffectPlan, DgclFileEvidenceValidator, DgclFileRepairConfig,
+    DgclFileRepairDriver,
+};
 pub use instruction_grammar::{
     parse_controlled_instruction, ConditionEvidenceState, ConditionExpression, ConditionPredicate,
     ConditionRelation, ConditionScopeState, InstructionAction, InstructionAst,
@@ -141,17 +167,23 @@ pub use instruction_grammar::{
     InstructionPolarity, InstructionPolarityScope, InstructionPolarityScopeState,
     InstructionReferenceCandidate, InstructionReferenceState, InstructionScopeCandidate,
     InstructionScopeKind, InstructionScopeState, PackedInstructionForest, PackedInstructionNode,
-    SharedArgumentState, TemporalRelation, INSTRUCTION_GRAMMAR_REVISION,
+    SharedArgumentState, SharedInstructionAst, TemporalRelation, INSTRUCTION_GRAMMAR_REVISION,
 };
 pub use language_worker::{
-    load_dgcl_runtime_pins, run_language_worker, DependencySentence, DependencyToken,
-    DependencyWord, DgclRuntimePins, LanguageObservation, LanguageWorkerConfig,
-    LanguageWorkerError,
+    load_dgcl_runtime_pins, load_dgcl_runtime_pins_with_resources, run_language_worker,
+    run_language_worker_with_resources, DependencySentence, DependencyToken, DependencyWord,
+    DgclRuntimePins, LanguageObservation, LanguageWorkerConfig, LanguageWorkerError,
 };
 pub use model::*;
-pub use pipeline::{analyze, analyze_path, analyze_with_receipts, AnalysisRequest};
+pub use pipeline::{
+    analyze, analyze_path, analyze_path_with_resources, analyze_with_receipts,
+    analyze_with_receipts_and_resources, analyze_with_resources, AnalysisRequest,
+};
 pub(crate) use process::not_started_request;
-pub use process::{run_bounded_tool, BoundedToolRequest, BoundedToolResult, ToolRunState};
+pub use process::{
+    run_bounded_tool, run_bounded_tool_with_resources, BoundedToolRequest, BoundedToolResult,
+    ResourceToolResult, ToolProcessRunner, ToolRunState,
+};
 pub use release::{
     evaluation_payload_digest, expected_v630_baseline_digest, release_component_scope,
     stage_completion_payload_digest,
@@ -160,9 +192,12 @@ pub use repair_loop::{
     dgcl_repair_application_payload_digest, dgcl_repair_application_scope,
     dgcl_repair_request_digest, dgcl_repair_validation_payload_digest,
     dgcl_repair_validation_scope, repair_authorization_scope, repair_request_authorization_scope,
-    run_dgcl_repair_loop, DgclRepairApplication, DgclRepairAttemptRecord, DgclRepairAuthorization,
-    DgclRepairConfigError, DgclRepairDriver, DgclRepairDriverError, DgclRepairLoopInput,
-    DgclRepairLoopReport, DgclRepairRequest, DgclRepairStatus, DgclRepairValidation,
-    DgclRepairValidationOutcome, RepairEffectState, MAX_DGCL_REPAIR_ATTEMPTS,
+    run_dgcl_repair_loop, run_dgcl_repair_loop_with_total_budget, DgclRepairApplication,
+    DgclRepairAttemptRecord, DgclRepairAuthorization, DgclRepairConfigError, DgclRepairDeltaUnit,
+    DgclRepairDriver, DgclRepairDriverError, DgclRepairLoopInput, DgclRepairLoopReport,
+    DgclRepairRequest, DgclRepairStatus, DgclRepairTotalBudgetObservation,
+    DgclRepairTotalBudgetReport, DgclRepairValidation, DgclRepairValidationOutcome,
+    DgclVerifiedRepairApplication, DgclVerifiedRepairValidation, RepairEffectState,
+    MAX_DGCL_REPAIR_ATTEMPTS,
 };
 pub use validation::{validation_receipt_payload_digest, validation_receipt_scope};

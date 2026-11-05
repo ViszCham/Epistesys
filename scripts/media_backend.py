@@ -26,14 +26,39 @@ MAX_FRAMES = 120
 MAX_OBSERVATIONS = 10_000
 MAX_TEMP_BYTES = 8 * 1024 * 1024 * 1024
 MAX_PCM_SAMPLES = 16_000 * 60 * 60
+MAX_MODEL_ENTRIES = 100_000
+MAX_MODEL_METADATA_BYTES = 8 * 1024 * 1024
+MAX_MODEL_FILE_BYTES = 8 * 1024 * 1024 * 1024
+MAX_MODEL_TOTAL_BYTES = 32 * 1024 * 1024 * 1024
+MAX_MODEL_DEPTH = 64
 
 
-def sha256_file(path: Path) -> str:
+def _hash_file_bounded(path: Path, max_bytes: int, deadline: float) -> tuple[str, int]:
+    if type(max_bytes) is not int or max_bytes < 0:
+        raise ValueError("invalid file byte budget")
     digest = hashlib.sha256()
+    observed = 0
     with path.open("rb") as stream:
-        for block in iter(lambda: stream.read(64 * 1024), b""):
+        expected = os.fstat(stream.fileno()).st_size
+        if expected > max_bytes:
+            raise ResourceBudgetExceeded("file byte budget exceeded before hashing")
+        while True:
+            if time.monotonic() >= deadline:
+                raise ResourceBudgetExceeded("file hash deadline exceeded")
+            block = stream.read(min(64 * 1024, max_bytes - observed + 1))
+            if not block:
+                break
+            observed += len(block)
+            if observed > max_bytes or observed > expected:
+                raise ResourceBudgetExceeded("file grew past its declared read budget")
             digest.update(block)
-    return "sha256:" + digest.hexdigest()
+    if observed != expected:
+        raise ResourceBudgetExceeded("file size changed during hashing")
+    return "sha256:" + digest.hexdigest(), observed
+
+
+def sha256_file(path: Path, *, max_bytes: int = MAX_MODEL_FILE_BYTES) -> str:
+    return _hash_file_bounded(path, max_bytes, time.monotonic() + 1800)[0]
 
 
 def canonical_digest(value: Any) -> str:
@@ -41,30 +66,96 @@ def canonical_digest(value: Any) -> str:
     return "sha256:" + hashlib.sha256(encoded).hexdigest()
 
 
-def tree_manifest_digest(root: Path) -> str:
+def _bounded_files(
+    root: Path, *, max_entries: int, max_metadata_bytes: int,
+    deadline: float, max_depth: int = MAX_MODEL_DEPTH,
+) -> list[Path]:
+    if (type(max_entries) is not int or not 0 < max_entries <= MAX_MODEL_ENTRIES
+            or type(max_metadata_bytes) is not int or not 0 < max_metadata_bytes <= 16 * 1024 * 1024
+            or type(max_depth) is not int or not 0 < max_depth <= 256):
+        raise ValueError("invalid model scan budget")
+    files: list[Path] = []
+    if not root.is_dir():
+        return files
+    pending = [(root, 0)]
+    seen = metadata_bytes = 0
+    while pending:
+        directory, depth = pending.pop()
+        if depth > max_depth:
+            raise ResourceBudgetExceeded("model directory depth exceeded")
+        with os.scandir(directory) as children:
+            for child in children:
+                if time.monotonic() >= deadline:
+                    raise ResourceBudgetExceeded("model scan deadline exceeded")
+                if seen >= max_entries:
+                    raise ResourceBudgetExceeded("model entry budget exceeded before append")
+                seen += 1
+                path = Path(child.path)
+                metadata_bytes += len(path.relative_to(root).as_posix().encode("utf-8")) + 160
+                if metadata_bytes > max_metadata_bytes:
+                    raise ResourceBudgetExceeded("model metadata budget exceeded before append")
+                info = child.stat(follow_symlinks=False)
+                if child.is_symlink() or getattr(info, "st_file_attributes", 0) & 0x400:
+                    raise ValueError("linked model entries are not authorized")
+                if child.is_dir(follow_symlinks=False):
+                    pending.append((path, depth + 1))
+                elif child.is_file(follow_symlinks=False):
+                    files.append(path)
+    files.sort(key=lambda path: path.relative_to(root).as_posix().encode("utf-8"))
+    return files
+
+
+def tree_manifest_digest(
+    root: Path, *, max_entries: int = MAX_MODEL_ENTRIES,
+    max_file_bytes: int = MAX_MODEL_FILE_BYTES,
+    max_total_bytes: int = MAX_MODEL_TOTAL_BYTES,
+    max_metadata_bytes: int = MAX_MODEL_METADATA_BYTES,
+) -> str:
     entries: list[list[Any]] = []
-    if root.is_dir():
-        paths = list(root.rglob("*"))
-        if any(path.is_symlink() for path in paths):
-            raise ValueError("symlink model entries are not authorized")
-        files = sorted((path for path in paths if path.is_file()),
-                       key=lambda path: path.relative_to(root).as_posix().encode("utf-8"))
-        if len(files) > 100_000:
-            raise ValueError("model entry budget exceeded")
-        for path in files:
-            entries.append([path.relative_to(root).as_posix(), path.stat().st_size, sha256_file(path)])
-    basis = "lc631-directory-manifest.v3\0" + json.dumps(entries, ensure_ascii=False, separators=(",", ":"))
-    return "sha256:" + hashlib.sha256(basis.encode("utf-8")).hexdigest()
+    if type(max_file_bytes) is not int or max_file_bytes < 0 or type(max_total_bytes) is not int or max_total_bytes < 0:
+        raise ValueError("invalid model hash byte budget")
+    deadline = time.monotonic() + 1800
+    files = _bounded_files(root, max_entries=max_entries, max_metadata_bytes=max_metadata_bytes, deadline=deadline)
+    observed_total = 0
+    for path in files:
+        digest, length = _hash_file_bounded(path, min(max_file_bytes, max_total_bytes - observed_total), deadline)
+        observed_total += length
+        entries.append([path.relative_to(root).as_posix(), length, digest])
+    digest = hashlib.sha256(b"lc631-directory-manifest.v3\0")
+    encoder = json.JSONEncoder(ensure_ascii=False, separators=(",", ":"))
+    for part in encoder.iterencode(entries):
+        digest.update(part.encode("utf-8"))
+    return "sha256:" + digest.hexdigest()
 
 
 def tree_size(root: Path) -> int:
-    return sum(path.stat().st_size for path in root.rglob("*") if path.is_file())
+    files = _bounded_files(root, max_entries=MAX_MODEL_ENTRIES,
+                           max_metadata_bytes=MAX_MODEL_METADATA_BYTES,
+                           deadline=time.monotonic() + 1800)
+    total = 0
+    for path in files:
+        total += path.stat().st_size
+        if total > MAX_TEMP_BYTES:
+            raise ResourceBudgetExceeded("temporary tree byte budget exceeded")
+    return total
 
 
-def model_card_license_hint(root: Path) -> str:
-    readmes = sorted(root.rglob("README.md")) if root.is_dir() else []
+def model_card_license_hint(
+    root: Path, *, max_file_bytes: int = 65_536, max_total_bytes: int = 1024 * 1024,
+) -> str:
+    deadline = time.monotonic() + 1800
+    readmes = [path for path in _bounded_files(
+        root, max_entries=MAX_MODEL_ENTRIES, max_metadata_bytes=MAX_MODEL_METADATA_BYTES,
+        deadline=deadline) if path.name == "README.md"]
+    observed_total = 0
     for readme in readmes:
-        for line in readme.read_text(encoding="utf-8", errors="replace").splitlines():
+        with readme.open("rb") as stream:
+            allowed = min(max_file_bytes, max_total_bytes - observed_total)
+            payload = stream.read(allowed + 1)
+        if len(payload) > allowed:
+            raise ResourceBudgetExceeded("model card read byte budget exceeded")
+        observed_total += len(payload)
+        for line in payload.decode("utf-8", errors="replace").splitlines():
             if line.strip().lower().startswith("license:"):
                 return line.split(":", 1)[1].strip()[:128] or "unobserved"
     return "unobserved"
@@ -482,7 +573,7 @@ def analyze_asr(
         diagnostics.append("asr_local_model_cache_missing")
         return "asr-local-model-unavailable"
     model_path = model_candidates[0]
-    model_id = f"local:{tree_manifest_digest(model_path)}"
+    model_id = f"local:{tree_manifest_digest(model_path, max_entries=MAX_MODEL_ENTRIES, max_file_bytes=MAX_MODEL_FILE_BYTES, max_total_bytes=MAX_MODEL_TOTAL_BYTES, max_metadata_bytes=MAX_MODEL_METADATA_BYTES)}"
     selected_device = "cpu"
     try:
         model = WhisperModel(
@@ -695,6 +786,7 @@ def configure_worker_resource_limits() -> dict[str, Any]:
 
 def main() -> int:
     global MAX_FRAMES, MAX_OBSERVATIONS, MAX_TEMP_BYTES, MAX_PCM_SAMPLES
+    global MAX_MODEL_ENTRIES, MAX_MODEL_FILE_BYTES, MAX_MODEL_TOTAL_BYTES, MAX_MODEL_METADATA_BYTES
     parser = argparse.ArgumentParser()
     parser.add_argument("--media", required=True, type=Path)
     parser.add_argument("--ffmpeg", required=True, type=Path)
@@ -704,7 +796,23 @@ def main() -> int:
     parser.add_argument("--max-frames", required=True, type=int)
     parser.add_argument("--max-pcm-samples", required=True, type=int)
     parser.add_argument("--max-observations", required=True, type=int)
+    parser.add_argument("--max-model-entries", type=int, default=100_000)
+    parser.add_argument("--max-model-file-bytes", type=int, default=8 * 1024**3)
+    parser.add_argument("--max-model-total-bytes", type=int, default=32 * 1024**3)
+    parser.add_argument("--max-model-metadata-bytes", type=int, default=8 * 1024**2)
     args = parser.parse_args()
+    for value, ceiling in [
+        (args.max_model_entries, 100_000),
+        (args.max_model_file_bytes, 8 * 1024**3),
+        (args.max_model_total_bytes, 32 * 1024**3),
+        (args.max_model_metadata_bytes, 8 * 1024**2),
+    ]:
+        if not 0 < value <= ceiling:
+            raise ValueError("model scan budget outside the registered profile")
+    MAX_MODEL_ENTRIES = args.max_model_entries
+    MAX_MODEL_FILE_BYTES = args.max_model_file_bytes
+    MAX_MODEL_TOTAL_BYTES = args.max_model_total_bytes
+    MAX_MODEL_METADATA_BYTES = args.max_model_metadata_bytes
     if min(
         args.max_temp_bytes,
         args.max_frames,
@@ -763,8 +871,12 @@ def main() -> int:
         "backend_id": "lc631-local-ffmpeg-opencv-whisper-anonymous-diarization",
         "backend_version": backend_version,
         "model_revision": asr_revision,
-        "model_cache_manifest_sha256": tree_manifest_digest(args.model_cache),
-        "model_card_license_hint": model_card_license_hint(args.model_cache),
+        "model_cache_manifest_sha256": tree_manifest_digest(
+            args.model_cache, max_entries=MAX_MODEL_ENTRIES,
+            max_file_bytes=MAX_MODEL_FILE_BYTES, max_total_bytes=MAX_MODEL_TOTAL_BYTES,
+            max_metadata_bytes=MAX_MODEL_METADATA_BYTES),
+        "model_card_license_hint": model_card_license_hint(
+            args.model_cache, max_file_bytes=65_536, max_total_bytes=1024 * 1024),
         "executed_families": sorted(executed),
         "executed_methods": {
             "decode": "ffmpeg-cli",

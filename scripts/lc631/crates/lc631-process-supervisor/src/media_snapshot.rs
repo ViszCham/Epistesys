@@ -1,11 +1,15 @@
 //! Byte-authenticated private inputs for trusted local media backends.
 //! Same-owner/privileged code is not an OS sandbox boundary on Unix.
+use lc631_substrate::resource::ResourceReservationView;
 use sha2::{Digest, Sha256};
 use std::fs::File;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
+
+mod resources;
+pub use resources::ReservedSourceSnapshot;
 
 #[cfg(unix)]
 #[path = "media_snapshot/unix.rs"]
@@ -69,7 +73,7 @@ pub struct AuthenticatedSourceSnapshot {
     file_handle: Option<File>,
     bytes: u64,
     cleaned: bool,
-    reservation: Reservation,
+    reservation: Option<Reservation>,
 }
 
 impl AuthenticatedSourceSnapshot {
@@ -80,6 +84,24 @@ impl AuthenticatedSourceSnapshot {
         expected_sha256: &str,
         max_bytes: u64,
         temporary_budget: u64,
+    ) -> io::Result<Self> {
+        Self::capture_inner(
+            source,
+            expected_sha256,
+            max_bytes,
+            temporary_budget,
+            true,
+            None,
+        )
+    }
+
+    fn capture_inner(
+        source: &Path,
+        expected_sha256: &str,
+        max_bytes: u64,
+        temporary_budget: u64,
+        legacy: bool,
+        control: Option<&ResourceReservationView<'_>>,
     ) -> io::Result<Self> {
         if expected_sha256.len() != 71
             || !expected_sha256.starts_with("sha256:")
@@ -101,10 +123,23 @@ impl AuthenticatedSourceSnapshot {
             return Err(budget());
         }
         let expected_length = metadata.len();
-        let reservation = Reservation::acquire(expected_length)?;
+        let mut reservation = if legacy {
+            Some(Reservation::acquire(expected_length)?)
+        } else {
+            None
+        };
         let directory = create_directory()?;
-        let directory_handle = platform::open_directory(&directory)?;
-        let directory_identity = platform::identity(&directory_handle)?;
+        let setup = platform::open_directory(&directory)
+            .and_then(|handle| platform::identity(&handle).map(|identity| (handle, identity)));
+        let (directory_handle, directory_identity) = setup.map_err(|cause| {
+            if let Some(reservation) = &mut reservation {
+                reservation.retained = true;
+            }
+            io::Error::other(CaptureFailure {
+                cause,
+                cleanup: Some(io::Error::other("created_directory_cleanup_unobserved")),
+            })
+        })?;
         let extension = source
             .extension()
             .and_then(|value| value.to_str())
@@ -126,25 +161,40 @@ impl AuthenticatedSourceSnapshot {
             cleaned: false,
             reservation,
         };
-        let result = snapshot.capture_bytes(&mut input, expected_sha256, expected_length);
+        let result = snapshot.capture_bytes(&mut input, expected_sha256, expected_length, control);
         if let Err(error) = result {
             if let Err(cleanup) = snapshot.cleanup() {
-                return Err(io::Error::other(format!(
-                    "media_snapshot_capture:{error}; cleanup:{cleanup}"
-                )));
+                return Err(io::Error::other(CaptureFailure {
+                    cause: error,
+                    cleanup: Some(cleanup),
+                }));
             }
-            return Err(error);
+            return Err(io::Error::new(
+                error.kind(),
+                CaptureFailure {
+                    cause: error,
+                    cleanup: None,
+                },
+            ));
         }
         Ok(snapshot)
     }
 
-    fn capture_bytes(&mut self, input: &mut File, expected: &str, limit: u64) -> io::Result<()> {
+    fn capture_bytes(
+        &mut self,
+        input: &mut File,
+        expected: &str,
+        limit: u64,
+        control: Option<&ResourceReservationView<'_>>,
+    ) -> io::Result<()> {
         let mut output = platform::create_file(&self.path)?;
         self.file_identity = Some(platform::identity(&output)?);
         let mut hasher = Sha256::new();
         let mut buffer = [0_u8; 64 * 1024];
         loop {
+            check_control(control)?;
             let count = input.read(&mut buffer)?;
+            check_control(control)?;
             if count == 0 {
                 break;
             }
@@ -218,9 +268,39 @@ impl AuthenticatedSourceSnapshot {
 impl Drop for AuthenticatedSourceSnapshot {
     fn drop(&mut self) {
         if self.cleanup().is_err() {
-            self.reservation.retained = true;
+            if let Some(reservation) = &mut self.reservation {
+                reservation.retained = true;
+            }
         }
     }
+}
+
+#[derive(Debug)]
+struct CaptureFailure {
+    cause: io::Error,
+    cleanup: Option<io::Error>,
+}
+impl std::fmt::Display for CaptureFailure {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.cleanup {
+            Some(cleanup) => write!(
+                formatter,
+                "media_snapshot_capture:{}; cleanup:{cleanup}",
+                self.cause
+            ),
+            None => write!(formatter, "{}", self.cause),
+        }
+    }
+}
+impl std::error::Error for CaptureFailure {}
+
+fn check_control(control: Option<&ResourceReservationView<'_>>) -> io::Result<()> {
+    if let Some(control) = control {
+        control
+            .check()
+            .map_err(|error| io::Error::other(format!("resource_scope:{error:?}")))?;
+    }
+    Ok(())
 }
 
 fn create_directory() -> io::Result<PathBuf> {

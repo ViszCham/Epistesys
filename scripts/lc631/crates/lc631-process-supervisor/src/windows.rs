@@ -166,98 +166,117 @@ impl Drop for ManagedChild {
 }
 
 pub fn spawn(request: SpawnRequest<'_>) -> io::Result<SpawnedProcess> {
-    validate_input(&request)?;
-    let stdin_pipe = Pipe::new(false)?;
-    let stdout_pipe = Pipe::new(true)?;
-    let stderr_pipe = Pipe::new(true)?;
-    let job = create_job()?;
-    let attributes = HandleAttributeList::new()?;
-    let mut child_handles = [stdin_pipe.child.0, stdout_pipe.child.0, stderr_pipe.child.0];
-    // SAFETY: the attribute list is initialized, aligned, and alive through CreateProcessW;
-    // `child_handles` is alive and contains exactly the inheritable child pipe endpoints.
-    let updated = unsafe {
-        UpdateProcThreadAttribute(
-            attributes.pointer,
-            0,
-            PROC_THREAD_ATTRIBUTE_HANDLE_LIST as usize,
-            child_handles.as_mut_ptr().cast(),
-            size_of_val(&child_handles),
-            null_mut(),
-            null_mut(),
-        )
-    };
-    if updated == 0 {
-        return Err(io::Error::last_os_error());
-    }
+    spawn_observed(request).map_err(crate::spawn_failure::SpawnFailure::into_io)
+}
 
-    let executable = wide_z(request.executable)?;
-    let mut command_line = build_command_line(request.executable, request.arguments)?;
-    let current_dir = wide_path(request.current_dir)?;
-    let mut environment = build_environment(request.environment)?;
-    let mut startup = STARTUPINFOEXW::default();
-    startup.StartupInfo.cb = size_of::<STARTUPINFOEXW>() as u32;
-    startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
-    startup.StartupInfo.hStdInput = stdin_pipe.child.0;
-    startup.StartupInfo.hStdOutput = stdout_pipe.child.0;
-    startup.StartupInfo.hStdError = stderr_pipe.child.0;
-    startup.lpAttributeList = attributes.pointer;
-    let mut information = PROCESS_INFORMATION::default();
-    let flags = CREATE_SUSPENDED
-        | CREATE_UNICODE_ENVIRONMENT
-        | EXTENDED_STARTUPINFO_PRESENT
-        | CREATE_NO_WINDOW;
-    // SAFETY: all strings/blocks are NUL-terminated and alive during the call;
-    // startup handle values are restricted with PROC_THREAD_ATTRIBUTE_HANDLE_LIST.
-    // The process starts suspended so it cannot execute before job assignment.
-    let created = unsafe {
-        CreateProcessW(
-            executable.as_ptr(),
-            command_line.as_mut_ptr(),
-            null(),
-            null(),
-            1,
-            flags,
-            environment.as_mut_ptr().cast(),
-            current_dir.as_ptr(),
-            (&startup.StartupInfo as *const STARTUPINFOW).cast(),
-            &mut information,
-        )
-    };
-    if created == 0 {
-        return Err(io::Error::last_os_error());
-    }
-    let process = OwnedHandle::new(information.hProcess)?;
-    let thread = OwnedHandle::new(information.hThread)?;
-    let mut rollback = SpawnRollback {
-        job: &job,
-        process: &process,
-        committed: false,
-    };
-    // SAFETY: both handles are owned above; the process's initial thread is still suspended.
-    if unsafe { AssignProcessToJobObject(job.0, process.0) } == 0 {
-        return Err(io::Error::last_os_error());
-    }
-    // SAFETY: `thread` is the initial thread returned by CreateProcessW and is still suspended.
-    if unsafe { ResumeThread(thread.0) } == u32::MAX {
-        return Err(io::Error::last_os_error());
-    }
-    rollback.committed = true;
-    drop(rollback);
-    drop(thread);
-    drop(attributes);
-    drop(stdin_pipe.child);
-    drop(stdout_pipe.child);
-    drop(stderr_pipe.child);
-    let child = ManagedChild {
-        process,
-        job,
-        process_id: information.dwProcessId,
-    };
-    Ok(SpawnedProcess {
-        child,
-        stdin: stdin_pipe.parent.into_file(),
-        stdout: stdout_pipe.parent.into_file(),
-        stderr: stderr_pipe.parent.into_file(),
+pub(crate) fn spawn_observed(
+    request: SpawnRequest<'_>,
+) -> Result<SpawnedProcess, crate::spawn_failure::SpawnFailure> {
+    let mut child_created = false;
+    let result = (|| -> io::Result<SpawnedProcess> {
+        validate_input(&request)?;
+        let stdin_pipe = Pipe::new(false)?;
+        let stdout_pipe = Pipe::new(true)?;
+        let stderr_pipe = Pipe::new(true)?;
+        let job = create_job()?;
+        let attributes = HandleAttributeList::new()?;
+        let mut child_handles = [stdin_pipe.child.0, stdout_pipe.child.0, stderr_pipe.child.0];
+        // SAFETY: the attribute list is initialized, aligned, and alive through CreateProcessW;
+        // `child_handles` is alive and contains exactly the inheritable child pipe endpoints.
+        let updated = unsafe {
+            UpdateProcThreadAttribute(
+                attributes.pointer,
+                0,
+                PROC_THREAD_ATTRIBUTE_HANDLE_LIST as usize,
+                child_handles.as_mut_ptr().cast(),
+                size_of_val(&child_handles),
+                null_mut(),
+                null_mut(),
+            )
+        };
+        if updated == 0 {
+            return Err(io::Error::last_os_error());
+        }
+
+        let executable = wide_z(request.executable)?;
+        let mut command_line = build_command_line(request.executable, request.arguments)?;
+        let current_dir = wide_path(request.current_dir)?;
+        let mut environment = build_environment(request.environment)?;
+        let mut startup = STARTUPINFOEXW::default();
+        startup.StartupInfo.cb = size_of::<STARTUPINFOEXW>() as u32;
+        startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+        startup.StartupInfo.hStdInput = stdin_pipe.child.0;
+        startup.StartupInfo.hStdOutput = stdout_pipe.child.0;
+        startup.StartupInfo.hStdError = stderr_pipe.child.0;
+        startup.lpAttributeList = attributes.pointer;
+        let mut information = PROCESS_INFORMATION::default();
+        let flags = CREATE_SUSPENDED
+            | CREATE_UNICODE_ENVIRONMENT
+            | EXTENDED_STARTUPINFO_PRESENT
+            | CREATE_NO_WINDOW;
+        // SAFETY: all strings/blocks are NUL-terminated and alive during the call;
+        // startup handle values are restricted with PROC_THREAD_ATTRIBUTE_HANDLE_LIST.
+        // The process starts suspended so it cannot execute before job assignment.
+        let created = unsafe {
+            CreateProcessW(
+                executable.as_ptr(),
+                command_line.as_mut_ptr(),
+                null(),
+                null(),
+                1,
+                flags,
+                environment.as_mut_ptr().cast(),
+                current_dir.as_ptr(),
+                (&startup.StartupInfo as *const STARTUPINFOW).cast(),
+                &mut information,
+            )
+        };
+        if created == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        child_created = true;
+        let process = OwnedHandle::new(information.hProcess)?;
+        let thread = OwnedHandle::new(information.hThread)?;
+        let mut rollback = SpawnRollback {
+            job: &job,
+            process: &process,
+            committed: false,
+        };
+        // SAFETY: both handles are owned above; the process's initial thread is still suspended.
+        if unsafe { AssignProcessToJobObject(job.0, process.0) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        // SAFETY: `thread` is the initial thread returned by CreateProcessW and is still suspended.
+        if unsafe { ResumeThread(thread.0) } == u32::MAX {
+            return Err(io::Error::last_os_error());
+        }
+        crate::native_dispatch::record_started(information.dwProcessId);
+        rollback.committed = true;
+        drop(rollback);
+        drop(thread);
+        drop(attributes);
+        drop(stdin_pipe.child);
+        drop(stdout_pipe.child);
+        drop(stderr_pipe.child);
+        let child = ManagedChild {
+            process,
+            job,
+            process_id: information.dwProcessId,
+        };
+        Ok(SpawnedProcess {
+            child,
+            stdin: stdin_pipe.parent.into_file(),
+            stdout: stdout_pipe.parent.into_file(),
+            stderr: stderr_pipe.parent.into_file(),
+        })
+    })();
+    result.map_err(|error| {
+        if child_created {
+            crate::native_dispatch::record_may_have_started();
+            crate::spawn_failure::SpawnFailure::MayHaveStarted(error)
+        } else {
+            crate::spawn_failure::SpawnFailure::BeforeChild(error)
+        }
     })
 }
 
@@ -532,7 +551,9 @@ fn build_environment(environment: &[(OsString, OsString)]) -> io::Result<Vec<u16
         block.push(0);
     }
     block.push(0);
-    if block.len() > 32_767 {
+    // Engineering allocation budget, not a modern CreateProcessW total-block
+    // OS ceiling. The bounded entry separately checks each variable's units.
+    if block.len() > super::bounded::launch::MAX_ENV_BLOCK_UNITS {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             "environment block too large",

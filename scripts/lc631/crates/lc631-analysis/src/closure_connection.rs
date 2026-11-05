@@ -1,25 +1,31 @@
+use crate::bounded_input::{hash_capped, read_text_file};
 use crate::connection_graph::{
     build_connection_graph_from_trees, StaticConnectionGraphReport, StaticConnectionState,
 };
+use crate::process::{capture_tool, ToolCapture};
 use crate::{
-    coding_evidence_payload_digest, coding_evidence_scope, not_started_request, run_bounded_tool,
-    BoundedToolRequest, BoundedToolResult, CodingEvidenceClaim, CodingEvidenceKind,
-    CodingEvidenceProducer, ToolRunState,
+    coding_evidence_payload_digest, coding_evidence_scope, not_started_request, BoundedToolRequest,
+    BoundedToolResult, CodingEvidenceClaim, CodingEvidenceKind, CodingEvidenceProducer,
+    ToolRunState,
 };
 use lc631_core::stable_sha256;
+use lc631_process_supervisor::ResourceReservationView;
 use lc631_receipt_kernel::{
     ReceiptClass, ReceiptIssuer, ReceiptScope, ReceiptVerifier, SubjectRevision,
 };
 use lc631_tldg::{analyze_dg1, Dg1Budget, Dg1ConditionKind, Dg1RequirementPolarity};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sha2::{Digest, Sha256};
 use std::env;
-use std::fs::{self, File};
-use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
+
+mod output;
+
+#[cfg(test)]
+#[path = "closure_connection/output_tests.rs"]
+mod output_tests;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -172,6 +178,7 @@ impl VerifiedConnectionObservation {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub enum ConnectionError {
+    Resource(String),
     EvidenceIssuerMismatch,
     ObservationNotQualified,
     PublicReportNotEvidence,
@@ -202,6 +209,46 @@ pub fn observe_connection_plan_from_cli(
     project_root: &Path,
     plan: &CodingConnectionPlan,
 ) -> Result<VerifiedConnectionObservation, ConnectionError> {
+    observe_connection_plan_from_cli_read(project_root, plan, None)
+}
+
+pub fn observe_connection_plan_from_cli_with_resources(
+    project_root: &Path,
+    plan: &CodingConnectionPlan,
+    resources: &ResourceReservationView<'_>,
+) -> Result<VerifiedConnectionObservation, ConnectionError> {
+    check_connection_resources(plan, resources)?;
+    observe_connection_plan_from_cli_read(project_root, plan, Some(resources))
+}
+
+/// Construct an owned candidate while the exact child bytes and their resource
+/// claim remain alive. The report/token alone deliberately contains no raw
+/// resource-owned output. This callback grants no authority or host commit.
+pub fn observe_connection_plan_from_cli_with_consumer<T>(
+    project_root: &Path,
+    plan: &CodingConnectionPlan,
+    resources: &ResourceReservationView<'_>,
+    consume: impl FnOnce(&CodingConnectionReport, &[u8]) -> Result<T, ConnectionError>,
+) -> Result<(VerifiedConnectionObservation, T), ConnectionError> {
+    check_connection_resources(plan, resources)?;
+    observe_connection_with_consumer(project_root, plan, Some(resources), consume)
+}
+
+fn observe_connection_plan_from_cli_read(
+    project_root: &Path,
+    plan: &CodingConnectionPlan,
+    resources: Option<&ResourceReservationView<'_>>,
+) -> Result<VerifiedConnectionObservation, ConnectionError> {
+    observe_connection_with_consumer(project_root, plan, resources, |_, _| Ok(()))
+        .map(|(observation, ())| observation)
+}
+
+fn observe_connection_with_consumer<T>(
+    project_root: &Path,
+    plan: &CodingConnectionPlan,
+    resources: Option<&ResourceReservationView<'_>>,
+    consume: impl FnOnce(&CodingConnectionReport, &[u8]) -> Result<T, ConnectionError>,
+) -> Result<(VerifiedConnectionObservation, T), ConnectionError> {
     let root = project_root
         .canonicalize()
         .map_err(|_| ConnectionError::PathUnsafe)?;
@@ -216,7 +263,36 @@ pub fn observe_connection_plan_from_cli(
     if planned_executable != current_executable {
         return Err(ConnectionError::ExecutableNotCurrent);
     }
-    let report = verify_connection_plan_internal(&root, plan, true)?;
+    let (report, owned) = verify_connection_plan_internal_with_consumer(
+        &root,
+        plan,
+        true,
+        resources,
+        |report, stdout| {
+            qualified_trace(report)?;
+            consume(report, stdout)
+        },
+    )?;
+    let trace = qualified_trace(&report)?;
+    let producer_run_digest = trace.trace_digest.clone();
+    let observation_digest = stable_sha256(&format!(
+        "dgcl-production-connection-observation.v2\0{}\0{}\0{}",
+        trace.run_id, trace.trace_digest, trace.connection_graph_digest
+    ));
+    Ok((
+        VerifiedConnectionObservation {
+            plan: plan.clone(),
+            report,
+            producer_run_digest,
+            observation_digest,
+        },
+        owned,
+    ))
+}
+
+fn qualified_trace(
+    report: &CodingConnectionReport,
+) -> Result<&ConnectionRuntimeTrace, ConnectionError> {
     if report.status != ConnectionStatus::Observed
         || !report.acceptance_matched
         || !report.runtime_command_observed
@@ -238,17 +314,7 @@ pub fn observe_connection_plan_from_cli(
                 && !trace.acceptance_oracle.independent_semantic_gold
         })
         .ok_or(ConnectionError::ObservationNotQualified)?;
-    let producer_run_digest = trace.trace_digest.clone();
-    let observation_digest = stable_sha256(&format!(
-        "dgcl-production-connection-observation.v2\0{}\0{}\0{}",
-        trace.run_id, trace.trace_digest, trace.connection_graph_digest
-    ));
-    Ok(VerifiedConnectionObservation {
-        plan: plan.clone(),
-        report,
-        producer_run_digest,
-        observation_digest,
-    })
+    Ok(trace)
 }
 
 /// Issue exactly one production-connection claim from an opaque runtime
@@ -352,7 +418,16 @@ pub fn verify_connection_plan(
     project_root: &Path,
     plan: &CodingConnectionPlan,
 ) -> Result<CodingConnectionReport, ConnectionError> {
-    verify_connection_plan_internal(project_root, plan, false)
+    verify_connection_plan_internal(project_root, plan, false, None)
+}
+
+pub fn verify_connection_plan_with_resources(
+    project_root: &Path,
+    plan: &CodingConnectionPlan,
+    resources: &ResourceReservationView<'_>,
+) -> Result<CodingConnectionReport, ConnectionError> {
+    check_connection_resources(plan, resources)?;
+    verify_connection_plan_internal(project_root, plan, false, Some(resources))
 }
 
 /// Execute only the fixed read-only DG1 diagnostic through the currently
@@ -363,6 +438,26 @@ pub fn verify_connection_plan_from_cli(
     plan: &CodingConnectionPlan,
 ) -> Result<CodingConnectionReport, ConnectionError> {
     Ok(observe_connection_plan_from_cli(project_root, plan)?.report)
+}
+
+pub fn verify_connection_plan_from_cli_with_resources(
+    project_root: &Path,
+    plan: &CodingConnectionPlan,
+    resources: &ResourceReservationView<'_>,
+) -> Result<CodingConnectionReport, ConnectionError> {
+    Ok(observe_connection_plan_from_cli_with_resources(project_root, plan, resources)?.report)
+}
+
+fn check_connection_resources(
+    plan: &CodingConnectionPlan,
+    view: &ResourceReservationView<'_>,
+) -> Result<(), ConnectionError> {
+    view.check()
+        .map_err(|e| ConnectionError::Resource(format!("{e:?}")))?;
+    if view.source_revision() != lc631_core::context::SourceRevision::of(&plan.source).digest() {
+        return Err(ConnectionError::Resource("SourceMismatch".into()));
+    }
+    Ok(())
 }
 
 fn registered_read_only_command(plan: &CodingConnectionPlan) -> bool {
@@ -381,7 +476,25 @@ fn verify_connection_plan_internal(
     project_root: &Path,
     plan: &CodingConnectionPlan,
     execute_registered_runtime: bool,
+    resources: Option<&ResourceReservationView<'_>>,
 ) -> Result<CodingConnectionReport, ConnectionError> {
+    verify_connection_plan_internal_with_consumer(
+        project_root,
+        plan,
+        execute_registered_runtime,
+        resources,
+        |_, _| Ok(()),
+    )
+    .map(|(report, ())| report)
+}
+
+fn verify_connection_plan_internal_with_consumer<T>(
+    project_root: &Path,
+    plan: &CodingConnectionPlan,
+    execute_registered_runtime: bool,
+    resources: Option<&ResourceReservationView<'_>>,
+    consume: impl FnOnce(&CodingConnectionReport, &[u8]) -> Result<T, ConnectionError>,
+) -> Result<(CodingConnectionReport, T), ConnectionError> {
     if plan.schema_version != "epistesys-coding-connection-plan.v1"
         || plan.source_revision != stable_sha256(&plan.source)
         || plan.requirement_id == 0
@@ -419,17 +532,25 @@ fn verify_connection_plan_internal(
     if !valid_digest(&plan.implementation_digest)
         || !valid_digest(&plan.router_digest)
         || !valid_digest(&plan.executable_digest)
-        || digest_file(&implementation)? != plan.implementation_digest
-        || digest_file(&router)? != plan.router_digest
-        || digest_file(&executable)? != plan.executable_digest
+        || digest_file(&implementation, resources)? != plan.implementation_digest
+        || digest_file(&router, resources)? != plan.router_digest
+        || digest_file(&executable, resources)? != plan.executable_digest
     {
         return Err(ConnectionError::StaleArtifact);
     }
-    let implementation_text = read_bounded_rust(&implementation)?;
-    let router_text = read_bounded_rust(&router)?;
-    let implementation_tree = analyze_dg1(&implementation_text, Dg1Budget::default())
+    let implementation_input = read_text_file(&implementation, 262_144, resources)
+        .map_err(|e| ConnectionError::Resource(e.to_string()))?;
+    let implementation_text = implementation_input
+        .as_str()
         .map_err(|_| ConnectionError::RustSyntaxError)?;
-    let router_tree = analyze_dg1(&router_text, Dg1Budget::default())
+    let router_input = read_text_file(&router, 262_144, resources)
+        .map_err(|e| ConnectionError::Resource(e.to_string()))?;
+    let router_text = router_input
+        .as_str()
+        .map_err(|_| ConnectionError::RustSyntaxError)?;
+    let implementation_tree = analyze_dg1(implementation_text, Dg1Budget::default())
+        .map_err(|_| ConnectionError::RustSyntaxError)?;
+    let router_tree = analyze_dg1(router_text, Dg1Budget::default())
         .map_err(|_| ConnectionError::RustSyntaxError)?;
     if implementation_tree
         .rust_trees
@@ -453,9 +574,9 @@ fn verify_connection_plan_internal(
     let connection_graph = build_connection_graph_from_trees(
         plan,
         &dg1,
-        &implementation_text,
+        implementation_text,
         implementation_tree,
-        &router_text,
+        router_text,
         router_tree,
     )
     .map_err(|error| ConnectionError::StaticConnectionGraph(format!("{error:?}")))?;
@@ -465,25 +586,29 @@ fn verify_connection_plan_internal(
     let argv = std::iter::once(plan.command.as_str())
         .chain(plan.arguments.iter().map(String::as_str))
         .collect::<Vec<_>>();
-    let process = if execute_registered_runtime
+    let capture = if execute_registered_runtime
         && command_registered_candidate
         && connection_graph.state == StaticConnectionState::Connected
         && registered_read_only_command(plan)
     {
-        run_bounded_tool(BoundedToolRequest {
-            program: executable_name,
-            args: &argv,
-            stdin: None,
-            timeout_ms: 60_000,
-            stdout_limit: 1_048_576,
-            stderr_limit: 4_096,
-        })
+        capture_tool(
+            BoundedToolRequest {
+                program: executable_name,
+                args: &argv,
+                stdin: None,
+                timeout_ms: 60_000,
+                stdout_limit: 1_048_576,
+                stderr_limit: 4_096,
+            },
+            resources,
+        )
+        .map_err(|e| ConnectionError::Resource(format!("{e:?}")))?
     } else {
         let args = argv
             .iter()
             .map(|argument| (*argument).to_string())
             .collect::<Vec<_>>();
-        not_started_request(
+        ToolCapture::Legacy(not_started_request(
             executable_name,
             &args,
             if execute_registered_runtime {
@@ -491,21 +616,22 @@ fn verify_connection_plan_internal(
             } else {
                 "execution_not_requested_by_static_plan_observer"
             },
-        )
+        ))
     };
-    if digest_file(&implementation)? != plan.implementation_digest
-        || digest_file(&router)? != plan.router_digest
-        || digest_file(&executable)? != plan.executable_digest
+    if digest_file(&implementation, resources)? != plan.implementation_digest
+        || digest_file(&router, resources)? != plan.router_digest
+        || digest_file(&executable, resources)? != plan.executable_digest
     {
         return Err(ConnectionError::StaleArtifact);
     }
+    let process = capture.reported();
     let runtime_command_observed = process.state == ToolRunState::Observed
         && process.exit_code == Some(0)
         && !process.timed_out
         && !process.stdout_truncated
         && !process.stderr_truncated;
     let response: Option<Value> = if runtime_command_observed {
-        serde_json::from_slice(&process.stdout).ok()
+        serde_json::from_slice(capture.stdout()).ok()
     } else {
         None
     };
@@ -517,13 +643,14 @@ fn verify_connection_plan_internal(
         Some(build_connection_runtime_trace(
             plan,
             &connection_graph,
-            &process,
+            process,
             acceptance_matched,
         )?)
     } else {
         None
     };
-    Ok(CodingConnectionReport {
+    let (process, capture) = capture.into_parts();
+    let report = CodingConnectionReport {
         schema_version: "epistesys-coding-connection.v1",
         source_revision: plan.source_revision.clone(),
         requirement_id: plan.requirement_id,
@@ -540,13 +667,33 @@ fn verify_connection_plan_internal(
         status: if connection_graph.state == StaticConnectionState::Connected
             && implementation_symbol_found
             && command_registered_candidate
-            && runtime_command_observed && acceptance_matched {
+            && runtime_command_observed
+            && acceptance_matched
+        {
             ConnectionStatus::Observed
-        } else { ConnectionStatus::Held },
+        } else {
+            ConnectionStatus::Held
+        },
         authority_created: false,
         output_commit_allowed: false,
         claim_boundary: "source-revision-bound declared Rust CST path plus exact read-only command/output observation; cross-module typing, whole-repository reachability, semantic correctness, and host-wide enforcement remain separate",
-    })
+    };
+    let stdout = capture
+        .as_ref()
+        .map_or(report.process.stdout.as_slice(), |capture| {
+            capture.outcome().stdout.as_slice()
+        });
+    let mut consumer = output::OutputConsumer::new(|bytes: &[u8]| consume(&report, bytes));
+    consumer.invoke(stdout)?;
+    let owned = consumer.finish()?;
+    // A callback cannot change the bound files and still obtain a fresh seal.
+    if digest_file(&implementation, resources)? != plan.implementation_digest
+        || digest_file(&router, resources)? != plan.router_digest
+        || digest_file(&executable, resources)? != plan.executable_digest
+    {
+        return Err(ConnectionError::StaleArtifact);
+    }
+    Ok((report, owned))
 }
 
 fn valid_action_binding(plan: &CodingConnectionPlan) -> bool {
@@ -710,33 +857,17 @@ fn checked_path(root: &Path, relative: &str) -> Result<PathBuf, ConnectionError>
     Ok(resolved)
 }
 
-fn read_bounded_rust(path: &Path) -> Result<String, ConnectionError> {
-    let metadata = fs::metadata(path).map_err(|_| ConnectionError::FileUnavailable)?;
-    if metadata.len() > 262_144 {
-        return Err(ConnectionError::InvalidPlan);
-    }
-    fs::read_to_string(path).map_err(|_| ConnectionError::RustSyntaxError)
-}
-
-fn digest_file(path: &Path) -> Result<String, ConnectionError> {
-    let mut file = File::open(path).map_err(|_| ConnectionError::FileUnavailable)?;
-    let mut hasher = Sha256::new();
-    let mut buffer = [0_u8; 65_536];
-    loop {
-        let count = file
-            .read(&mut buffer)
-            .map_err(|_| ConnectionError::FileUnavailable)?;
-        if count == 0 {
-            break;
+fn digest_file(
+    path: &Path,
+    resources: Option<&ResourceReservationView<'_>>,
+) -> Result<String, ConnectionError> {
+    hash_capped(path, 1024 * 1024 * 1024, resources).map_err(|error| {
+        if resources.is_some() {
+            ConnectionError::Resource(error.to_string())
+        } else {
+            ConnectionError::FileUnavailable
         }
-        hasher.update(&buffer[..count]);
-    }
-    let mut output = String::from("sha256:");
-    for byte in hasher.finalize() {
-        use std::fmt::Write as _;
-        let _ = write!(output, "{byte:02x}");
-    }
-    Ok(output)
+    })
 }
 
 fn valid_digest(value: &str) -> bool {

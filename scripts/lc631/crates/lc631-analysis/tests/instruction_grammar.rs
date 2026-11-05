@@ -372,7 +372,7 @@ fn postposed_modality_and_japanese_te_coordination_do_not_leak_scope() {
     )
     .unwrap();
     assert_eq!(english.state, InstructionParseState::Parsed);
-    let actions = english.selected.unwrap().actions;
+    let actions = english.selected.unwrap().into_legacy().actions;
     assert_eq!(actions.len(), 2);
     assert_eq!(actions[0].modality, InstructionModality::Permitted);
     assert_eq!(actions[0].polarity, InstructionPolarity::Positive);

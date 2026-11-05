@@ -1,8 +1,12 @@
+use crate::instruction_grammar::{
+    legacy_instruction_ast_digest, legacy_json_digest, SharedInstructionAst,
+};
 use crate::{
     DgclInstructionParse, DgclInstructionParseState, DgclLanguageRegion, InstructionAst,
     InstructionParseState,
 };
 use lc631_core::{stable_sha256, ObligationId, SourceSpan};
+use lc631_substrate::source::{SourceSpan as CheckedSourceSpan, SourceStore};
 use lc631_tl::{
     CanonicalTranslationEnvelope, DomainTranslationPayload, Obligation, ObligationKind,
     ObligationPolarity, ObligationStrength, PreservationState, ProjectionDefectGraphV3,
@@ -13,9 +17,69 @@ use lc631_tldg::{Dg1ContentRole, Dg1RegionKind, Dg1Report};
 use serde::Serialize;
 use std::collections::BTreeSet;
 use std::ops::Range;
+use std::sync::Arc;
 
 pub const DGCL_PROGRAM_IR_SCHEMA: &str = "epistesys-dgcl-program-ir.v1";
 pub const DGCL_TRANSLATION_PROJECTION_SCHEMA: &str = "epistesys-dgcl-translation-projection.v1";
+
+/// Bind typed task IR to the same legacy artifact without extending its strict
+/// JSON DTO. A successful structural binding is not semantic validation.
+pub(crate) fn bind_logical_task_program(
+    legacy: &DgclProgramIrReport,
+    source: &SourceStore,
+    candidate: crate::logical_lowering::TaskProgramIr,
+) -> Result<crate::logical_lowering::TaskProgramIr, crate::logical_lowering::LogicalLoweringError> {
+    use crate::logical_lowering::{FormulaKind, LogicalLoweringError};
+    if legacy.source_revision != stable_sha256(source.text())
+        || legacy.semantic_truth_claim
+        || legacy.authority_created
+        || candidate.context.source() != lc631_core::context::SourceRevision::of(source.text())
+        || candidate.legacy_program_digest != legacy.program_digest
+        || candidate.parser_grammar_revision != legacy.grammar_revision
+    {
+        return Err(LogicalLoweringError::PipelineIdentity);
+    }
+    for formula in candidate.formulas() {
+        source
+            .slice(formula.span())
+            .map_err(|_| LogicalLoweringError::SourceSpan)?;
+        candidate.formula(formula.id())?;
+        match formula.kind() {
+            FormulaKind::Atom { .. } | FormulaKind::Unresolved => {}
+            FormulaKind::Negation { operand, .. } => {
+                candidate.formula(*operand)?;
+            }
+            FormulaKind::All(children) | FormulaKind::Any(children) => {
+                for child in children {
+                    candidate.formula(*child)?;
+                }
+            }
+            FormulaKind::Directive { action, .. } => {
+                candidate.formula(*action)?;
+            }
+            FormulaKind::Guarded {
+                predicate, body, ..
+            } => {
+                candidate.formula(*predicate)?;
+                candidate.formula(*body)?;
+            }
+        }
+    }
+    for directive in &candidate.directives {
+        candidate.formula(directive.target)?;
+        source
+            .slice(directive.span)
+            .map_err(|_| LogicalLoweringError::SourceSpan)?;
+    }
+    for relation in candidate.relations() {
+        candidate.formula(relation.left())?;
+        candidate.formula(relation.right())?;
+        source
+            .slice(relation.span())
+            .map_err(|_| LogicalLoweringError::SourceSpan)?;
+    }
+    Ok(candidate)
+}
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct DgclProgramAlternative {
@@ -26,7 +90,7 @@ pub struct DgclProgramAlternative {
     pub region_offset: usize,
     pub root_source_span: Range<usize>,
     /// Parser spans inside `ast` remain region-relative; `region_offset` maps them to root bytes.
-    pub ast: InstructionAst,
+    pub ast: SharedInstructionAst,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -158,10 +222,96 @@ pub fn build_dgcl_projection(
     language_regions: &[DgclLanguageRegion],
     instruction_parses: &[DgclInstructionParse],
 ) -> Result<(DgclProgramIrReport, DgclTranslationProjection), DgclProjectionError> {
+    let store = legacy_projection_source(source, instruction_parses)?;
+    build_dgcl_projection_store(&store, dg1, language_regions, instruction_parses)
+}
+
+/// Explicit legacy string ingress. Normal pipeline construction passes its store.
+fn legacy_projection_source(
+    source: &str,
+    instruction_parses: &[DgclInstructionParse],
+) -> Result<SourceStore, DgclProjectionError> {
+    for parse in instruction_parses {
+        if let Some(report) = &parse.report {
+            for ast in report.alternatives.iter().chain(report.selected.iter()) {
+                if let Some(store) = ast.source_store() {
+                    if store.text() != source {
+                        return Err(DgclProjectionError::SourceRevisionMismatch);
+                    }
+                    return Ok(store.clone());
+                }
+            }
+        }
+    }
+    if source.len() > u32::MAX as usize {
+        return Err(DgclProjectionError::SourceSpanInvalid);
+    }
+    SourceStore::new(Arc::from(source), u32::MAX as usize)
+        .map_err(|_| DgclProjectionError::SourceSpanInvalid)
+}
+
+fn validate_ast_source_binding(
+    store: &SourceStore,
+    region: &Range<usize>,
+    ast: &SharedInstructionAst,
+) -> Result<(), DgclProjectionError> {
+    let expected = CheckedSourceSpan::checked(store, region.start, region.end)
+        .map_err(|_| DgclProjectionError::SourceSpanInvalid)?;
+    let observed = ast
+        .root_source_span()
+        .ok_or(DgclProjectionError::SourceSpanInvalid)?;
+    let owner = ast
+        .source_store()
+        .ok_or(DgclProjectionError::SourceSpanInvalid)?;
+    if ast.canonical_id().is_none()
+        || observed != expected
+        || owner.id() != store.id()
+        || owner.text().as_ptr() != store.text().as_ptr()
+    {
+        return Err(DgclProjectionError::SourceSpanInvalid);
+    }
+    Ok(())
+}
+
+pub(crate) fn validate_dgcl_ast_bindings(
+    store: &SourceStore,
+    instruction_parses: &[DgclInstructionParse],
+) -> Result<(), DgclProjectionError> {
+    for parse in instruction_parses {
+        if let Some(report) = &parse.report {
+            for ast in report.alternatives.iter().chain(report.selected.iter()) {
+                validate_ast_source_binding(store, &parse.source_span, ast)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn validate_program_ast_bindings(
+    store: &SourceStore,
+    program: &DgclProgramIrReport,
+) -> Result<(), DgclProjectionError> {
+    for requirement in &program.requirements {
+        for alternative in &requirement.alternatives {
+            validate_ast_source_binding(store, &requirement.source_span, &alternative.ast)?;
+        }
+        validate_dgcl_ast_bindings(store, std::slice::from_ref(&requirement.contract))?;
+    }
+    Ok(())
+}
+
+pub(crate) fn build_dgcl_projection_store(
+    store: &SourceStore,
+    dg1: &Dg1Report,
+    language_regions: &[DgclLanguageRegion],
+    instruction_parses: &[DgclInstructionParse],
+) -> Result<(DgclProgramIrReport, DgclTranslationProjection), DgclProjectionError> {
+    let source = store.text();
     let source_revision = stable_sha256(source);
     if dg1.source_revision != source_revision || !dg1.exact_source_roundtrip {
         return Err(DgclProjectionError::SourceRevisionMismatch);
     }
+    validate_dgcl_ast_bindings(store, instruction_parses)?;
     let operative_regions = dg1
         .regions
         .iter()
@@ -188,7 +338,7 @@ pub fn build_dgcl_projection(
         let view_text = source
             .get(view.source_span.clone())
             .ok_or(DgclProjectionError::SourceSpanInvalid)?;
-        let payload = serde_json::to_string(&(
+        let payload_digest = legacy_json_digest(&(
             "epistesys-dgcl-language-region-payload.v2",
             &view.root_source_revision,
             view.region_id,
@@ -213,7 +363,7 @@ pub fn build_dgcl_projection(
             || language_span.language != view.language
             || view.region_source_revision != stable_sha256(view_text)
             || view.payload_binding_revision != "epistesys-dgcl-language-region-payload.v2"
-            || view.payload_digest != stable_sha256(&payload)
+            || view.payload_digest != payload_digest
             || view.semantic_truth_claim
             || !valid_digest(&view.model_manifest_digest)
             || !valid_digest(&view.runtime_manifest_digest)
@@ -259,9 +409,8 @@ pub fn build_dgcl_projection(
 
         let mut alternatives = Vec::new();
         let mut selected_alternative_id = None;
-        let contract_digest = serde_json::to_string(parse)
-            .map(|payload| stable_sha256(&payload))
-            .map_err(|_| DgclProjectionError::PayloadEncoding)?;
+        let contract_digest =
+            legacy_json_digest(parse).map_err(|_| DgclProjectionError::PayloadEncoding)?;
         if let Some(report) = &parse.report {
             if report.source_revision != stable_sha256(region_text)
                 || report.grammar_revision != crate::INSTRUCTION_GRAMMAR_REVISION
@@ -274,9 +423,8 @@ pub fn build_dgcl_projection(
             let mut alternative_ids = BTreeSet::new();
             for ast in &report.alternatives {
                 validate_ast_spans(ast, region_text)?;
-                let ast_json =
-                    serde_json::to_string(ast).map_err(|_| DgclProjectionError::PayloadEncoding)?;
-                let parser_ast_digest = stable_sha256(&ast_json);
+                let parser_ast_digest = legacy_instruction_ast_digest(ast)
+                    .map_err(|_| DgclProjectionError::PayloadEncoding)?;
                 let alternative_id = stable_sha256(&format!(
                     "epistesys-dgcl-program-alternative.v1\0{source_revision}\0{}\0{}\0{}\0{}",
                     parse.region_id,
@@ -300,13 +448,12 @@ pub fn build_dgcl_projection(
             }
             match (&report.selected, report.state) {
                 (Some(selected), InstructionParseState::Parsed) => {
-                    let selected_digest = stable_sha256(
-                        &serde_json::to_string(selected)
-                            .map_err(|_| DgclProjectionError::PayloadEncoding)?,
-                    );
+                    let selected_id = selected
+                        .canonical_id()
+                        .ok_or(DgclProjectionError::ProgramIrMismatch)?;
                     let matches = alternatives
                         .iter()
-                        .filter(|alternative| alternative.parser_ast_digest == selected_digest)
+                        .filter(|alternative| alternative.ast.canonical_id() == Some(selected_id))
                         .collect::<Vec<_>>();
                     if matches.len() != 1 {
                         return Err(DgclProjectionError::ProgramIrMismatch);
@@ -413,20 +560,19 @@ pub fn build_dgcl_projection(
 
     requirements.sort_by_key(|requirement| (requirement.source_span.start, requirement.region_id));
     residuals.sort_by_key(|residual| (residual.source_span.start, residual.region_id));
-    let structural_distillation = crate::distill_dgcl_constraints(source, &requirements)?;
-    let program_digest = stable_sha256(
-        &serde_json::to_string(&(
-            DGCL_PROGRAM_IR_SCHEMA,
-            &source_revision,
-            crate::INSTRUCTION_GRAMMAR_REVISION,
-            &requirements,
-            &residuals,
-            &structural_distillation,
-            false,
-            false,
-        ))
-        .map_err(|_| DgclProjectionError::PayloadEncoding)?,
-    );
+    let structural_distillation =
+        crate::dgcl_distillation::distill_dgcl_constraints_store(store, &requirements)?;
+    let program_digest = legacy_json_digest(&(
+        DGCL_PROGRAM_IR_SCHEMA,
+        &source_revision,
+        crate::INSTRUCTION_GRAMMAR_REVISION,
+        &requirements,
+        &residuals,
+        &structural_distillation,
+        false,
+        false,
+    ))
+    .map_err(|_| DgclProjectionError::PayloadEncoding)?;
     let program_ir = DgclProgramIrReport {
         schema_version: DGCL_PROGRAM_IR_SCHEMA,
         source_revision: source_revision.clone(),
@@ -451,13 +597,15 @@ pub fn verify_dgcl_projection(
     program_ir: &DgclProgramIrReport,
     translation: &DgclTranslationProjection,
 ) -> Result<(), DgclProjectionError> {
+    let store = legacy_projection_source(source, instruction_parses)?;
     let (expected_program, expected_translation) =
-        build_dgcl_projection(source, dg1, language_regions, instruction_parses)?;
+        build_dgcl_projection_store(&store, dg1, language_regions, instruction_parses)?;
     if &expected_program != program_ir {
         return Err(DgclProjectionError::ProjectionDefect(
             classify_program_difference(&expected_program, program_ir),
         ));
     }
+    validate_program_ast_bindings(&store, program_ir)?;
     if &expected_translation != translation {
         return Err(DgclProjectionError::ProjectionDefect(
             ProjectionDefectDimension::TranslationGraph,
@@ -875,12 +1023,12 @@ fn build_translation_projection(
             ));
         }
         if !requirement.dependencies.is_empty() {
-            let payload = serde_json::to_string(&requirement.dependencies)
+            let payload_digest = legacy_json_digest(&requirement.dependencies)
                 .map_err(|_| DgclProjectionError::PayloadEncoding)?;
             domain_payloads.push(DomainTranslationPayload {
                 domain: format!("nlp-observations/{}", requirement.requirement_id),
                 schema_version: "epistesys-dgcl-nlp-dependency.v1".into(),
-                payload_digest: stable_sha256(&payload),
+                payload_digest,
                 unknowns: vec!["dependency_parse_is_not_semantic_truth_or_authority".into()],
             });
         }

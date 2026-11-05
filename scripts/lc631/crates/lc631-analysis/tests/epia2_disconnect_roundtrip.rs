@@ -130,8 +130,11 @@ fn sixteen_cuts_are_observed_then_original_requirement_identity_is_restored() {
             2 => cut.program_ir.grammar_revision = "substituted-grammar.v1",
             3 => cut.authority_created = true,
             4 => {
-                cut.program_ir.requirements[0].alternatives[0].ast.actions[0].polarity =
-                    InstructionPolarity::Forbidden
+                cut.program_ir.requirements[0].alternatives[0]
+                    .ast
+                    .materialize_mut()
+                    .actions[0]
+                    .polarity = InstructionPolarity::Forbidden
             }
             5 => {
                 let conditional = "Please publish only if tests pass.";
@@ -143,6 +146,7 @@ fn sixteen_cuts_are_observed_then_original_requirement_identity_is_restored() {
                 let mut missing_condition = before.clone();
                 missing_condition.program_ir.requirements[0].alternatives[0]
                     .ast
+                    .materialize_mut()
                     .conditions
                     .clear();
                 assert!(
@@ -164,8 +168,11 @@ fn sixteen_cuts_are_observed_then_original_requirement_identity_is_restored() {
                 continue;
             }
             6 => {
-                cut.program_ir.requirements[0].alternatives[0].ast.scopes[0].value =
-                    "all files".into()
+                cut.program_ir.requirements[0].alternatives[0]
+                    .ast
+                    .materialize_mut()
+                    .scopes[0]
+                    .value = "all files".into()
             }
             7 => cut.completion_plan.requirements.clear(),
             8 => cut.translation_projection.loss_events.clear(),

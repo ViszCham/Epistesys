@@ -187,6 +187,7 @@ fn program_ir_tampering_or_missing_operative_parse_is_rejected() {
     let mut tampered = report(source);
     tampered.program_ir.requirements[0].alternatives[0]
         .ast
+        .materialize_mut()
         .actions[0]
         .polarity = lc631_analysis::InstructionPolarity::Forbidden;
     assert_eq!(
@@ -235,6 +236,7 @@ fn dropped_conditions_scopes_requirements_and_source_anchors_report_their_own_de
     let mut missing_condition = report(condition_source);
     missing_condition.program_ir.requirements[0].alternatives[0]
         .ast
+        .materialize_mut()
         .conditions
         .clear();
     assert_eq!(
@@ -254,6 +256,7 @@ fn dropped_conditions_scopes_requirements_and_source_anchors_report_their_own_de
     let mut missing_action = report(condition_source);
     missing_action.program_ir.requirements[0].alternatives[0]
         .ast
+        .materialize_mut()
         .actions
         .clear();
     assert_eq!(
@@ -290,6 +293,7 @@ fn dropped_conditions_scopes_requirements_and_source_anchors_report_their_own_de
     let mut missing_scope = report(source);
     missing_scope.program_ir.requirements[0].alternatives[0]
         .ast
+        .materialize_mut()
         .scopes
         .push(lc631_analysis::InstructionScopeCandidate {
             kind: lc631_analysis::InstructionScopeKind::Resource,

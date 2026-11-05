@@ -31,6 +31,110 @@ pub struct AnalysisRequest<'a> {
     pub source: Option<&'a str>,
 }
 
+struct AnalysisComponents {
+    rust: Option<crate::RustAnalysisSurface>,
+    cargo: Option<crate::CargoWorldReceipt>,
+    python: Option<crate::PythonAnalysisSurface>,
+    assembly: Option<crate::AssemblyAnalysisSurface>,
+}
+
+pub fn analyze_with_resources(
+    request: AnalysisRequest<'_>,
+    runner: &mut dyn crate::ToolProcessRunner,
+) -> Result<ProgramAnalysisReport, lc631_process_supervisor::ResourceError> {
+    analyze_resource_inner(request, None, false, None, 0, runner)
+}
+pub fn analyze_path_with_resources(
+    request: AnalysisRequest<'_>,
+    source_path: Option<&Path>,
+    execute: bool,
+    runner: &mut dyn crate::ToolProcessRunner,
+) -> Result<ProgramAnalysisReport, lc631_process_supervisor::ResourceError> {
+    analyze_resource_inner(request, source_path, execute, None, 0, runner)
+}
+pub fn analyze_with_receipts_and_resources(
+    request: AnalysisRequest<'_>,
+    verifier: &ReceiptVerifier,
+    now_epoch: u64,
+    runner: &mut dyn crate::ToolProcessRunner,
+) -> Result<ProgramAnalysisReport, lc631_process_supervisor::ResourceError> {
+    analyze_resource_inner(request, None, false, Some(verifier), now_epoch, runner)
+}
+
+fn analyze_resource_inner(
+    request: AnalysisRequest<'_>,
+    source_path: Option<&Path>,
+    execute: bool,
+    verifier: Option<&ReceiptVerifier>,
+    now_epoch: u64,
+    runner: &mut dyn crate::ToolProcessRunner,
+) -> Result<ProgramAnalysisReport, lc631_process_supervisor::ResourceError> {
+    let selection = select_languages(request.prompt, request.source_name);
+    let source = request.source.filter(|s| !s.trim().is_empty());
+    let (rust, snapshot) = if selection.languages.contains(&LanguageKind::Rust) {
+        if let Some(source) = source {
+            let (surface, snapshot) =
+                crate::rust::analyze_rust_source_with_resources(source, request.prompt, runner)?;
+            (Some(surface), snapshot)
+        } else {
+            (None, None)
+        }
+    } else {
+        (None, None)
+    };
+    let rust_source_path = selection
+        .languages
+        .contains(&LanguageKind::Rust)
+        .then_some(source_path)
+        .flatten();
+    let cargo = if let Some(repo) = request.repo {
+        Some(crate::cargo_world::observe_cargo_world_with_runner(
+            repo,
+            rust_source_path,
+            source,
+            execute && rust_source_path.is_some(),
+            runner,
+        )?)
+    } else {
+        None
+    };
+    let python = if selection.languages.contains(&LanguageKind::Python) {
+        source
+            .map(|s| crate::python::analyze_python_source_with_resources(s, runner))
+            .transpose()?
+    } else {
+        None
+    };
+    let assembly = if selection.languages.contains(&LanguageKind::Assembly) {
+        source
+            .map(|s| {
+                crate::assembly::from_explicit_source_with_resources(s, request.prompt, runner)
+            })
+            .transpose()?
+    } else if let Some(rust) = rust.as_ref() {
+        crate::assembly::finish_codegen_snapshot(
+            snapshot,
+            rust,
+            source.unwrap_or(request.prompt),
+            runner,
+        )?
+    } else {
+        None
+    };
+    Ok(finish_analysis(
+        request,
+        selection,
+        AnalysisComponents {
+            rust,
+            cargo,
+            python,
+            assembly,
+        },
+        verifier,
+        now_epoch,
+    ))
+}
+
 pub fn analyze(request: AnalysisRequest<'_>) -> ProgramAnalysisReport {
     analyze_inner(request, None, false, None, 0)
 }
@@ -58,9 +162,8 @@ fn analyze_inner(
     verifier: Option<&ReceiptVerifier>,
     now_epoch: u64,
 ) -> ProgramAnalysisReport {
-    let corpora = audited_corpora();
     let language_selection = select_languages(request.prompt, request.source_name);
-    let languages = language_selection.languages;
+    let languages = language_selection.languages.clone();
     let source_revision = request
         .source
         .filter(|source| !source.trim().is_empty())
@@ -94,6 +197,39 @@ fn analyze_inner(
         rust.as_ref()
             .and_then(|rust| from_rust_codegen(rust, request.prompt))
     };
+    finish_analysis(
+        request,
+        language_selection,
+        AnalysisComponents {
+            rust,
+            cargo,
+            python,
+            assembly,
+        },
+        verifier,
+        now_epoch,
+    )
+}
+
+fn finish_analysis(
+    request: AnalysisRequest<'_>,
+    language_selection: LanguageSelection,
+    components: AnalysisComponents,
+    verifier: Option<&ReceiptVerifier>,
+    now_epoch: u64,
+) -> ProgramAnalysisReport {
+    let corpora = audited_corpora();
+    let languages = language_selection.languages;
+    let source_revision = request
+        .source
+        .filter(|s| !s.trim().is_empty())
+        .map(stable_sha256);
+    let AnalysisComponents {
+        rust,
+        cargo,
+        python,
+        assembly,
+    } = components;
     let target = AnalysisTargetProfile {
         languages: languages.clone(),
         source_name: request.source_name.map(str::to_string),
@@ -428,7 +564,9 @@ fn base_stages(
             if language_selection_authoritative {
                 &[]
             } else if selected {
-                &["prompt markers are a candidate target only; bind a source extension or repository target"]
+                &[
+                    "prompt markers are a candidate target only; bind a source extension or repository target",
+                ]
             } else {
                 &["no explicit language target"]
             },

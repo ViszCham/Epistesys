@@ -94,6 +94,14 @@ pub(crate) fn validate_connection_source(
     root: &Path,
     spec: &DgclConnectionSpec,
 ) -> Result<(), Error> {
+    validate_connection_source_with_reader(root, spec, &mut bounded_source)
+}
+
+pub(crate) fn validate_connection_source_with_reader(
+    root: &Path,
+    spec: &DgclConnectionSpec,
+    reader: &mut dyn FnMut(&Path) -> Result<String, Error>,
+) -> Result<(), Error> {
     let path = spec.entrypoint.split("::").collect::<Vec<_>>();
     if spec.schema_version != "epistesys-dgcl-connection-spec.v1"
         || !safe_test_name(&spec.integration_target)
@@ -110,13 +118,12 @@ pub(crate) fn validate_connection_source(
         return Err(Error::InvalidConnectionDriver);
     }
     let driver = checked_validation_path(root, &spec.driver_path)?;
-    let driver = bounded_source(&driver)?;
+    let driver = reader(&driver)?;
     if stable_sha256(&driver) != spec.driver_digest {
         return Err(Error::StaleInput);
     }
     validate_driver(&driver, spec)?;
-    let implementation =
-        bounded_source(&checked_validation_path(root, &spec.implementation_path)?)?;
+    let implementation = reader(&checked_validation_path(root, &spec.implementation_path)?)?;
     let nodes = rust_nodes(&implementation)?;
     let definitions = nodes
         .iter()

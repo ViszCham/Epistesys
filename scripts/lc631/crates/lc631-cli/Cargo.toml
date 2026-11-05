@@ -6,7 +6,7 @@ license.workspace = true
 
 [features]
 default = ["gpu-cubecl-wgpu"]
-gpu-cubecl-wgpu = ["lc631-accelerator/gpu-cubecl-wgpu", "lc631-tldg/gpu-cubecl-wgpu"]
+gpu-cubecl-wgpu = ["lc631-accelerator/gpu-cubecl-wgpu", "lc631-tldg/gpu-cubecl-wgpu", "lc631-runtime/semantic-gpu"]
 
 [[bin]]
 name = "lc631"
@@ -19,7 +19,9 @@ lc631-compat = { path = "../lc631-compat" }
 lc631-core = { path = "../lc631-core" }
 lc631-host = { path = "../lc631-host" }
 lc631-media = { path = "../lc631-media" }
+lc631-process-supervisor = { path = "../lc631-process-supervisor" }
 lc631-receipt-kernel = { path = "../lc631-receipt-kernel" }
+lc631-runtime = { path = "../lc631-runtime" }
 lc631-tl = { path = "../lc631-tl" }
 lc631-tldg = { path = "../lc631-tldg" }
 lc631-wire = { path = "../lc631-wire" }

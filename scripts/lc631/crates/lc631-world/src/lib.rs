@@ -1,5 +1,10 @@
 #![forbid(unsafe_code)]
 
+pub mod context_graph;
+pub mod curved_exploration;
+pub mod exploration_schedule;
+pub mod materialized_worlds;
+
 use lc631_core::{stable_sha256, Generation, WorldId};
 use serde::Serialize;
 use std::collections::BTreeSet;

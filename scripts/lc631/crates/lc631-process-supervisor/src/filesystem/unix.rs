@@ -81,9 +81,45 @@ pub(super) fn open_file(
     name: &OsStr,
     create: bool,
     exclusive: bool,
+    writable: bool,
+) -> io::Result<File> {
+    open_file_inner(
+        parent,
+        name,
+        create,
+        exclusive,
+        writable,
+        LinkPolicy::Unique,
+    )
+}
+
+pub(super) fn open_binary_file(parent: &DirectoryAnchor, name: &OsStr) -> io::Result<File> {
+    open_file_inner(parent, name, false, false, false, LinkPolicy::BinaryAliases)
+}
+
+enum LinkPolicy {
+    Unique,
+    BinaryAliases,
+}
+
+fn open_file_inner(
+    parent: &DirectoryAnchor,
+    name: &OsStr,
+    create: bool,
+    exclusive: bool,
+    writable: bool,
+    link_policy: LinkPolicy,
 ) -> io::Result<File> {
     let name = name_bytes(name)?;
-    let flags = libc::O_RDWR | libc::O_CLOEXEC | libc::O_NOFOLLOW;
+    let flags = (if writable {
+        libc::O_RDWR
+    } else {
+        libc::O_RDONLY
+    }) | libc::O_CLOEXEC
+        | libc::O_NOFOLLOW
+        // Reject a FIFO/device through the opened handle before any blocking
+        // I/O. O_NONBLOCK does not change regular-file reads or writes.
+        | libc::O_NONBLOCK;
     let parent_fd = directory_fd(parent)?;
     // SAFETY: parent owns the descriptor and name is one component; 0600 applies atomically on creation.
     let mut newly_created = false;
@@ -121,7 +157,10 @@ pub(super) fn open_file(
     if newly_created {
         strip_inherited_access_acl(&file)?;
     }
-    identity(&file)?;
+    match link_policy {
+        LinkPolicy::Unique => identity(&file)?,
+        LinkPolicy::BinaryAliases => binary_identity(&file)?,
+    };
     Ok(file)
 }
 
@@ -152,6 +191,29 @@ fn strip_inherited_access_acl(_file: &File) -> io::Result<()> {
 pub(super) fn identity(file: &File) -> io::Result<FileIdentity> {
     let metadata = file.metadata()?;
     if !metadata.is_file() || metadata.nlink() != 1 {
+        return Err(unsafe_path());
+    }
+    Ok(FileIdentity {
+        volume: metadata.dev(),
+        index: metadata.ino(),
+    })
+}
+
+/// Binary aliases are observations only; never reuse for security-file writes.
+pub(super) fn binary_identity(file: &File) -> io::Result<FileIdentity> {
+    let metadata = file.metadata()?;
+    if !metadata.is_file() {
+        return Err(unsafe_path());
+    }
+    Ok(FileIdentity {
+        volume: metadata.dev(),
+        index: metadata.ino(),
+    })
+}
+
+pub(super) fn directory_identity(file: &File) -> io::Result<FileIdentity> {
+    let metadata = file.metadata()?;
+    if !metadata.is_dir() {
         return Err(unsafe_path());
     }
     Ok(FileIdentity {
