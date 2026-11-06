@@ -2,6 +2,8 @@
 
 ## 日本語
 
+両facadeの役割と使いどころは[会話とコーディングの支援](coding-and-conversation-assistance.md)をご覧ください。本書は選択と起動の条件を扱います。
+
 この文書は、利用者がEpistesysを明示選択し、host側で利用を有効にした場合の手順である。非codingには`epistesys:lc631-conversation-projector`、coding/review/testには`epistesys:lc631-coding-projector`を一つだけ使用する。version指定がなければ対象は7.1.0-beta.1とする。選択範囲は利用者が指定したtask/sessionに従い、repositoryの閲覧・編集やEpistesysへの言及だけでは利用を選択しない。古いskill内の「既定」表現より、利用者の明示指示を優先する。
 
 既存Labyrinth lineも明示指定用に保持し、通常の二重実行や故障時の無断fallbackは行わない。要求されたlineが利用不能なら、その状態を報告する。これはhost設定・利用者指示で選択するルーティングであり、host interceptionではない。ファイル名は既存linkとの互換性のため維持している。
@@ -19,6 +21,8 @@ automationでは`ProcessStartInfo.StandardInputEncoding`をUTF-8にし、元seed
 source release、plugin登録/cache install、enabled設定、host pickup、再起動後の実観測を分離する。manifestやdirectoryだけではhost activationの証拠にならない。pluginの追加はhost公式marketplace/install経路を使い、cache/model/keyをsource repositoryへ持ち込まない。個人の既定選択をこの公開repositoryから他人の設定へ自動適用しない。
 
 ## English
+
+See [conversation and coding assistance](coding-and-conversation-assistance.md) for facade roles and use cases. This document covers selection and invocation conditions.
 
 This document describes use after the user explicitly selects Epistesys and enables it on the host. Select exactly one facade: `epistesys:lc631-conversation-projector` for non-coding or `epistesys:lc631-coding-projector` for coding/review/tests. Use 7.1.0-beta.1 when no version is specified. Respect the task/session scope stated by the user; browsing/editing the repository or mentioning Epistesys alone does not select its use. Explicit user instructions take precedence over older default-use wording in skills.
 

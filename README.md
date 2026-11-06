@@ -2,9 +2,9 @@
 
 ## 日本語
 
-Epistesys（エピステシス）は、コードの変更を元の要求と検証結果に結び付ける**開発支援ツール**です。自分の開発で「依頼した条件は残っているか」「追加した機能は実際に呼ばれるか」「何を確認して完了としたのか」を、後からコードとテストに戻って確かめるために作っています。
+Epistesys（エピステシス）は、AIとの設計相談で整理した要件を、実装と検証につなぐための**開発支援ツール**です。「依頼した条件は残っているか」「追加した機能は呼ばれるか」「何を確認して完了としたか」を、原文・コード・試験に戻って確かめやすくします。
 
-たとえば「既存の出力形式を変えずに機能を追加してほしい」という依頼では、ビルドが通ること、新機能が呼び出されること、従来の出力形式が保たれることは別々の確認です。Epistesysはモデルの重みを変更せず、その外側で元の要求、許可された操作、対象となるコードの版、検証結果、未確認の項目を対応づけます。具体的な使い方は[コーディング支援](#coding-assistance-ja)、現時点で何が動き、何が未検証かは以下の表で確認できます。
+要求の構造化、検証項目の分解、証拠の更新、修復・再開など、**開発手順の一部をRustの型と状態遷移で実装**しています。例えばAPIを維持して機能を追加するなら、コンパイル、呼び出し経路、互換性は別々の確認です。対応する解析条件の範囲で扱い、読めなかった条件や足りない証拠は未確認として残します。
 
 [使い方](docs/execution-guide.md) · [EpiMapLossの式](docs/epimaploss-epirecompscore-formulas.md#map-ja) · [EpiRecompScoreの式](docs/epimaploss-epirecompscore-formulas.md#score-ja) · [現在の検証範囲](docs/epistesys-7.1.0-beta.1-release-notes-2026-11-06.md)
 
@@ -19,7 +19,7 @@ Epistesys（エピステシス）は、コードの変更を元の要求と検�
 | ホスト接続 | adapter・receipt・replayの実装を含む。実ホストのcallback／delivery観測は`PendingHostObservation` |
 | 開発上の効果 | Epistesys自体が作業の失敗をどれだけ減らすかは未検証です。独立評価に使う正解データは`PendingNoCorpus`です |
 
-ソース経路の局所検証は、任意指示の意味的正確性、ハルシネーション抑制、長期対話の性能を実証するものではありません。Beta-7.1は、既存試験で検出した失敗を修復した開発版です。全OS・一般性能・実host配信の検証完了を示す名称ではありません。Alpha.3は[独立した保守ブランチ](https://github.com/ViszCham/Epistesys/tree/main-alpha.3)に残し、この版の試験・配布・plugin適用は、それぞれ[検証記録](validation/beta7-onepass-verification-2026-11-06.md)で確認できます。
+ソース経路の局所検証は、任意指示の意味的正確性、ハルシネーション抑制、長期対話の性能を実証するものではありません。Beta-7.1は、既存試験で検出した失敗を修復した開発版です。全OS・一般性能・実host配信の検証完了を示す名称ではありません。Alpha.3は[独立した保守ブランチ](https://github.com/ViszCham/Epistesys/tree/main-alpha.3)に残し、この版の試験・配布・plugin適用は、それぞれ[Beta-7.1記録](docs/epistesys-7.1.0-beta.1-release-notes-2026-11-06.md)で確認できます。
 
 ### TLCXの実装と測定
 
@@ -75,14 +75,15 @@ alpha.3はEPR監査に基づき、既存経路の次の境界を強化します�
 [変更一覧](docs/epistesys-6.3.2-alpha.3-release-notes-2026-10-27.md)と[境界契約](docs/epr-boundary-contracts.md)は、この版で追加された実装の範囲を示します。開発での効果や、実ホストでの有効化を示す記録ではありません。
 
 <a id="coding-assistance-ja"></a>
+<a id="conversation-assistance-ja"></a>
 
-### コーディング支援：要求追跡・検証・修復
+### 会話とコーディングの支援
 
-コーディング支援は、Epistesysの主要な適用先の一つです。対応するprofileでは、要求、実装対象、呼び出し経路、検証結果を対応づけ、完了判定の根拠を追跡する制御経路を実装しています。対象とする問題には、要求の一部欠落、追加した機能の未接続、検証不足、変更前の証拠の再利用があります。
+- **仕様の相談**：守る条件、仮定、例外、未決定の点を分け、次の実装依頼へ明示して引き継ぎます。
+- **実装・レビュー**：要求ごとに、実装対象・呼び出し・テスト・受入条件を対応づけます。ビルド成功だけで他の確認を代替しません。
+- **修復・再開**：変更した版と検証結果を追い、古い証拠、進展なし、予算不足、作用が不明な失敗を区別します。
 
-Epistesysを明示的に選択した場合、Coding Projectorが設計・実装・テスト・レビューの依頼を解析経路へ渡します。原文に結び付く要求と未解決事項をProgram IRに保持し、要求ごとの検証計画へ接続します。要求と実装対象の対応、コンパイラ検査、指定した実行時テスト、登録されたproduction APIの直接呼出し、受入試験を別々の検証材料として扱います。例えば、コンパイラ検査が成功しても、計画で要求した呼び出しの証拠がなければ、その接続のgapは残ります。このruntime観測は登録driverとpinしたassertionに限定し、API内部からexecutorまでの任意の呼出し追跡とは区別します。
-
-修復経路は、呼び出し側が提供した候補を、許可された既存Rustファイルへ適用し、変更前の内容を保存して、変更後snapshotと新しい証拠から要求を再評価します。再開時にも現在のsource・権限・証拠を確認します。完了判定の範囲は、抽出・登録された要求と検証計画です。要求抽出の意味精度、一般的なCoding性能、実hostへの出力・配信は別の評価・観測対象です。[利用手順](docs/execution-guide.md)、[実行契約](docs/dgcl-operating-profile-and-closure.md)、[既知の制約](docs/known-limitations.md)で条件を確認できます。
+Conversation Projectorは説明・設計相談、Coding Projectorは実装・テスト・レビューの入口です。通常の診断が、外部toolや実修復まで自動実行するわけではありません。[使いどころと具体例](docs/coding-and-conversation-assistance.md)から、[実行ガイド](docs/execution-guide.md)と[実行条件](docs/dgcl-operating-profile-and-closure.md)へ進めます。
 
 ### 検証状態を読むための区別
 
@@ -140,7 +141,7 @@ plugin登録・起動・診断の再利用条件は[plugin接続契約](docs/plu
 
 | 読者の関心 | 入口 |
 | --- | --- |
-| コーディング支援の利用場面と判定条件 | [概要](#coding-assistance-ja) → [実行ガイド](docs/execution-guide.md) → [DGCL実行契約](docs/dgcl-operating-profile-and-closure.md) |
+| 会話・コーディング支援の使いどころ | [概要](#coding-assistance-ja) → [具体例と仕組み](docs/coding-and-conversation-assistance.md) → [実行ガイド](docs/execution-guide.md) |
 | システム境界・データフロー・用語 | [システムアーキテクチャ](docs/system-architecture.md) |
 | 実行条件・修復・再開 | [実行ガイド](docs/execution-guide.md) → [DGCL実行契約](docs/dgcl-operating-profile-and-closure.md) |
 | wire形式・互換性 | [DGCL wire互換性](docs/dgcl-wire-compatibility.md) → [schema契約](schemas/closure-and-receipt-contract.md) |
@@ -155,9 +156,9 @@ plugin登録・起動・診断の再利用条件は[plugin接続契約](docs/plu
 
 ## English
 
-Epistesys is a **development tool** that connects a code change to its original requirements and validation results. I’m building it so I can return to the code and tests in my own projects and answer three questions: Did the requested constraints survive? Is the new behavior actually called? What was verified before the change was called complete?
+Epistesys is a **development tool** that connects requirements clarified with an AI to implementation and validation. It helps you return to the original request, code and tests to ask whether constraints survived, new behavior is invoked, and completion has supporting checks.
 
-For example, a request to “add a feature without changing the existing output format” needs three distinct checks: the build passes, the new feature is invoked, and the old format is preserved. Without changing model weights, Epistesys relates the original requirements, permitted operations, code revision, validation results, and outstanding checks. See [Coding assistance](#coding-assistance-en) for the workflow and the table below for what currently works and what remains unverified.
+It implements **parts of the development procedure as Rust types and state transitions**: requirement structure, separate validation obligations, evidence refresh, repair and resume. Adding a feature while preserving an API, for example, requires distinct compilation, invocation and compatibility checks. Processing is limited to supported analysis profiles; unparsed conditions and missing evidence remain explicit.
 
 [How to use it](docs/execution-guide.md) · [EpiMapLoss equations](docs/epimaploss-epirecompscore-formulas.md#map-en) · [EpiRecompScore equations](docs/epimaploss-epirecompscore-formulas.md#score-en) · [Current verification scope](docs/epistesys-7.1.0-beta.1-release-notes-2026-11-06.md)
 
@@ -172,7 +173,7 @@ For example, a request to “add a feature without changing the existing output 
 | Host integration | Includes adapter/receipt/replay implementations; real-host callback/delivery observations remain `PendingHostObservation` |
 | Effect on development work | How much Epistesys itself reduces development failures is unverified. The independent reference corpus remains `PendingNoCorpus` |
 
-Local source-path verification does not establish arbitrary-instruction semantic accuracy, hallucination containment, or long-session performance. Beta-7.1 is a development version incorporating repairs of observed test failures, not a claim of all-OS, general-performance or real-host-delivery validation. Alpha.3 remains on its [independent maintenance branch](https://github.com/ViszCham/Epistesys/tree/main-alpha.3), and this version's tests, distribution and plugin rollout are tracked separately in the [verification record](validation/beta7-onepass-verification-2026-11-06.md).
+Local source-path verification does not establish arbitrary-instruction semantic accuracy, hallucination containment, or long-session performance. Beta-7.1 is a development version incorporating repairs of observed test failures, not a claim of all-OS, general-performance or real-host-delivery validation. Alpha.3 remains on its [independent maintenance branch](https://github.com/ViszCham/Epistesys/tree/main-alpha.3), and this version's tests, distribution and plugin rollout are tracked separately in the [Beta-7.1 record](docs/epistesys-7.1.0-beta.1-release-notes-2026-11-06.md).
 
 ### TLCX implementation and measures
 
@@ -228,14 +229,15 @@ Following the EPR audit, alpha.3 strengthens these boundaries in existing paths:
 The [change notes](docs/epistesys-6.3.2-alpha.3-release-notes-2026-10-27.md) and [boundary contracts](docs/epr-boundary-contracts.md) describe the implementation added in that version. They do not establish its effect on development work or activation on a real host.
 
 <a id="coding-assistance-en"></a>
+<a id="conversation-assistance-en"></a>
 
-### Coding assistance: requirement traceability, validation, and repair
+### Conversation and coding assistance
 
-Coding assistance is one of Epistesys's principal application areas. Within supported profiles, it implements a control path relating requirements, implementation targets, invocation paths, and validation results, making the basis for completion decisions traceable. The failure model includes omitted requirements, disconnected functionality, missing validation, and reuse of evidence collected before a change.
+- **Specification discussions:** separate constraints, assumptions, exceptions and undecided points, then explicitly carry them into the implementation request.
+- **Implementation and review:** relate each requirement to its implementation target, invocation, tests and acceptance conditions. A passing build does not replace other checks.
+- **Repair and resume:** track changed revisions and validation, distinguishing stale evidence, no progress, budget exhaustion and failures with uncertain effects.
 
-When Epistesys is explicitly selected, the Coding Projector routes design, implementation, testing, and review requests into the analysis path. Source-linked requirements and unresolved items are retained in Program IR and connected to per-requirement validation plans. Requirement-to-implementation bindings, compiler checks, specified runtime tests, registered direct production-API invocations, and acceptance tests are treated as distinct validation materials. For example, a successful compiler check still leaves a connection gap open when evidence for the invocation required by the plan is missing. This runtime observation is limited to a registered driver and pinned assertion, not arbitrary internal API-to-executor tracing.
-
-The repair path applies a caller-provided candidate to an authorized existing Rust file, preserves its previous contents, and reevaluates requirements using the changed snapshot and fresh evidence. Resume also checks current source, authority, and evidence. Completion decisions cover the extracted and registered requirements and validation plans. Semantic accuracy of requirement extraction, general coding performance, and real-host output and delivery require separate evaluation or observation. See the [execution guide](docs/execution-guide.md), [execution contract](docs/dgcl-operating-profile-and-closure.md), and [known limitations](docs/known-limitations.md) for conditions.
+Conversation Projector is the entry for explanation/design; Coding Projector handles implementation/tests/review. Ordinary diagnostics do not automatically execute external tools or repairs. Start with [use cases and examples](docs/coding-and-conversation-assistance.md), then follow the [execution guide](docs/execution-guide.md) and [operating conditions](docs/dgcl-operating-profile-and-closure.md).
 
 ### Interpreting verification states
 
@@ -293,7 +295,7 @@ See the [plugin integration contract](docs/plugin-host-integration.md) for regis
 
 | Reader interest | Entry point |
 | --- | --- |
-| Coding use cases and decision conditions | [Overview](#coding-assistance-en) → [Execution guide](docs/execution-guide.md) → [DGCL execution contract](docs/dgcl-operating-profile-and-closure.md) |
+| Conversation and coding use cases | [Overview](#coding-assistance-en) → [Examples and mechanisms](docs/coding-and-conversation-assistance.md) → [Execution guide](docs/execution-guide.md) |
 | System boundaries, dataflow, terminology | [System architecture](docs/system-architecture.md) |
 | Execution, repair, resume | [Execution guide](docs/execution-guide.md) → [DGCL execution contract](docs/dgcl-operating-profile-and-closure.md) |
 | Wire formats and compatibility | [DGCL wire compatibility](docs/dgcl-wire-compatibility.md) → [schema contract](schemas/closure-and-receipt-contract.md) |
