@@ -65,11 +65,20 @@ impl CollectionPlan {
         }
         let mut fixed = [M::DescriptionBits; 19];
         fixed[..required.len()].copy_from_slice(required);
-        Ok(Self { pins, formula, required: fixed, required_len: required.len() })
+        Ok(Self {
+            pins,
+            formula,
+            required: fixed,
+            required_len: required.len(),
+        })
     }
 
-    pub fn required_subset(&self) -> &[M] { &self.required[..self.required_len] }
-    pub fn original_required(&self) -> &'static [M] { original_required(self.formula) }
+    pub fn required_subset(&self) -> &[M] {
+        &self.required[..self.required_len]
+    }
+    pub fn original_required(&self) -> &'static [M] {
+        original_required(self.formula)
+    }
 }
 
 fn original_required(formula: OriginalFormula) -> &'static [M] {

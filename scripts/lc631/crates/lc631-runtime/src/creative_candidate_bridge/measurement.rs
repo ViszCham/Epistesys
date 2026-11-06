@@ -82,7 +82,8 @@ impl ValidatedFormalCandidate<'_, '_> {
         bridge: &CreativeCandidateBridge<'_, '_>,
         resources: &ResourceReservationView<'_>,
     ) -> Result<Digest32, Error> {
-        self.project_current(bridge, resources).map_err(Error::Creative)?;
+        self.project_current(bridge, resources)
+            .map_err(Error::Creative)?;
         let mut hash = Sha256::new();
         hash.update(b"epistesys.generated-formal-measurement.candidate.v1\0");
         hash.update(bridge.source.id().digest().as_bytes());
@@ -92,7 +93,8 @@ impl ValidatedFormalCandidate<'_, '_> {
         hash.update((self.payload.len() as u64).to_le_bytes());
         hash.update(&self.payload);
         let identity = Digest32::from_bytes(hash.finalize().into());
-        self.project_current(bridge, resources).map_err(Error::Creative)?;
+        self.project_current(bridge, resources)
+            .map_err(Error::Creative)?;
         Ok(identity)
     }
 
@@ -113,38 +115,77 @@ impl ValidatedFormalCandidate<'_, '_> {
     ) -> Result<R, Error> {
         self.check_measurement_input(bridge, input, resources)?;
         let produced = produced::execute(
-            input.plan, input.candidate, input.schedule, input.budget, resources,
-        ).map_err(Error::Produced)?;
-        let observations = produced.observations_current(resources).map_err(Error::Produced)?;
+            input.plan,
+            input.candidate,
+            input.schedule,
+            input.budget,
+            resources,
+        )
+        .map_err(Error::Produced)?;
+        let observations = produced
+            .observations_current(resources)
+            .map_err(Error::Produced)?;
         let soundness = owned::measure_owned(
-            input.plan, input.candidate, m::Direction::Soundness,
-            observations.as_slice(), input.budget, resources,
-        ).map_err(Error::Owned)?;
+            input.plan,
+            input.candidate,
+            m::Direction::Soundness,
+            observations.as_slice(),
+            input.budget,
+            resources,
+        )
+        .map_err(Error::Owned)?;
         let completeness = owned::measure_owned(
-            input.plan, input.candidate, m::Direction::Completeness,
-            observations.as_slice(), input.budget, resources,
-        ).map_err(Error::Owned)?;
+            input.plan,
+            input.candidate,
+            m::Direction::Completeness,
+            observations.as_slice(),
+            input.budget,
+            resources,
+        )
+        .map_err(Error::Owned)?;
         self.check_measurement_input(bridge, input, resources)?;
         observations.check_current().map_err(Error::Produced)?;
-        let sound = soundness.project_current(
-            input.plan, input.candidate, m::Direction::Soundness, resources,
-        ).map_err(Error::Owned)?;
-        let complete = completeness.project_current(
-            input.plan, input.candidate, m::Direction::Completeness, resources,
-        ).map_err(Error::Owned)?;
+        let sound = soundness
+            .project_current(
+                input.plan,
+                input.candidate,
+                m::Direction::Soundness,
+                resources,
+            )
+            .map_err(Error::Owned)?;
+        let complete = completeness
+            .project_current(
+                input.plan,
+                input.candidate,
+                m::Direction::Completeness,
+                resources,
+            )
+            .map_err(Error::Owned)?;
         let result = consume(MeasuredPair {
-            soundness: sound, completeness: complete,
-            produced: produced.produced_count(), missing: produced.missing_count(),
+            soundness: sound,
+            completeness: complete,
+            produced: produced.produced_count(),
+            missing: produced.missing_count(),
         });
         // Keep the original producer/observation/measurement owners alive across
         // consumption. Equal detached numbers do not substitute for these checks.
         observations.check_current().map_err(Error::Produced)?;
-        soundness.project_current(
-            input.plan, input.candidate, m::Direction::Soundness, resources,
-        ).map_err(Error::Owned)?;
-        completeness.project_current(
-            input.plan, input.candidate, m::Direction::Completeness, resources,
-        ).map_err(Error::Owned)?;
+        soundness
+            .project_current(
+                input.plan,
+                input.candidate,
+                m::Direction::Soundness,
+                resources,
+            )
+            .map_err(Error::Owned)?;
+        completeness
+            .project_current(
+                input.plan,
+                input.candidate,
+                m::Direction::Completeness,
+                resources,
+            )
+            .map_err(Error::Owned)?;
         self.check_measurement_input(bridge, input, resources)?;
         Ok(result)
     }
@@ -155,7 +196,9 @@ impl ValidatedFormalCandidate<'_, '_> {
         input: MeasurementInput<'_>,
         resources: &ResourceReservationView<'_>,
     ) -> Result<(), Error> {
-        let query = self.project_current(bridge, resources).map_err(Error::Creative)?;
+        let query = self
+            .project_current(bridge, resources)
+            .map_err(Error::Creative)?;
         let original = bridge.contexts().original().state();
         let scope = input.plan.scope();
         if scope.context != self.prepared.parent()

@@ -102,7 +102,13 @@ fn expect_held(logic: DeclaredLogic, assertion: &str, detail: &str) {
 
 #[test]
 fn qf_uf_holds_integer_comparisons_instead_of_exposing_a_query() {
-    for comparison in ["(< 0 1)", "(<= 1 1)", "(> 1 0)", "(>= (- 2) (+ 0 1))", "(= 0 1)"] {
+    for comparison in [
+        "(< 0 1)",
+        "(<= 1 1)",
+        "(> 1 0)",
+        "(>= (- 2) (+ 0 1))",
+        "(= 0 1)",
+    ] {
         expect_held(DeclaredLogic::Boolean, comparison, comparison);
     }
 }
@@ -156,8 +162,16 @@ fn qf_lia_invalid_operands_keep_their_typed_errors() {
             FormalErrorKind::UndeclaredSymbol,
             Some("missing"),
         ),
-        ("(= (not) false)", FormalErrorKind::MalformedCommand, Some("(not)")),
-        ("(= true (and p))", FormalErrorKind::MalformedCommand, Some("(and p)")),
+        (
+            "(= (not) false)",
+            FormalErrorKind::MalformedCommand,
+            Some("(not)"),
+        ),
+        (
+            "(= true (and p))",
+            FormalErrorKind::MalformedCommand,
+            Some("(and p)"),
+        ),
         ("(= p x)", FormalErrorKind::SortMismatch, None),
         ("(= x p)", FormalErrorKind::SortMismatch, None),
         (

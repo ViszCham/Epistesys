@@ -135,9 +135,9 @@ impl<'a, 'v> FrameworkRoot<'a, 'v> {
         expected: ExpectedInputs<'s, 'a, 'v>,
         view: &'v ResourceReservationView<'_>,
     ) -> Result<OwnedFrameworkCase<'s, 'a, 'v>, Error> {
-        self.native.meter.with_call(
-            self.native.state.declaration.limits.max_call_work,
-            || {
+        self.native
+            .meter
+            .with_call(self.native.state.declaration.limits.max_call_work, || {
                 self.check(view)?;
                 self.expected(expected, view)?;
                 let attempts = self.attempts.get();
@@ -148,8 +148,7 @@ impl<'a, 'v> FrameworkRoot<'a, 'v> {
                     .set(attempts.checked_add(1).ok_or(Error::CaseBudget)?);
                 bounds::debit(&self.native, 4096)?; // failed valid attempts are not refunded
                 execution::execute(self, expected, view)
-            },
-        )
+            })
     }
     pub fn work_remaining_current(&self, view: &ResourceReservationView<'_>) -> Result<u64, Error> {
         self.check(view)?;

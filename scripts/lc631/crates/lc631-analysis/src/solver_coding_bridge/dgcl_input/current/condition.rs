@@ -27,14 +27,23 @@ impl<'report, 'context> CurrentCodingRequirement<'_, 'report, 'context> {
         condition_index: usize,
         reported: ReportedRelation,
     ) -> Result<CurrentConditionQuery<'_, 'report, 'context>, CurrentCodingError> {
-        if !self.requirement.condition_indices().contains(&condition_index) {
+        if !self
+            .requirement
+            .condition_indices()
+            .contains(&condition_index)
+        {
             return Err(CurrentCodingError::ForeignConditionOwner);
         }
         let request = ConditionRequest::new(self.input.input.logical_task(), condition_index)
-            .map_err(|error| CurrentCodingError::Input(super::super::CodingInputError::TaskRoute(error)))?;
+            .map_err(|error| {
+                CurrentCodingError::Input(super::super::CodingInputError::TaskRoute(error))
+            })?;
         let report = ConditionReport::reported(&request, reported);
         Ok(CurrentConditionQuery {
-            owner: self.input, requirement_index: self.index, request, report,
+            owner: self.input,
+            requirement_index: self.index,
+            request,
+            report,
         })
     }
 
@@ -47,7 +56,9 @@ impl<'report, 'context> CurrentCodingRequirement<'_, 'report, 'context> {
         {
             return Err(CurrentCodingError::ForeignConditionOwner);
         }
-        self.requirement.review_condition(&observed.observation).map_err(CurrentCodingError::Input)
+        self.requirement
+            .review_condition(&observed.observation)
+            .map_err(CurrentCodingError::Input)
     }
 }
 
@@ -70,9 +81,13 @@ impl<'owner, 'report, 'context> CurrentConditionQuery<'owner, 'report, 'context>
         &'input self,
         premises: &'input [(FormulaId, bool)],
         max_steps: usize,
-    ) -> Result<CurrentConditionObservation<'input, 'owner, 'report, 'context>, ConditionBridgeError> {
+    ) -> Result<CurrentConditionObservation<'input, 'owner, 'report, 'context>, ConditionBridgeError>
+    {
         let observation = check_condition(&self.request, premises, &self.report, max_steps)?;
-        Ok(CurrentConditionObservation { query: self, observation })
+        Ok(CurrentConditionObservation {
+            query: self,
+            observation,
+        })
     }
 }
 

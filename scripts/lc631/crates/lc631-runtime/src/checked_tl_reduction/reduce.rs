@@ -1,15 +1,15 @@
 //! Canonical K1 over real live owners. No report/interval input constructor.
 use super::*;
 use crate::joint_selection::AxisValue;
+use crate::spatial_preservation::SpatialModelInput;
 use crate::spatiotemporal_selection::{SpatialOwner, TemporalOwner};
+use crate::temporal_preservation::TemporalModelInput;
 use crate::{
     spatial_preservation::SpatialPreservationPolicy,
     temporal_preservation::TemporalPreservationPolicy,
 };
-use crate::spatial_preservation::SpatialModelInput;
-use crate::temporal_preservation::TemporalModelInput;
-use lc631_substrate::Digest32;
 use lc631_analysis::creativity_measurement::{weighted_assessment, Rational, WeightedProbe};
+use lc631_substrate::Digest32;
 
 /// Callback-scoped actual tuple inputs and original live producer references.
 pub(crate) struct ProductTupleView<'p, 'i, 's, 'v> {

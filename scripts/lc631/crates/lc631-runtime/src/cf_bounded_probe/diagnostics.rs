@@ -118,8 +118,10 @@ fn check_diagnostic(
         None if !root => {}
         _ => return Err(Failure::UnknownDiagnosticSchema),
     }
-    if matches!(diagnostic.level.as_str(), "ice" | "error: internal compiler error")
-        || diagnostic.message.contains("internal compiler error")
+    if matches!(
+        diagnostic.level.as_str(),
+        "ice" | "error: internal compiler error"
+    ) || diagnostic.message.contains("internal compiler error")
     {
         return Err(Failure::Ice);
     }
@@ -244,7 +246,10 @@ fn bounded_record(bytes: &[u8], nodes: &mut usize) -> Result<(), Failure> {
                 any = true;
                 index += 1;
                 while index < bytes.len()
-                    && !matches!(bytes[index], b' ' | b'\t' | b'\r' | b',' | b':' | b']' | b'}' | b'[' | b'{' | b'"')
+                    && !matches!(
+                        bytes[index],
+                        b' ' | b'\t' | b'\r' | b',' | b':' | b']' | b'}' | b'[' | b'{' | b'"'
+                    )
                 {
                     index += 1;
                 }

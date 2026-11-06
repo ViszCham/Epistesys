@@ -5,13 +5,18 @@ use crate::declared_build_capture::{capture_declared_build, SnapshotCaptureAttem
 use lc631_substrate::resource::ResourceReservationView;
 
 pub(super) fn capture<'r>(
-    plan: &BuildPlan<'_, '_>, services: &mut BuildServices<'_, '_>,
+    plan: &BuildPlan<'_, '_>,
+    services: &mut BuildServices<'_, '_>,
     view: &'r ResourceReservationView<'_>,
 ) -> SnapshotCaptureAttempt<'r> {
     // Callers check the exact plan first; keep snapshot failures in their original vocabulary.
     if let Err(error) = plan.input.binding.check_goal_profile_inputs(view) {
         return SnapshotCaptureAttempt::failure(error);
     }
-    capture_declared_build(plan.input.binding, services.source_reader,
-        services.capture_authority, view)
+    capture_declared_build(
+        plan.input.binding,
+        services.source_reader,
+        services.capture_authority,
+        view,
+    )
 }

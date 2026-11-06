@@ -74,9 +74,8 @@ pub(crate) fn open_or_create_root(path: &Path) -> io::Result<DirectoryAnchor> {
             Err(error) => return Err(error),
         }
     }
-    Err(last_missing.unwrap_or_else(|| {
-        io::Error::new(io::ErrorKind::InvalidInput, "host_root_parent_missing")
-    }))
+    Err(last_missing
+        .unwrap_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "host_root_parent_missing")))
 }
 
 fn open_read_only(path: &Path) -> Result<ReadOnlyAnchoredFile, crate::HostError> {
@@ -133,10 +132,11 @@ pub(crate) fn with_file_text<T>(
     file.validate_current()
         .map_err(|error| crate::HostError::Io(error.to_string()))?;
     let Some(view) = view else {
-        let bytes =
-            legacy_bytes(&mut file, limit).map_err(|error| crate::HostError::Io(error.to_string()))?;
-        let text = std::str::from_utf8(&bytes)
-            .map_err(|_| crate::HostError::Io(io::Error::from(io::ErrorKind::InvalidData).to_string()))?;
+        let bytes = legacy_bytes(&mut file, limit)
+            .map_err(|error| crate::HostError::Io(error.to_string()))?;
+        let text = std::str::from_utf8(&bytes).map_err(|_| {
+            crate::HostError::Io(io::Error::from(io::ErrorKind::InvalidData).to_string())
+        })?;
         file.validate_current()
             .map_err(|error| crate::HostError::Io(error.to_string()))?;
         let result = consume(text);

@@ -1,8 +1,8 @@
 //! Reported NLP fragments become Proposed premises, never verified propositions.
 //! Registration pins and source checks establish structural correspondence only.
 #![forbid(unsafe_code)]
-pub mod worker;
 pub mod media;
+pub mod worker;
 use lc631_analysis::{DependencySentence, LanguageObservation};
 use lc631_core::context::{
     ContextAdmission, ContextConsumer, ContextDelta, ContextError, ContextPremise, ContextRevision,

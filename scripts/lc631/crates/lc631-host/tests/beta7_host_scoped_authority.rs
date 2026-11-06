@@ -5,7 +5,9 @@ use lc631_core::{
     stable_sha256, Action, ArtifactId, AuthorityRevision, DeonticPolarity, ExecutionPermit,
     SourceSpan, TurnId,
 };
-use lc631_host::{host_seed_scoped_payload_digest, HostError, HostReceiptContext, HostSeedEnvelope};
+use lc631_host::{
+    host_seed_scoped_payload_digest, HostError, HostReceiptContext, HostSeedEnvelope,
+};
 use lc631_receipt_kernel::{ReceiptClass, ReceiptScope, ReplayGuard, SubjectRevision};
 use std::fs;
 use std::path::PathBuf;
@@ -18,9 +20,14 @@ const TURN: TurnId = TurnId(9);
 
 fn fixture_root() -> PathBuf {
     static SERIAL: AtomicU64 = AtomicU64::new(0);
-    let time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+    let time = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
     let root = std::env::temp_dir().canonicalize().unwrap().join(format!(
-        "beta7-host-scope-{}-{time}-{}", std::process::id(), SERIAL.fetch_add(1, Ordering::Relaxed),
+        "beta7-host-scope-{}-{time}-{}",
+        std::process::id(),
+        SERIAL.fetch_add(1, Ordering::Relaxed),
     ));
     fs::create_dir(&root).unwrap();
     root
@@ -35,17 +42,30 @@ fn local_host() -> HostReceiptContext {
 
 fn scoped_seed(host: &HostReceiptContext, text: &str) -> HostSeedEnvelope {
     let whole = SourceSpan::checked(text, 0, text.len()).unwrap();
-    let wire = host.issuer().issue(
-        ReceiptClass::HostSeed,
-        SubjectRevision::checked(stable_sha256(text)).unwrap(),
-        ReceiptScope::checked(format!("host/user-span/7/9/{}", stable_sha256(SCOPE))).unwrap(),
-        host_seed_scoped_payload_digest(ARTIFACT, TURN, text, whole, SCOPE),
-        100, Some(200), None,
-    ).unwrap();
+    let wire = host
+        .issuer()
+        .issue(
+            ReceiptClass::HostSeed,
+            SubjectRevision::checked(stable_sha256(text)).unwrap(),
+            ReceiptScope::checked(format!("host/user-span/7/9/{}", stable_sha256(SCOPE))).unwrap(),
+            host_seed_scoped_payload_digest(ARTIFACT, TURN, text, whole, SCOPE),
+            100,
+            Some(200),
+            None,
+        )
+        .unwrap();
     HostSeedEnvelope::verify_attested_scoped(
-        ARTIFACT, TURN, text.into(), whole, SCOPE.into(), wire,
-        host.verifier(), &mut ReplayGuard::default(), 100,
-    ).unwrap()
+        ARTIFACT,
+        TURN,
+        text.into(),
+        whole,
+        SCOPE.into(),
+        wire,
+        host.verifier(),
+        &mut ReplayGuard::default(),
+        100,
+    )
+    .unwrap()
 }
 
 fn span(text: &str, excerpt: &str) -> SourceSpan {
@@ -53,12 +73,22 @@ fn span(text: &str, excerpt: &str) -> SourceSpan {
     SourceSpan::checked(text, start, start + excerpt.len()).unwrap()
 }
 
-fn issue(host: &HostReceiptContext, seed: &HostSeedEnvelope, selected: SourceSpan)
-    -> Result<ExecutionPermit, HostError>
-{
+fn issue(
+    host: &HostReceiptContext,
+    seed: &HostSeedEnvelope,
+    selected: SourceSpan,
+) -> Result<ExecutionPermit, HostError> {
     host.issue_execution_permit(
-        seed, Action::Edit, DeonticPolarity::Grant, selected, SCOPE.into(),
-        AuthorityRevision(4), 120, 150, 0, &mut ReplayGuard::default(),
+        seed,
+        Action::Edit,
+        DeonticPolarity::Grant,
+        selected,
+        SCOPE.into(),
+        AuthorityRevision(4),
+        120,
+        150,
+        0,
+        &mut ReplayGuard::default(),
     )
 }
 

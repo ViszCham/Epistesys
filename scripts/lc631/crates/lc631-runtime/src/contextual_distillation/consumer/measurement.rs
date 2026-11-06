@@ -6,8 +6,10 @@
 use super::{check_binding, DependencyPath, NextRelationQuery, RelationConsumerHold};
 use crate::{joint_selection::*, structural_gain_measurement as structural};
 use lc631_substrate::{
-    resource::{ResourceAmount, ResourceClaim, ResourceError, ResourceKind, ResourceRequest,
-        ResourceReservationView},
+    resource::{
+        ResourceAmount, ResourceClaim, ResourceError, ResourceKind, ResourceRequest,
+        ResourceReservationView,
+    },
     source::SourceStore,
 };
 
@@ -47,7 +49,9 @@ pub fn project_relation_graph<'input, 'view>(
     source: &'input SourceStore,
     resources: &'view ResourceReservationView<'_>,
 ) -> Result<RelationGraphSnapshot<'input, 'view>, RelationMeasurementError> {
-    resources.check().map_err(RelationMeasurementError::Resource)?;
+    resources
+        .check()
+        .map_err(RelationMeasurementError::Resource)?;
     let request = path.request();
     if source.id().digest() != request.context.source().digest()
         || resources.source_revision() != source.id().digest()
@@ -55,22 +59,33 @@ pub fn project_relation_graph<'input, 'view>(
         return Err(RelationMeasurementError::SourceMismatch);
     }
     check_binding(path.checked.state, request).map_err(RelationMeasurementError::Relation)?;
-    let retained = resources.claim_resources(&[ResourceRequest::new(
-        ResourceKind::Ram,
-        ResourceAmount::checked(RELATION_SNAPSHOT_RAM)
-            .map_err(RelationMeasurementError::Resource)?,
-    )]).map_err(RelationMeasurementError::Resource)?;
+    let retained = resources
+        .claim_resources(&[ResourceRequest::new(
+            ResourceKind::Ram,
+            ResourceAmount::checked(RELATION_SNAPSHOT_RAM)
+                .map_err(RelationMeasurementError::Resource)?,
+        )])
+        .map_err(RelationMeasurementError::Resource)?;
     let relations = path.checked.state.relations();
     let mut edges = Vec::new();
-    edges.try_reserve_exact(relations.len()).map_err(|_| RelationMeasurementError::AllocationFailed)?;
+    edges
+        .try_reserve_exact(relations.len())
+        .map_err(|_| RelationMeasurementError::AllocationFailed)?;
     if edges.capacity() > relations.len() {
         return Err(RelationMeasurementError::AllocationFailed);
     }
-    edges.extend(relations.iter().map(|relation| structural::Edge(
-        structural::Vertex(u16::from(relation.from.0)),
-        structural::Vertex(u16::from(relation.to.0)),
-    )));
-    let snapshot = RelationGraphSnapshot { edges, path, source, retained };
+    edges.extend(relations.iter().map(|relation| {
+        structural::Edge(
+            structural::Vertex(u16::from(relation.from.0)),
+            structural::Vertex(u16::from(relation.to.0)),
+        )
+    }));
+    let snapshot = RelationGraphSnapshot {
+        edges,
+        path,
+        source,
+        retained,
+    };
     snapshot.check_current(resources)?;
     // Also run the existing graph's canonical order/domain/source checks.
     snapshot.graph_current(resources)?;
@@ -78,9 +93,13 @@ pub fn project_relation_graph<'input, 'view>(
 }
 
 impl RelationGraphSnapshot<'_, '_> {
-    pub const fn path(&self) -> &DependencyPath<'_> { &self.path }
+    pub const fn path(&self) -> &DependencyPath<'_> {
+        &self.path
+    }
 
-    pub const fn request(&self) -> NextRelationQuery { self.path.request() }
+    pub const fn request(&self) -> NextRelationQuery {
+        self.path.request()
+    }
 
     pub fn graph_current(
         &self,
@@ -92,8 +111,11 @@ impl RelationGraphSnapshot<'_, '_> {
             self.request().context,
             u16::from(self.path.checked.state.basis().node_count()),
             &self.edges,
-        ).map_err(RelationMeasurementError::Structural)?;
-        self.retained.check().map_err(RelationMeasurementError::Resource)?;
+        )
+        .map_err(RelationMeasurementError::Structural)?;
+        self.retained
+            .check()
+            .map_err(RelationMeasurementError::Resource)?;
         Ok(graph)
     }
 
@@ -101,8 +123,12 @@ impl RelationGraphSnapshot<'_, '_> {
         &self,
         resources: &ResourceReservationView<'_>,
     ) -> Result<(), RelationMeasurementError> {
-        resources.check().map_err(RelationMeasurementError::Resource)?;
-        self.retained.check().map_err(RelationMeasurementError::Resource)?;
+        resources
+            .check()
+            .map_err(RelationMeasurementError::Resource)?;
+        self.retained
+            .check()
+            .map_err(RelationMeasurementError::Resource)?;
         if !self.retained.same_reservation(resources) {
             return Err(RelationMeasurementError::ForeignReservation);
         }
@@ -130,11 +156,21 @@ impl RelationSelection<'_, '_, '_, '_> {
         &self,
         resources: &ResourceReservationView<'_>,
     ) -> Result<&JointSelectionReport<'_, '_>, RelationMeasurementError> {
-        let report = self.selected.report_current(resources)
+        let report = self
+            .selected
+            .report_current(resources)
             .map_err(RelationMeasurementError::Structural)?;
-        let row = report.candidates.get(self.materialized_row)
+        let row = report
+            .candidates
+            .get(self.materialized_row)
             .ok_or(RelationMeasurementError::BindingMismatch)?;
-        check_target(self.snapshot, report.pins, row, self.materialized_owner, resources)?;
+        check_target(
+            self.snapshot,
+            report.pins,
+            row,
+            self.materialized_owner,
+            resources,
+        )?;
         Ok(report)
     }
 }
@@ -152,14 +188,24 @@ pub fn select_relation_current<'a, 'state, 'input, 'view>(
     coverage: SearchCoverage,
     resources: &'view ResourceReservationView<'_>,
 ) -> Result<RelationSelection<'a, 'state, 'input, 'view>, RelationMeasurementError> {
-    let row = rows.get(materialized_row).ok_or(RelationMeasurementError::BindingMismatch)?;
-    let owner = owners.iter().find(|binding| binding.row == materialized_row)
-        .ok_or(RelationMeasurementError::BindingMismatch)?.owner;
+    let row = rows
+        .get(materialized_row)
+        .ok_or(RelationMeasurementError::BindingMismatch)?;
+    let owner = owners
+        .iter()
+        .find(|binding| binding.row == materialized_row)
+        .ok_or(RelationMeasurementError::BindingMismatch)?
+        .owner;
     check_target(snapshot, policy.pins, row, owner, resources)?;
     let selected = structural::select_current(policy, rows, owners, coverage, resources)
         .map_err(RelationMeasurementError::Structural)?;
     check_target(snapshot, policy.pins, row, owner, resources)?;
-    Ok(RelationSelection { snapshot, materialized_row, materialized_owner: owner, selected })
+    Ok(RelationSelection {
+        snapshot,
+        materialized_row,
+        materialized_owner: owner,
+        selected,
+    })
 }
 
 fn check_target(
@@ -171,7 +217,9 @@ fn check_target(
 ) -> Result<(), RelationMeasurementError> {
     let graph = snapshot.graph_current(resources)?;
     let request = snapshot.request();
-    let actual = owner.report_current(resources).map_err(RelationMeasurementError::Structural)?;
+    let actual = owner
+        .report_current(resources)
+        .map_err(RelationMeasurementError::Structural)?;
     if pins.source != request.context.source()
         || pins.scope != request.scope
         || row.context != request.context

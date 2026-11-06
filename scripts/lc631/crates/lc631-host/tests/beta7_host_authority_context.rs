@@ -26,9 +26,13 @@ const KEY_NAME: &str = "receipt-root-v1.key";
 
 fn outer() -> PathBuf {
     static SERIAL: AtomicU64 = AtomicU64::new(0);
-    let stamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+    let stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
     let root = std::env::temp_dir().canonicalize().unwrap().join(format!(
-        "beta7-host-context-{}-{stamp}-{}", std::process::id(),
+        "beta7-host-context-{}-{stamp}-{}",
+        std::process::id(),
         SERIAL.fetch_add(1, Ordering::Relaxed),
     ));
     fs::create_dir(&root).unwrap();
@@ -56,72 +60,144 @@ fn part(raw: &str, excerpt: &str) -> SourceSpan {
 }
 
 fn seed(host: &HostReceiptContext, raw: &str, attested: SourceSpan) -> HostSeedEnvelope {
-    let wire = host.issuer().issue(
-        ReceiptClass::HostSeed,
-        SubjectRevision::checked(stable_sha256(raw)).unwrap(),
-        ReceiptScope::checked(format!("host/user-span/31/8/{}", stable_sha256(SCOPE))).unwrap(),
-        host_seed_scoped_payload_digest(ARTIFACT, TURN, raw, attested, SCOPE),
-        100, Some(200), None,
-    ).unwrap();
+    let wire = host
+        .issuer()
+        .issue(
+            ReceiptClass::HostSeed,
+            SubjectRevision::checked(stable_sha256(raw)).unwrap(),
+            ReceiptScope::checked(format!("host/user-span/31/8/{}", stable_sha256(SCOPE))).unwrap(),
+            host_seed_scoped_payload_digest(ARTIFACT, TURN, raw, attested, SCOPE),
+            100,
+            Some(200),
+            None,
+        )
+        .unwrap();
     HostSeedEnvelope::verify_attested_scoped(
-        ARTIFACT, TURN, raw.into(), attested, SCOPE.into(), wire, host.verifier(),
-        &mut ReplayGuard::default(), 100,
-    ).unwrap()
+        ARTIFACT,
+        TURN,
+        raw.into(),
+        attested,
+        SCOPE.into(),
+        wire,
+        host.verifier(),
+        &mut ReplayGuard::default(),
+        100,
+    )
+    .unwrap()
 }
 
 fn issue(
-    host: &HostReceiptContext, seed: &HostSeedEnvelope, requested: SourceSpan,
-    scope: &str, now: u64, expires: u64,
+    host: &HostReceiptContext,
+    seed: &HostSeedEnvelope,
+    requested: SourceSpan,
+    scope: &str,
+    now: u64,
+    expires: u64,
 ) -> Result<ExecutionPermit, HostError> {
     host.issue_execution_permit(
-        seed, Action::Test, DeonticPolarity::Grant, requested, scope.into(), AuthorityRevision(2),
-        now, expires, 0, &mut ReplayGuard::default(),
+        seed,
+        Action::Test,
+        DeonticPolarity::Grant,
+        requested,
+        scope.into(),
+        AuthorityRevision(2),
+        now,
+        expires,
+        0,
+        &mut ReplayGuard::default(),
     )
 }
 
 fn assert_valid(host: &HostReceiptContext, seed: &HostSeedEnvelope, permit: &ExecutionPermit) {
     let source = stable_sha256(&seed.raw_user_message);
-    assert_eq!(host.validate_execution_permit(seed, &ExecutionPermitValidationRequest {
-        permit, action: Action::Test, scope: SCOPE, source_revision: &source,
-        authority_revision: AuthorityRevision(2), now_epoch: 130,
-        revocation_revision: 0, revoked_permit_digests: &[],
-    }), PermitValidation::ValidGrant);
+    assert_eq!(
+        host.validate_execution_permit(
+            seed,
+            &ExecutionPermitValidationRequest {
+                permit,
+                action: Action::Test,
+                scope: SCOPE,
+                source_revision: &source,
+                authority_revision: AuthorityRevision(2),
+                now_epoch: 130,
+                revocation_revision: 0,
+                revoked_permit_digests: &[],
+            }
+        ),
+        PermitValidation::ValidGrant
+    );
 }
 
 fn event(selected: SourceSpan) -> AuthorityEvent {
     AuthorityEvent {
-        action: Action::Test, source: AuthoritySourceKind::VerifiedHostUserSpan,
-        polarity: DeonticPolarity::Grant, span: selected, scope: SCOPE.into(),
+        action: Action::Test,
+        source: AuthoritySourceKind::VerifiedHostUserSpan,
+        polarity: DeonticPolarity::Grant,
+        span: selected,
+        scope: SCOPE.into(),
     }
 }
 
 fn signed_authority(
-    host: &HostReceiptContext, seed: &HostSeedEnvelope, event: &AuthorityEvent,
-    parent: Option<String>, expiry: u64,
+    host: &HostReceiptContext,
+    seed: &HostSeedEnvelope,
+    event: &AuthorityEvent,
+    parent: Option<String>,
+    expiry: u64,
 ) -> UntrustedReceipt {
-    host.issuer().issue(
-        ReceiptClass::Authority, SubjectRevision::checked(stable_sha256(&seed.raw_user_message)).unwrap(),
-        ReceiptScope::checked("authority/test/fixture/tests").unwrap(),
-        authority_event_payload_digest(event), 110, Some(expiry), parent,
-    ).unwrap()
+    host.issuer()
+        .issue(
+            ReceiptClass::Authority,
+            SubjectRevision::checked(stable_sha256(&seed.raw_user_message)).unwrap(),
+            ReceiptScope::checked("authority/test/fixture/tests").unwrap(),
+            authority_event_payload_digest(event),
+            110,
+            Some(expiry),
+            parent,
+        )
+        .unwrap()
 }
 
 fn admit(
-    host: &HostReceiptContext, seed: &HostSeedEnvelope, selected: SourceSpan,
-    signed: UntrustedReceipt, replay: &mut ReplayGuard,
+    host: &HostReceiptContext,
+    seed: &HostSeedEnvelope,
+    selected: SourceSpan,
+    signed: UntrustedReceipt,
+    replay: &mut ReplayGuard,
 ) -> Result<ExecutionPermit, HostError> {
-    host.admit_execution_permit(seed, HostExecutionPermitAdmission {
-        action: Action::Test, scope: SCOPE.into(), span: selected, authority_revision: AuthorityRevision(2),
-        revocation_revision: 0, now_epoch: 120, attestation: signed,
-    }, replay)
+    host.admit_execution_permit(
+        seed,
+        HostExecutionPermitAdmission {
+            action: Action::Test,
+            scope: SCOPE.into(),
+            span: selected,
+            authority_revision: AuthorityRevision(2),
+            revocation_revision: 0,
+            now_epoch: 120,
+            attestation: signed,
+        },
+        replay,
+    )
 }
 
 const EXCLUSIONS: [(&str, &str); 5] = [
     ("Do not test the project.", "test the project"),
-    ("If approved, please test the project.", "please test the project"),
-    ("Please test the project only if approved.", "Please test the project"),
-    ("The note reads ‘please test the project’.", "please test the project"),
-    ("例として「テストしてください」と入力します。", "テストしてください"),
+    (
+        "If approved, please test the project.",
+        "please test the project",
+    ),
+    (
+        "Please test the project only if approved.",
+        "Please test the project",
+    ),
+    (
+        "The note reads ‘please test the project’.",
+        "please test the project",
+    ),
+    (
+        "例として「テストしてください」と入力します。",
+        "テストしてください",
+    ),
 ];
 
 #[test]
@@ -132,11 +208,19 @@ fn beta7_host_local_issuance_checks_full_raw_clause_even_with_clipped_attested_s
         let selected = part(raw, excerpt);
         for attested in [whole(raw), selected] {
             let bound = seed(&host, raw, attested);
-            outcomes.push((raw, attested, issue(&host, &bound, selected, SCOPE, 120, 150)));
+            outcomes.push((
+                raw,
+                attested,
+                issue(&host, &bound, selected, SCOPE, 120, 150),
+            ));
         }
     }
     for (raw, attested, result) in outcomes {
-        assert_eq!(result, Err(HostError::AuthoritySourceIneligible), "{raw}, attested={attested:?}");
+        assert_eq!(
+            result,
+            Err(HostError::AuthoritySourceIneligible),
+            "{raw}, attested={attested:?}"
+        );
     }
 }
 
@@ -172,15 +256,28 @@ fn beta7_host_external_signed_event_cannot_strip_the_same_negation_condition_or_
         let selected = part(raw, excerpt);
         for attested in [whole(raw), selected] {
             let bound = seed(&host, raw, attested);
-            let wire = signed_authority(&host, &bound, &event(selected), bound.host_receipt_digest.clone(), 150);
+            let wire = signed_authority(
+                &host,
+                &bound,
+                &event(selected),
+                bound.host_receipt_digest.clone(),
+                150,
+            );
             let mut replay = ReplayGuard::default();
             let result = admit(&host, &bound, selected, wire, &mut replay);
             outcomes.push((raw, attested, result, replay.observed_count()));
         }
     }
     for (raw, attested, result, consumed) in outcomes {
-        assert_eq!(result, Err(HostError::AuthoritySourceIneligible), "{raw}, attested={attested:?}");
-        assert_eq!(consumed, 0, "ineligible source must reject before receipt consumption");
+        assert_eq!(
+            result,
+            Err(HostError::AuthoritySourceIneligible),
+            "{raw}, attested={attested:?}"
+        );
+        assert_eq!(
+            consumed, 0,
+            "ineligible source must reject before receipt consumption"
+        );
     }
 }
 
@@ -189,21 +286,59 @@ fn beta7_host_neutral_prose_requires_external_authority_and_accepts_its_exact_bi
     let host = local_host();
     let raw = "The verification stage is ready.";
     let bound = seed(&host, raw, whole(raw));
-    assert_eq!(issue(&host, &bound, whole(raw), SCOPE, 120, 150), Err(HostError::AuthoritySourceIneligible));
+    assert_eq!(
+        issue(&host, &bound, whole(raw), SCOPE, 120, 150),
+        Err(HostError::AuthoritySourceIneligible)
+    );
 
     let declared = event(whole(raw));
-    let wire = signed_authority(&host, &bound, &declared, bound.host_receipt_digest.clone(), 150);
+    let wire = signed_authority(
+        &host,
+        &bound,
+        &declared,
+        bound.host_receipt_digest.clone(),
+        150,
+    );
     let mut replay = ReplayGuard::default();
     let permit = admit(&host, &bound, whole(raw), wire.clone(), &mut replay).unwrap();
     assert_valid(&host, &bound, &permit);
     assert_eq!(permit.source_span(), whole(raw));
-    assert_eq!(admit(&host, &bound, whole(raw), wire, &mut replay), Err(HostError::ReceiptReplay));
+    assert_eq!(
+        admit(&host, &bound, whole(raw), wire, &mut replay),
+        Err(HostError::ReceiptReplay)
+    );
     assert_eq!(replay.observed_count(), 1);
 
-    let wrong = signed_authority(&host, &bound, &declared, Some(stable_sha256("another parent")), 150);
-    assert!(admit(&host, &bound, whole(raw), wrong, &mut ReplayGuard::default()).is_err());
-    let expired = signed_authority(&host, &bound, &declared, bound.host_receipt_digest.clone(), 120);
-    assert!(admit(&host, &bound, whole(raw), expired, &mut ReplayGuard::default()).is_err());
+    let wrong = signed_authority(
+        &host,
+        &bound,
+        &declared,
+        Some(stable_sha256("another parent")),
+        150,
+    );
+    assert!(admit(
+        &host,
+        &bound,
+        whole(raw),
+        wrong,
+        &mut ReplayGuard::default()
+    )
+    .is_err());
+    let expired = signed_authority(
+        &host,
+        &bound,
+        &declared,
+        bound.host_receipt_digest.clone(),
+        120,
+    );
+    assert!(admit(
+        &host,
+        &bound,
+        whole(raw),
+        expired,
+        &mut ReplayGuard::default()
+    )
+    .is_err());
 }
 
 #[test]
@@ -212,11 +347,23 @@ fn beta7_host_modified_scope_expiry_and_self_attestation_keep_existing_rejection
     let raw = "Please test the project.";
     let selected = whole(raw);
     let bound = seed(&host, raw, selected);
-    assert_eq!(issue(&host, &bound, selected, "fixture", 120, 150), Err(HostError::AuthorityScopeMismatch));
-    assert_eq!(issue(&host, &bound, selected, SCOPE, 200, 205), Err(HostError::HostSeedUnbound));
-    assert_eq!(issue(&host, &bound, selected, SCOPE, 120, 201), Err(HostError::AuthorityPermitRejected));
+    assert_eq!(
+        issue(&host, &bound, selected, "fixture", 120, 150),
+        Err(HostError::AuthorityScopeMismatch)
+    );
+    assert_eq!(
+        issue(&host, &bound, selected, SCOPE, 200, 205),
+        Err(HostError::HostSeedUnbound)
+    );
+    assert_eq!(
+        issue(&host, &bound, selected, SCOPE, 120, 201),
+        Err(HostError::AuthorityPermitRejected)
+    );
     let self_report = HostSeedEnvelope::self_attested(ARTIFACT, TURN, raw.into());
-    assert_eq!(issue(&host, &self_report, selected, SCOPE, 120, 150), Err(HostError::HostSeedUnbound));
+    assert_eq!(
+        issue(&host, &self_report, selected, SCOPE, 120, 150),
+        Err(HostError::HostSeedUnbound)
+    );
 }
 
 #[test]
@@ -228,22 +375,48 @@ fn beta7_host_validator_rechecks_contradicted_context_on_a_preexisting_signed_pe
     let declared = event(selected);
     let parent = bound.host_receipt_digest.as_deref().unwrap();
     let receipt = signed_authority(&host, &bound, &declared, Some(parent.into()), 150);
-    let verified = host.verifier().verify(receipt, &ReceiptPolicy::exact(
-        ReceiptClass::Authority, SubjectRevision::checked(stable_sha256(raw)).unwrap(),
-        ReceiptScope::checked("authority/test/fixture/tests").unwrap(),
-        authority_event_payload_digest(&declared), 120,
-    ).with_parent(parent), &mut ReplayGuard::default()).unwrap();
+    let verified = host
+        .verifier()
+        .verify(
+            receipt,
+            &ReceiptPolicy::exact(
+                ReceiptClass::Authority,
+                SubjectRevision::checked(stable_sha256(raw)).unwrap(),
+                ReceiptScope::checked("authority/test/fixture/tests").unwrap(),
+                authority_event_payload_digest(&declared),
+                120,
+            )
+            .with_parent(parent),
+            &mut ReplayGuard::default(),
+        )
+        .unwrap();
     let already_issued = ExecutionPermit::from_verified_user_event(
-        VerifiedAuthorityEvent::checked(declared, verified).unwrap(), raw, AuthorityRevision(2),
-        120, 150, 0,
-    ).unwrap();
+        VerifiedAuthorityEvent::checked(declared, verified).unwrap(),
+        raw,
+        AuthorityRevision(2),
+        120,
+        150,
+        0,
+    )
+    .unwrap();
     let revision = stable_sha256(raw);
-    let validation = host.validate_execution_permit(&bound, &ExecutionPermitValidationRequest {
-        permit: &already_issued, action: Action::Test, scope: SCOPE, source_revision: &revision,
-        authority_revision: AuthorityRevision(2), now_epoch: 130, revocation_revision: 0,
-        revoked_permit_digests: &[],
-    });
-    assert!(matches!(validation, PermitValidation::Rejected(_)), "{validation:?}");
+    let validation = host.validate_execution_permit(
+        &bound,
+        &ExecutionPermitValidationRequest {
+            permit: &already_issued,
+            action: Action::Test,
+            scope: SCOPE,
+            source_revision: &revision,
+            authority_revision: AuthorityRevision(2),
+            now_epoch: 130,
+            revocation_revision: 0,
+            revoked_permit_digests: &[],
+        },
+    );
+    assert!(
+        matches!(validation, PermitValidation::Rejected(_)),
+        "{validation:?}"
+    );
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -261,8 +434,12 @@ fn key_open(mode: KeyOpen, root: &Path) -> Result<HostReceiptContext, HostError>
         KeyOpen::ExistingOwned | KeyOpen::CreateOwned => {
             let lease = bounded_test_lease(81).unwrap();
             let result = match mode {
-                KeyOpen::ExistingOwned => HostReceiptContext::load_existing_with_resources(root, &lease.view()),
-                KeyOpen::CreateOwned => HostReceiptContext::load_or_create_with_resources(root, &lease.view()),
+                KeyOpen::ExistingOwned => {
+                    HostReceiptContext::load_existing_with_resources(root, &lease.view())
+                }
+                KeyOpen::CreateOwned => {
+                    HostReceiptContext::load_or_create_with_resources(root, &lease.view())
+                }
                 _ => unreachable!(),
             };
             lease.close_confirmed().unwrap();
@@ -271,7 +448,10 @@ fn key_open(mode: KeyOpen, root: &Path) -> Result<HostReceiptContext, HostError>
     }
 }
 const KEY_ENTRIES: [KeyOpen; 4] = [
-    KeyOpen::ExistingOwned, KeyOpen::CreateOwned, KeyOpen::Existing, KeyOpen::Create,
+    KeyOpen::ExistingOwned,
+    KeyOpen::CreateOwned,
+    KeyOpen::Existing,
+    KeyOpen::Create,
 ];
 
 #[test]
@@ -283,13 +463,19 @@ fn beta7_host_existing_and_creating_key_entries_reject_a_second_hardlink_name() 
         fs::create_dir(&root).unwrap();
         let key = root.join(KEY_NAME);
         synthetic_key(&key);
-        assert!(key_open(mode, &root).is_ok(), "{mode:?} ordinary synthetic control failed");
+        assert!(
+            key_open(mode, &root).is_ok(),
+            "{mode:?} ordinary synthetic control failed"
+        );
         fs::hard_link(&key, p.join("fixture-alias")).unwrap();
         if key_open(mode, &root).is_ok() {
             failures.push(mode);
         }
     }
-    assert!(failures.is_empty(), "entries accepted a hardlinked key: {failures:?}");
+    assert!(
+        failures.is_empty(),
+        "entries accepted a hardlinked key: {failures:?}"
+    );
 }
 
 #[cfg(unix)]
@@ -305,16 +491,26 @@ fn alias_parent(p: &Path) {
     let root = p.canonicalize().unwrap();
     let link = root.join("alias");
     let sibling = root.join("sibling");
-    assert_eq!(link.parent().unwrap().canonicalize().unwrap(), link.parent().unwrap());
+    assert_eq!(
+        link.parent().unwrap().canonicalize().unwrap(),
+        link.parent().unwrap()
+    );
     assert_eq!(sibling.canonicalize().unwrap(), sibling);
-    assert!(matches!(fs::symlink_metadata(&link), Err(e) if e.kind() == std::io::ErrorKind::NotFound));
+    assert!(
+        matches!(fs::symlink_metadata(&link), Err(e) if e.kind() == std::io::ErrorKind::NotFound)
+    );
     let operand = |path: &Path| {
         assert!(path.is_absolute() && path.starts_with(&root));
-        assert!(matches!(path.components().next(), Some(Component::Prefix(prefix))
-            if matches!(prefix.kind(), Prefix::Disk(_) | Prefix::VerbatimDisk(_))));
+        assert!(
+            matches!(path.components().next(), Some(Component::Prefix(prefix))
+            if matches!(prefix.kind(), Prefix::Disk(_) | Prefix::VerbatimDisk(_)))
+        );
         let absolute = path.to_str().expect("fixture path must be Unicode");
         let dos = absolute.strip_prefix(r"\\?\").unwrap_or(absolute);
-        assert!(!dos.contains(['[', ']', '*', '?', '\x60']), "fixture path contains a wildcard");
+        assert!(
+            !dos.contains(['[', ']', '*', '?', '\x60']),
+            "fixture path contains a wildcard"
+        );
         dos.to_owned()
     };
     let powershell = PathBuf::from(std::env::var_os("SystemRoot").unwrap())
@@ -328,7 +524,10 @@ fn alias_parent(p: &Path) {
         .env("BETA7_JUNCTION_SIBLING", operand(&sibling))
         .creation_flags(0x08000000) // CREATE_NO_WINDOW
         .status().unwrap();
-    assert!(status.success(), "test fixture could not create its directory junction");
+    assert!(
+        status.success(),
+        "test fixture could not create its directory junction"
+    );
 }
 
 #[cfg(any(unix, windows))]
@@ -340,17 +539,26 @@ fn beta7_host_key_parent_alias_cannot_load_or_create_in_the_sibling() {
         let sibling = p.join("sibling");
         fs::create_dir(&sibling).unwrap();
         alias_parent(&p);
-        assert_eq!(p.join("alias").canonicalize().unwrap(), sibling.canonicalize().unwrap());
+        assert_eq!(
+            p.join("alias").canonicalize().unwrap(),
+            sibling.canonicalize().unwrap()
+        );
         let store = sibling.join("keys");
         let existing = matches!(mode, KeyOpen::Existing | KeyOpen::ExistingOwned);
         if existing {
             fs::create_dir(&store).unwrap();
             synthetic_key(&store.join(KEY_NAME));
-            assert!(key_open(mode, &store).is_ok(), "{mode:?} ordinary control failed");
+            assert!(
+                key_open(mode, &store).is_ok(),
+                "{mode:?} ordinary control failed"
+            );
         }
         let accepted = key_open(mode, &p.join("alias/keys")).is_ok();
         let named_entries = if store.exists() {
-            fs::read_dir(&store).unwrap().map(|e| e.unwrap().file_name()).collect::<Vec<_>>()
+            fs::read_dir(&store)
+                .unwrap()
+                .map(|e| e.unwrap().file_name())
+                .collect::<Vec<_>>()
         } else {
             Vec::new()
         };
@@ -363,7 +571,10 @@ fn beta7_host_key_parent_alias_cannot_load_or_create_in_the_sibling() {
             failures.push((mode, accepted, changed));
         }
     }
-    assert!(failures.is_empty(), "alias was accepted or mutated its sibling: {failures:?}");
+    assert!(
+        failures.is_empty(),
+        "alias was accepted or mutated its sibling: {failures:?}"
+    );
 }
 
 #[test]
@@ -371,7 +582,10 @@ fn beta7_host_linked_governing_text_cannot_disappear_before_context_veto() {
     let host = local_host();
     let mut outcomes = Vec::new();
     for (raw, excerpt) in [
-        ("[Do not](https://example.invalid) test the project.", "test the project"),
+        (
+            "[Do not](https://example.invalid) test the project.",
+            "test the project",
+        ),
         (
             "Please test the project [only if approved](https://example.invalid).",
             "Please test the project",
@@ -382,25 +596,55 @@ fn beta7_host_linked_governing_text_cannot_disappear_before_context_veto() {
             let bound = seed(&host, raw, attested);
             let mut local_replay = ReplayGuard::default();
             let local = host.issue_execution_permit(
-                &bound, Action::Test, DeonticPolarity::Grant, selected, SCOPE.into(),
-                AuthorityRevision(2), 120, 150, 0, &mut local_replay,
+                &bound,
+                Action::Test,
+                DeonticPolarity::Grant,
+                selected,
+                SCOPE.into(),
+                AuthorityRevision(2),
+                120,
+                150,
+                0,
+                &mut local_replay,
             );
             let wire = signed_authority(
-                &host, &bound, &event(selected), bound.host_receipt_digest.clone(), 150,
+                &host,
+                &bound,
+                &event(selected),
+                bound.host_receipt_digest.clone(),
+                150,
             );
             let mut external_replay = ReplayGuard::default();
             let external = admit(&host, &bound, selected, wire, &mut external_replay);
             outcomes.push((
-                raw, attested, local, local_replay.observed_count(),
-                external, external_replay.observed_count(),
+                raw,
+                attested,
+                local,
+                local_replay.observed_count(),
+                external,
+                external_replay.observed_count(),
             ));
         }
     }
     for (raw, attested, local, local_consumed, external, external_consumed) in outcomes {
-        assert_eq!(local, Err(HostError::AuthoritySourceIneligible), "local: {raw}, attested={attested:?}");
-        assert_eq!(local_consumed, 0, "local context rejection consumed a receipt: {raw}");
-        assert_eq!(external, Err(HostError::AuthoritySourceIneligible), "external: {raw}, attested={attested:?}");
-        assert_eq!(external_consumed, 0, "external context rejection consumed a receipt: {raw}");
+        assert_eq!(
+            local,
+            Err(HostError::AuthoritySourceIneligible),
+            "local: {raw}, attested={attested:?}"
+        );
+        assert_eq!(
+            local_consumed, 0,
+            "local context rejection consumed a receipt: {raw}"
+        );
+        assert_eq!(
+            external,
+            Err(HostError::AuthoritySourceIneligible),
+            "external: {raw}, attested={attested:?}"
+        );
+        assert_eq!(
+            external_consumed, 0,
+            "external context rejection consumed a receipt: {raw}"
+        );
     }
 }
 
@@ -417,25 +661,55 @@ fn beta7_host_common_abbreviation_cannot_end_a_governing_clause() {
             let bound = seed(&host, raw, attested);
             let mut local_replay = ReplayGuard::default();
             let local = host.issue_execution_permit(
-                &bound, Action::Test, DeonticPolarity::Grant, selected, SCOPE.into(),
-                AuthorityRevision(2), 120, 150, 0, &mut local_replay,
+                &bound,
+                Action::Test,
+                DeonticPolarity::Grant,
+                selected,
+                SCOPE.into(),
+                AuthorityRevision(2),
+                120,
+                150,
+                0,
+                &mut local_replay,
             );
             let wire = signed_authority(
-                &host, &bound, &event(selected), bound.host_receipt_digest.clone(), 150,
+                &host,
+                &bound,
+                &event(selected),
+                bound.host_receipt_digest.clone(),
+                150,
             );
             let mut external_replay = ReplayGuard::default();
             let external = admit(&host, &bound, selected, wire, &mut external_replay);
             outcomes.push((
-                raw, attested, local, local_replay.observed_count(),
-                external, external_replay.observed_count(),
+                raw,
+                attested,
+                local,
+                local_replay.observed_count(),
+                external,
+                external_replay.observed_count(),
             ));
         }
     }
     for (raw, attested, local, local_consumed, external, external_consumed) in outcomes {
-        assert_eq!(local, Err(HostError::AuthoritySourceIneligible), "local: {raw}, attested={attested:?}");
-        assert_eq!(local_consumed, 0, "local context rejection consumed a receipt: {raw}");
-        assert_eq!(external, Err(HostError::AuthoritySourceIneligible), "external: {raw}, attested={attested:?}");
-        assert_eq!(external_consumed, 0, "external context rejection consumed a receipt: {raw}");
+        assert_eq!(
+            local,
+            Err(HostError::AuthoritySourceIneligible),
+            "local: {raw}, attested={attested:?}"
+        );
+        assert_eq!(
+            local_consumed, 0,
+            "local context rejection consumed a receipt: {raw}"
+        );
+        assert_eq!(
+            external,
+            Err(HostError::AuthoritySourceIneligible),
+            "external: {raw}, attested={attested:?}"
+        );
+        assert_eq!(
+            external_consumed, 0,
+            "external context rejection consumed a receipt: {raw}"
+        );
     }
 }
 
@@ -456,27 +730,59 @@ fn beta7_host_excluded_prior_sample_and_path_components_preserve_valid_directive
             let bound = seed(&host, raw, attested);
             let mut local_replay = ReplayGuard::default();
             let local = host.issue_execution_permit(
-                &bound, Action::Test, DeonticPolarity::Grant, selected, SCOPE.into(),
-                AuthorityRevision(2), 120, 150, 0, &mut local_replay,
+                &bound,
+                Action::Test,
+                DeonticPolarity::Grant,
+                selected,
+                SCOPE.into(),
+                AuthorityRevision(2),
+                120,
+                150,
+                0,
+                &mut local_replay,
             );
             let wire = signed_authority(
-                &host, &bound, &event(selected), bound.host_receipt_digest.clone(), 150,
+                &host,
+                &bound,
+                &event(selected),
+                bound.host_receipt_digest.clone(),
+                150,
             );
             let mut external_replay = ReplayGuard::default();
             let external = admit(&host, &bound, selected, wire, &mut external_replay);
             outcomes.push((
-                raw, selected, attested, bound, local, local_replay.observed_count(),
-                external, external_replay.observed_count(),
+                raw,
+                selected,
+                attested,
+                bound,
+                local,
+                local_replay.observed_count(),
+                external,
+                external_replay.observed_count(),
             ));
         }
     }
-    for (raw, selected, attested, bound, local, local_consumed, external, external_consumed) in outcomes {
-        let local = local.unwrap_or_else(|error| panic!("local: {raw}, attested={attested:?}: {error:?}"));
-        let external = external.unwrap_or_else(|error| panic!("external: {raw}, attested={attested:?}: {error:?}"));
-        assert_eq!(local_consumed, 1, "local valid directive did not consume its receipt: {raw}");
-        assert_eq!(external_consumed, 1, "external valid directive did not consume its receipt: {raw}");
+    for (raw, selected, attested, bound, local, local_consumed, external, external_consumed) in
+        outcomes
+    {
+        let local =
+            local.unwrap_or_else(|error| panic!("local: {raw}, attested={attested:?}: {error:?}"));
+        let external = external
+            .unwrap_or_else(|error| panic!("external: {raw}, attested={attested:?}: {error:?}"));
+        assert_eq!(
+            local_consumed, 1,
+            "local valid directive did not consume its receipt: {raw}"
+        );
+        assert_eq!(
+            external_consumed, 1,
+            "external valid directive did not consume its receipt: {raw}"
+        );
         for permit in [&local, &external] {
-            assert_eq!(permit.source_span(), selected, "{raw}, attested={attested:?}");
+            assert_eq!(
+                permit.source_span(),
+                selected,
+                "{raw}, attested={attested:?}"
+            );
             assert_eq!(permit.expires_at_epoch(), 150);
             assert_valid(&host, &bound, permit);
         }

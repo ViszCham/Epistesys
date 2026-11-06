@@ -2,8 +2,8 @@
 
 pub mod binary_checkpoint_resume;
 mod build_profile;
-mod coding_commands;
 pub mod bundle_inspect;
+mod coding_commands;
 pub mod io;
 mod tlcx_checked_tl_command;
 pub mod tlcx_commands;

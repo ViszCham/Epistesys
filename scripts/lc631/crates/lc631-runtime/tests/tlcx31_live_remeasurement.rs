@@ -2,39 +2,96 @@
 //! Signed-binding to actual-file connection; unexecuted tests are not passes.
 #[path = "tlcx32_verified_support/mod.rs"]
 mod fixture;
-use fixture::{root, permit, parse, Inputs, Effects, EmptyValidation, SOURCE};
+use fixture::{parse, permit, root, Effects, EmptyValidation, Inputs, SOURCE};
 use lc631_analysis::*;
 use lc631_core::*;
 use lc631_host::JournalBundleLimits;
 use lc631_receipt_kernel::*;
+use lc631_runtime::contextual_repair::{execution::*, measurement::*};
 use lc631_runtime::{contextual_resume::budget::*, journal::JournalChainLimits, resource::*};
 use lc631_substrate::Digest32;
 use std::time::Duration;
-use lc631_runtime::contextual_repair::{execution::*, measurement::*};
-#[path="../../lc631-analysis/tests/tlcx31_file_repair_fixture/authority.rs"]
+#[path = "../../lc631-analysis/tests/tlcx31_file_repair_fixture/authority.rs"]
 #[allow(dead_code)]
 mod probe_authority;
-const BEFORE:&str=r#"pub fn add(a:u32,b:u32)->Option<u32>{None}
+const BEFORE: &str = r#"pub fn add(a:u32,b:u32)->Option<u32>{None}
 fn main(){use std::io::Read;let mut s=String::new();std::io::stdin().read_to_string(&mut s).unwrap();for line in s.lines(){let v:Vec<u32>=line.split_whitespace().map(|x|x.parse().unwrap()).collect();match add(v[0],v[1]){Some(n)=>println!("some:{n}"),None=>println!("none")}}}
 "#;
-const AFTER:&str=r#"pub fn add(a:u32,b:u32)->Option<u32>{a.checked_add(b)}
+const AFTER: &str = r#"pub fn add(a:u32,b:u32)->Option<u32>{a.checked_add(b)}
 fn main(){use std::io::Read;let mut s=String::new();std::io::stdin().read_to_string(&mut s).unwrap();for line in s.lines(){let v:Vec<u32>=line.split_whitespace().map(|x|x.parse().unwrap()).collect();match add(v[0],v[1]){Some(n)=>println!("some:{n}"),None=>println!("none")}}}
 "#;
-fn clock()->u64 {100}
-fn compile_native(source:&std::path::Path,out:&std::path::Path) {
+fn clock() -> u64 {
+    100
+}
+fn compile_native(source: &std::path::Path, out: &std::path::Path) {
     // Test harness compilation only, not an unpermitted production fallback.
-    let status=std::process::Command::new("rustc").args(["--edition=2021","-Awarnings","-o"]).arg(out).arg(source).status().unwrap();
+    let status = std::process::Command::new("rustc")
+        .args(["--edition=2021", "-Awarnings", "-o"])
+        .arg(out)
+        .arg(source)
+        .status()
+        .unwrap();
     assert!(status.success());
 }
-fn observe<'v>(plan:&CodingProbePlan,snapshot:&DgclExecutionSnapshot,target:&std::path::Path,program:&std::path::Path,issuer:&ReceiptIssuer,verifier:&ReceiptVerifier,resources:&'v ResourceReservationView<'_>)->OwnedCodingProbeObservation<'v> {
-    let executable_digest=probe_authority::file_hash(program);
-    let registration=ProbeToolRegistration{program:program.to_str().unwrap(),executable_digest:&executable_digest,target_path:target,target_ref:"src/lib.rs",snapshot};
-    let receipt=issuer.issue(ReceiptClass::ToolExecution,SubjectRevision::checked(&snapshot.source_revision).unwrap(),ReceiptScope::checked(registration.receipt_scope(plan)).unwrap(),registration.payload_digest(plan),100,Some(400),None).unwrap();
-    let scope=registration.execution_scope(plan);
-    let permission=probe_authority::permit(SOURCE,&scope,issuer,verifier,Action::Test);
-    let authority=ExecutionPermitContext{principal:permission.principal_binding(),action:Action::Test,scope:&scope,source_revision:&snapshot.source_revision,authority_revision:AuthorityRevision(1),now_epoch:100,revocation_revision:0,revoked_permit_digests:&[],caller_origin:CallerOrigin::HostVerifiedUser,trusted_host_fingerprint:verifier.key_fingerprint()};
-    let lease=issue_dgcl_evidence_lease(snapshot,100,300).unwrap();
-    observe_current(plan,ProbeInvocation{source:SOURCE,registration,lease:&lease,tool_receipt:&receipt,tool_verifier:verifier,permit:&permission,authority:&authority,clock,timeout_ms:5000},resources).unwrap()
+fn observe<'v>(
+    plan: &CodingProbePlan,
+    snapshot: &DgclExecutionSnapshot,
+    target: &std::path::Path,
+    program: &std::path::Path,
+    issuer: &ReceiptIssuer,
+    verifier: &ReceiptVerifier,
+    resources: &'v ResourceReservationView<'_>,
+) -> OwnedCodingProbeObservation<'v> {
+    let executable_digest = probe_authority::file_hash(program);
+    let registration = ProbeToolRegistration {
+        program: program.to_str().unwrap(),
+        executable_digest: &executable_digest,
+        target_path: target,
+        target_ref: "src/lib.rs",
+        snapshot,
+    };
+    let receipt = issuer
+        .issue(
+            ReceiptClass::ToolExecution,
+            SubjectRevision::checked(&snapshot.source_revision).unwrap(),
+            ReceiptScope::checked(registration.receipt_scope(plan)).unwrap(),
+            registration.payload_digest(plan),
+            100,
+            Some(400),
+            None,
+        )
+        .unwrap();
+    let scope = registration.execution_scope(plan);
+    let permission = probe_authority::permit(SOURCE, &scope, issuer, verifier, Action::Test);
+    let authority = ExecutionPermitContext {
+        principal: permission.principal_binding(),
+        action: Action::Test,
+        scope: &scope,
+        source_revision: &snapshot.source_revision,
+        authority_revision: AuthorityRevision(1),
+        now_epoch: 100,
+        revocation_revision: 0,
+        revoked_permit_digests: &[],
+        caller_origin: CallerOrigin::HostVerifiedUser,
+        trusted_host_fingerprint: verifier.key_fingerprint(),
+    };
+    let lease = issue_dgcl_evidence_lease(snapshot, 100, 300).unwrap();
+    observe_current(
+        plan,
+        ProbeInvocation {
+            source: SOURCE,
+            registration,
+            lease: &lease,
+            tool_receipt: &receipt,
+            tool_verifier: verifier,
+            permit: &permission,
+            authority: &authority,
+            clock,
+            timeout_ms: 5000,
+        },
+        resources,
+    )
+    .unwrap()
 }
 
 fn exercise(reject_effect: bool) -> (BudgetSummary, String, usize, DgclRepairLoopReport) {
@@ -152,15 +209,22 @@ fn exercise_with_target_swap(
         )
         .unwrap();
     let mut reservation = run
-        .reserve(
-            &[
-                ResourceRequest::new(ResourceKind::Ram,ResourceAmount::checked(64*1024*1024).unwrap()),
-                ResourceRequest::new(ResourceKind::Output,ResourceAmount::checked(64*1024*1024).unwrap()),
-                ResourceRequest::new(ResourceKind::Disk,ResourceAmount::checked(64*1024*1024).unwrap()),
-                ResourceRequest::new(ResourceKind::Child,ResourceAmount::checked(2).unwrap()),
-                ResourceRequest::new(ResourceKind::Cleanup,ResourceAmount::checked(2).unwrap()),
-            ],
-        )
+        .reserve(&[
+            ResourceRequest::new(
+                ResourceKind::Ram,
+                ResourceAmount::checked(64 * 1024 * 1024).unwrap(),
+            ),
+            ResourceRequest::new(
+                ResourceKind::Output,
+                ResourceAmount::checked(64 * 1024 * 1024).unwrap(),
+            ),
+            ResourceRequest::new(
+                ResourceKind::Disk,
+                ResourceAmount::checked(64 * 1024 * 1024).unwrap(),
+            ),
+            ResourceRequest::new(ResourceKind::Child, ResourceAmount::checked(2).unwrap()),
+            ResourceRequest::new(ResourceKind::Cleanup, ResourceAmount::checked(2).unwrap()),
+        ])
         .unwrap();
     let lease = issue_dgcl_evidence_lease(&initial, 100, 300).unwrap();
     let authorization = DgclRepairAuthorization {
@@ -178,7 +242,11 @@ fn exercise_with_target_swap(
         calls: 0,
     };
     let mut validator = EmptyValidation;
-    let plan = CodingProbePlan::checked_add(Digest32::from_bytes([34;32]), Digest32::from_bytes([35;32])).unwrap();
+    let plan = CodingProbePlan::checked_add(
+        Digest32::from_bytes([34; 32]),
+        Digest32::from_bytes([35; 32]),
+    )
+    .unwrap();
     let summary;
     let report;
     let recommendation;
@@ -209,24 +277,44 @@ fn exercise_with_target_swap(
         let inner =
             BudgetedFileRepairDriver::new(config, &mut inputs, &mut effects, budget, checked)
                 .unwrap();
-        compile_native(&root.join("baseline.rs"), &root.join(format!("baseline{}",std::env::consts::EXE_SUFFIX)));
-        let baseline = observe(&plan, &initial, &root.join("baseline.rs"), &root.join(format!("baseline{}",std::env::consts::EXE_SUFFIX)), &issuer, &verifier, &view);
-        let mut callback = |token:&DgclVerifiedRepairValidation<'_>| {
-            let program=root.join(format!("current{}",std::env::consts::EXE_SUFFIX));
-            compile_native(&root.join("src/lib.rs"),&program);
-            let observed=observe(&plan,&token.application().after_snapshot,&root.join("src/lib.rs"),&program,&issuer,&verifier,&view);
+        compile_native(
+            &root.join("baseline.rs"),
+            &root.join(format!("baseline{}", std::env::consts::EXE_SUFFIX)),
+        );
+        let baseline = observe(
+            &plan,
+            &initial,
+            &root.join("baseline.rs"),
+            &root.join(format!("baseline{}", std::env::consts::EXE_SUFFIX)),
+            &issuer,
+            &verifier,
+            &view,
+        );
+        let mut callback = |token: &DgclVerifiedRepairValidation<'_>| {
+            let program = root.join(format!("current{}", std::env::consts::EXE_SUFFIX));
+            compile_native(&root.join("src/lib.rs"), &program);
+            let observed = observe(
+                &plan,
+                &token.application().after_snapshot,
+                &root.join("src/lib.rs"),
+                &program,
+                &issuer,
+                &verifier,
+                &view,
+            );
             if swap_after_observation {
                 // This is an actual successful owned observation, followed by a
                 // same-length mutation of this fixture's own physical target.
                 // check_current is deliberately not a continuous path watcher.
-                let changed=AFTER.replace("checked_add", "checked_sub");
+                let changed = AFTER.replace("checked_add", "checked_sub");
                 assert_ne!(changed, AFTER);
                 assert_eq!(changed.len(), AFTER.len());
                 std::fs::write(root.join("src/lib.rs"), changed).unwrap();
             }
             Ok(observed)
         };
-        let mut driver=RemeasuringRepairDriver::new(inner,&plan,&baseline,&view,&mut callback).unwrap();
+        let mut driver =
+            RemeasuringRepairDriver::new(inner, &plan, &baseline, &view, &mut callback).unwrap();
         let gaps = pipeline
             .implementation_closure
             .gaps
@@ -269,10 +357,12 @@ fn exercise_with_target_swap(
         )
         .unwrap();
         if !reject_effect && !swap_after_observation {
-            assert_eq!(driver.gains().len(),1);
-            assert_eq!(driver.gains()[0].gain_quarters(),3);
-            assert_eq!(driver.recommendation_current().unwrap(),Some(0));
-        } else if reject_effect { assert!(driver.gains().is_empty()); }
+            assert_eq!(driver.gains().len(), 1);
+            assert_eq!(driver.gains()[0].gain_quarters(), 3);
+            assert_eq!(driver.recommendation_current().unwrap(), Some(0));
+        } else if reject_effect {
+            assert!(driver.gains().is_empty());
+        }
         recommendation = driver.recommendation_current();
         summary = driver.budget_summary().unwrap();
     }
@@ -316,8 +406,7 @@ fn tlcx31_actual_repair_revalidation_native_measurement_changes_selection() {
 /// assertion is essential: a Hold alone does not establish physical freshness.
 #[test]
 fn tlcx31_post_observation_same_length_target_swap_withholds_fresh_recommendation() {
-    let (summary, actual, calls, report, recommendation) =
-        exercise_with_target_swap(false, true);
+    let (summary, actual, calls, report, recommendation) = exercise_with_target_swap(false, true);
     assert_eq!(calls, 1);
     assert_eq!(actual, AFTER.replace("checked_add", "checked_sub"));
     assert_eq!(actual.len(), AFTER.len());

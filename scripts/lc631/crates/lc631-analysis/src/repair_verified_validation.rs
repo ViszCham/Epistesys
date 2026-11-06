@@ -36,12 +36,31 @@ impl<'a> DgclVerifiedRepairValidation<'a> {
         digest: &'a str,
         checked_epoch: u64,
     ) -> Self {
-        Self { request, application, validation, receipt, digest, checked_epoch }
+        Self {
+            request,
+            application,
+            validation,
+            receipt,
+            digest,
+            checked_epoch,
+        }
     }
-    pub const fn request(&self) -> &'a DgclRepairRequest { self.request }
-    pub const fn application(&self) -> &'a DgclRepairApplication { self.application }
-    pub const fn validation(&self) -> &'a DgclRepairValidation { self.validation }
-    pub const fn validated_receipt(&self) -> &'a VerifiedReceipt { self.receipt }
-    pub const fn validated_receipt_digest(&self) -> &'a str { self.digest }
-    pub const fn checked_epoch(&self) -> u64 { self.checked_epoch }
+    pub const fn request(&self) -> &'a DgclRepairRequest {
+        self.request
+    }
+    pub const fn application(&self) -> &'a DgclRepairApplication {
+        self.application
+    }
+    pub const fn validation(&self) -> &'a DgclRepairValidation {
+        self.validation
+    }
+    pub const fn validated_receipt(&self) -> &'a VerifiedReceipt {
+        self.receipt
+    }
+    pub const fn validated_receipt_digest(&self) -> &'a str {
+        self.digest
+    }
+    pub const fn checked_epoch(&self) -> u64 {
+        self.checked_epoch
+    }
 }

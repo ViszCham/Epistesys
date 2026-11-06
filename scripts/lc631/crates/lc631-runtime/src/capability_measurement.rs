@@ -231,9 +231,11 @@ impl<'reg, 'view> Plan<'reg, 'view> {
             && registry.executable_digest == other_registry.executable_digest
             && self.max_steps == other.max_steps
             && self.probes.len() == other.probes.len()
-            && self.probes.iter().zip(&other.probes).all(|(a, b)| {
-                a.capability == b.capability && a.weight == b.weight
-            }))
+            && self
+                .probes
+                .iter()
+                .zip(&other.probes)
+                .all(|(a, b)| a.capability == b.capability && a.weight == b.weight))
     }
     fn check(
         &self,
@@ -372,7 +374,10 @@ impl OwnedPriority<'_, '_, '_, '_> {
 /// No serialization, Debug text, opaque observation ID or timestamp is used.
 /// Binding digests cross-pin the fixed actual query/program; the complete
 /// finite result/dependency payload is compared separately, not hash-only.
-fn same_actual_evidence(a: &OwnedAssessment<'_, '_, '_>, b: &OwnedAssessment<'_, '_, '_>) -> Result<bool, Error> {
+fn same_actual_evidence(
+    a: &OwnedAssessment<'_, '_, '_>,
+    b: &OwnedAssessment<'_, '_, '_>,
+) -> Result<bool, Error> {
     if a.actual.len() != b.actual.len()
         || a.report.statuses != b.report.statuses
         || a.report.bounds != b.report.bounds

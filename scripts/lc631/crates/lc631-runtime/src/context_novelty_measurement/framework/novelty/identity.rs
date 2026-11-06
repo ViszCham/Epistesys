@@ -119,7 +119,8 @@ fn comparison_baseline(
         w,
         budget::native_limits(&root.framework, root.registration.limits),
     );
-    h.bytes(b"tlcx.framework.p2.reference-role.v1").map_err(native)?;
+    h.bytes(b"tlcx.framework.p2.reference-role.v1")
+        .map_err(native)?;
     h.bytes(root.digest.as_bytes()).map_err(native)?;
     h.bytes(reference.as_bytes()).map_err(native)?;
     h.n(match role {

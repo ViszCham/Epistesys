@@ -247,7 +247,9 @@ impl EndpointReader<'_> {
     }
     fn check_funded(&self, view: &ResourceReservationView<'_>) -> Result<(), ClockFault> {
         self.0.profile.check(view)?;
-        self.0.credential.check(&self.0.profile, self.0.registry.as_ref())?;
+        self.0
+            .credential
+            .check(&self.0.profile, self.0.registry.as_ref())?;
         self.0.profile.check(view)
     }
 

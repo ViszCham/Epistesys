@@ -134,20 +134,14 @@ fn tlcx17_atomic_batch_intra_and_existing_duplicates_do_not_publish_valid_prefix
 fn tlcx17_atomic_batch_transform_and_event_capacity_reject_without_partial_append() {
     let mut transform_full = seeded(2, 4);
     assert_eq!(
-        transform_full.admit_batch(
-            &[binding(2), binding(3)],
-            &[gap(binding(2), 20)]
-        ),
+        transform_full.admit_batch(&[binding(2), binding(3)], &[gap(binding(2), 20)]),
         Err(LedgerError::Capacity)
     );
     assert_sentinel_unchanged(&transform_full);
 
     let mut event_full = seeded(3, 2);
     assert_eq!(
-        event_full.admit_batch(
-            &[binding(2)],
-            &[gap(binding(2), 20), gap(binding(1), 21)]
-        ),
+        event_full.admit_batch(&[binding(2)], &[gap(binding(2), 20), gap(binding(1), 21)]),
         Err(LedgerError::Capacity)
     );
     assert_sentinel_unchanged(&event_full);

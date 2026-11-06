@@ -78,23 +78,32 @@ impl<'v> Profile<'v> {
         input: ProfileInput<'_>,
         view: &'v ResourceReservationView<'_>,
     ) -> Result<Self, Error> {
-        view.check().map_err(|e| Error::Clock(ClockFault::Resource(e)))?;
+        view.check()
+            .map_err(|e| Error::Clock(ClockFault::Resource(e)))?;
         input.limits.validate()?;
         let fingerprint = input.trusted_registry_fingerprint;
         if fingerprint.len() > input.limits.max_metadata_bytes {
             return Err(Error::InputLimit);
         }
         if input.domain == Digest32::from_bytes([0; 32]) {
-            return Err(Error::Clock(ClockFault::NeedsEvidence(ClockGap::UnknownDomain)));
+            return Err(Error::Clock(ClockFault::NeedsEvidence(
+                ClockGap::UnknownDomain,
+            )));
         }
         if input.protocol != Protocol::EpochSecondsV1 {
-            return Err(Error::Clock(ClockFault::NeedsEvidence(ClockGap::UnknownProtocol)));
+            return Err(Error::Clock(ClockFault::NeedsEvidence(
+                ClockGap::UnknownProtocol,
+            )));
         }
         if input.requirement != TrustRequirement::GivenLocalRegistered {
-            return Err(Error::Clock(ClockFault::NeedsEvidence(ClockGap::HostAnchorUnavailable)));
+            return Err(Error::Clock(ClockFault::NeedsEvidence(
+                ClockGap::HostAnchorUnavailable,
+            )));
         }
         if !super::registry::canonical_digest(fingerprint) {
-            return Err(Error::Clock(ClockFault::NeedsEvidence(ClockGap::UntrustedIssuer)));
+            return Err(Error::Clock(ClockFault::NeedsEvidence(
+                ClockGap::UntrustedIssuer,
+            )));
         }
         // One retained claim covers the profile, live candidates/registrations
         // and one binding per role. Transient sample backing is separate.
@@ -112,12 +121,18 @@ impl<'v> Profile<'v> {
             retained,
         };
         state.check(view).map_err(Error::Clock)?;
-        Ok(Self { state: Arc::new(state) })
+        Ok(Self {
+            state: Arc::new(state),
+        })
     }
 
     pub fn work_current(&self, view: &ResourceReservationView<'_>) -> Result<ClockWork, Error> {
         self.check(view).map_err(Error::Clock)?;
-        let usage = self.state.usage.lock().map_err(|_| Error::Clock(poisoned()))?;
+        let usage = self
+            .state
+            .usage
+            .lock()
+            .map_err(|_| Error::Clock(poisoned()))?;
         let work = ClockWork {
             registration_attempts: usage.attempts,
             endpoint_reads: usage.reads,
@@ -203,12 +218,17 @@ pub(super) struct EndpointSlot<'v> {
 impl<'v> EndpointSlot<'v> {
     pub(super) fn claim(profile: &Arc<ProfileState<'v>>) -> Result<Self, ClockFault> {
         let mut usage = profile.usage.lock().map_err(|_| poisoned())?;
-        let next = usage.live_endpoints.checked_add(1).ok_or(ClockFault::BudgetExhausted)?;
+        let next = usage
+            .live_endpoints
+            .checked_add(1)
+            .ok_or(ClockFault::BudgetExhausted)?;
         if next > profile.limits.max_endpoints || !profile.fits(next, usage.roles) {
             return Err(ClockFault::BudgetExhausted);
         }
         usage.live_endpoints = next;
-        Ok(Self { profile: Arc::clone(profile) })
+        Ok(Self {
+            profile: Arc::clone(profile),
+        })
     }
 }
 impl Drop for EndpointSlot<'_> {

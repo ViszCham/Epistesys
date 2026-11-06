@@ -83,7 +83,10 @@ impl Fixture {
         &'a self,
         store: &mut FiniteResultStore<'a, '_>,
         resources: &ResourceReservationView<'_>,
-    ) -> (TemporalObservationRequest<'a>, TemporalObservationRequest<'a>) {
+    ) -> (
+        TemporalObservationRequest<'a>,
+        TemporalObservationRequest<'a>,
+    ) {
         let mut observe = |query: &'a TemporalQuery| {
             let observation = store
                 .evaluate_temporal(
@@ -129,13 +132,8 @@ fn resources(f: &Fixture, cancel: Cancellation) -> (ResourceBroker, RunResources
     (broker, run, reservation)
 }
 fn pending(pair: &CurrentTemporalPair<'_, '_, '_, '_>) -> PendingReprojection {
-    let diagnostic = analyze_temporal_pair(
-        pair.left_store,
-        pair.left,
-        pair.right_store,
-        pair.right,
-    )
-    .unwrap();
+    let diagnostic =
+        analyze_temporal_pair(pair.left_store, pair.left, pair.right_store, pair.right).unwrap();
     assert_eq!(diagnostic.truths(), (Truth::True, Truth::False));
     let request = diagnostic.reprojection().unwrap();
     assert_eq!(request.cause(), ReprojectionCause::ReportedDisagreement);
@@ -330,6 +328,9 @@ fn tlcx20_reprojection_stale_binding_and_actual_noop_do_not_create_a_loop() {
         .unwrap()
         .reprojection()
         .is_err());
-    let noop = CurrentTemporalPair { right: left, ..pair };
+    let noop = CurrentTemporalPair {
+        right: left,
+        ..pair
+    };
     assert!(prepare_identity_reprojection(pending, &noop, &view).is_err());
 }

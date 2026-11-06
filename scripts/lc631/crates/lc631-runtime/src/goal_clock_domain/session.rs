@@ -77,7 +77,9 @@ impl<'o, 'p, 'v> RoleSession<'o, 'p, 'v> {
             .check_goal_profile_inputs(view)
             .map_err(Error::Snapshot)?;
         let grant_scope = binding.execution_scope();
-        profile.reserve_role(exec.role, view).map_err(Error::Clock)?;
+        profile
+            .reserve_role(exec.role, view)
+            .map_err(Error::Clock)?;
         Ok(Self {
             profile,
             execution,

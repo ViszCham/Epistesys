@@ -138,12 +138,16 @@ impl<'p, 'i, 'v> BridgeProgram<'p, 'i, 'v> {
         root: &BridgeRoot<'i, 'v>,
         view: &ResourceReservationView<'_>,
         consume: impl for<'s> FnOnce(
-            &'s c::Plan<'i, 'v>, &'s c::Program<'p, 'i, 'v>, c::PlanInput<'i>,
-            &'s [c::PortMap; 3], &'s [c::PortMap; 3],
+            &'s c::Plan<'i, 'v>,
+            &'s c::Program<'p, 'i, 'v>,
+            c::PlanInput<'i>,
+            &'s [c::PortMap; 3],
+            &'s [c::PortMap; 3],
         ) -> R,
     ) -> Result<R, BridgeError> {
         self.check(root, view)?;
-        let result = self.native
+        let result = self
+            .native
             .inspect_composite_current(&root.native, view, consume)
             .map_err(from_c)?;
         self.check(root, view)?;

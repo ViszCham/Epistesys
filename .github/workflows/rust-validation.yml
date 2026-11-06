@@ -51,7 +51,9 @@ jobs:
       - name: Pin toolchain
         run: rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy
       - name: Format
-        run: cargo +1.98.0 fmt --all --check
+        run: python -B ../research/rust_format.py
+      - name: Format driver failure and coverage controls
+        run: python -B ../research/test_rust_format.py
       - name: Rust failure-propagation control
         run: cargo +1.98.0 test -p lc631-cli --no-default-features --test epr_ci_control --locked
       - name: Journal bundle schema regression

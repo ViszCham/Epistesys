@@ -3,10 +3,10 @@
 #![forbid(unsafe_code)]
 
 use lc631_media::{
-    authorize_media_source, authorize_media_source_attested, execute_local_media_backend_attested_v3,
-    media_source_payload_digest, media_source_scope, model_cache_manifest_sha256, BackendDescriptor,
-    BackendFamily, MediaBackendConfig, MediaError, MediaResourceBudget, MediaSourceKind,
-    MediaSourceRequest,
+    authorize_media_source, authorize_media_source_attested,
+    execute_local_media_backend_attested_v3, media_source_payload_digest, media_source_scope,
+    model_cache_manifest_sha256, BackendDescriptor, BackendFamily, MediaBackendConfig, MediaError,
+    MediaResourceBudget, MediaSourceKind, MediaSourceRequest,
 };
 use lc631_process_supervisor::{run_bounded, RunRequest};
 use lc631_receipt_kernel::{
@@ -18,7 +18,11 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 fn python(root: &Path) -> PathBuf {
-    let name = if cfg!(windows) { "python.exe" } else { "python3" };
+    let name = if cfg!(windows) {
+        "python.exe"
+    } else {
+        "python3"
+    };
     let executable = std::env::var_os("EPISTESYS_TEST_MEDIA_PYTHON")
         .map(PathBuf::from)
         .or_else(|| {
@@ -78,9 +82,13 @@ fn launches(script: &Path) -> usize {
 
 #[test]
 fn beta7_media_registered_entrypoint_rejects_foreign_script_before_dispatch() {
-    let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
     let root = std::env::temp_dir().join(format!(
-        "epistesys-beta7-registered-script-{}-{nonce}", std::process::id()
+        "epistesys-beta7-registered-script-{}-{nonce}",
+        std::process::id()
     ));
     fs::create_dir(&root).unwrap();
     let source = root.join("source.bin");
@@ -141,39 +149,69 @@ fn beta7_media_registered_entrypoint_rejects_foreign_script_before_dispatch() {
     let issuer = ReceiptIssuer::from_key_bytes("beta7-fixture", &[28; 32]).unwrap();
     let verifier = ReceiptVerifier::from_key_bytes("beta7-fixture", &[28; 32]).unwrap();
     let pending = authorize_media_source(&request);
-    let wire = issuer.issue(
-        ReceiptClass::MediaSource,
-        SubjectRevision::checked(pending.source_snapshot_sha256.as_deref().unwrap()).unwrap(),
-        ReceiptScope::checked(media_source_scope(request.kind)).unwrap(),
-        media_source_payload_digest(&request, &pending).unwrap(),
-        1, None, None,
-    ).unwrap();
-    let authority = authorize_media_source_attested(
-        &request, wire, &verifier, &mut ReplayGuard::default(), 1,
-    ).unwrap();
+    let wire = issuer
+        .issue(
+            ReceiptClass::MediaSource,
+            SubjectRevision::checked(pending.source_snapshot_sha256.as_deref().unwrap()).unwrap(),
+            ReceiptScope::checked(media_source_scope(request.kind)).unwrap(),
+            media_source_payload_digest(&request, &pending).unwrap(),
+            1,
+            None,
+            None,
+        )
+        .unwrap();
+    let authority =
+        authorize_media_source_attested(&request, wire, &verifier, &mut ReplayGuard::default(), 1)
+            .unwrap();
     let budget = MediaResourceBudget {
-        max_stdout_bytes: 65536, max_stderr_bytes: 8192, max_temporary_bytes: 1024 * 1024,
-        max_decoded_frames: 1, max_pcm_samples: 100, max_observations: 4,
+        max_stdout_bytes: 65536,
+        max_stderr_bytes: 8192,
+        max_temporary_bytes: 1024 * 1024,
+        max_decoded_frames: 1,
+        max_pcm_samples: 100,
+        max_observations: 4,
     };
     let execute = |config: &MediaBackendConfig, replay: &mut ReplayGuard| {
         execute_local_media_backend_attested_v3(
-            &authority, &descriptor, config, &budget, &issuer, &verifier, replay, 1,
+            &authority,
+            &descriptor,
+            config,
+            &budget,
+            &issuer,
+            &verifier,
+            replay,
+            1,
         )
     };
     let mut control = ReplayGuard::default();
     let receipt = execute(&config, &mut control).expect("the registered worker must run once");
     assert!(receipt.authenticity_attestation.is_some());
-    assert_eq!((launches(&registered), launches(&foreign), control.observed_count()), (1, 0, 1));
+    assert_eq!(
+        (
+            launches(&registered),
+            launches(&foreign),
+            control.observed_count()
+        ),
+        (1, 0, 1)
+    );
 
     // Keep the admitted descriptor, authority, model and budget. Substitute only
     // the script actually invoked; the foreign worker can emit a valid report.
-    let other = MediaBackendConfig { backend_script: foreign.clone(), ..config };
+    let other = MediaBackendConfig {
+        backend_script: foreign.clone(),
+        ..config
+    };
     let mut replay = ReplayGuard::default();
     let result = execute(&other, &mut replay);
     eprintln!("foreign-script execution returned: {result:?}");
     let refused = matches!(result, Err(MediaError::BackendDescriptorMismatch));
     assert_eq!(
-        (refused, launches(&registered), launches(&foreign), replay.observed_count()),
+        (
+            refused,
+            launches(&registered),
+            launches(&foreign),
+            replay.observed_count()
+        ),
         (true, 1, 0, 0),
         "foreign script must be rejected before child dispatch and backend replay"
     );

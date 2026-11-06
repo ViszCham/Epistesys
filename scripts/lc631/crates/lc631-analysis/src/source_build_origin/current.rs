@@ -10,12 +10,16 @@ use lc631_substrate::resource::ResourceReservationView;
 
 impl OwnedSourceBuildOrigin<'_, '_, '_> {
     pub fn with_current<R>(
-        &self, plan: &BuildPlan<'_, '_>, services: &mut BuildServices<'_, '_>,
+        &self,
+        plan: &BuildPlan<'_, '_>,
+        services: &mut BuildServices<'_, '_>,
         view: &ResourceReservationView<'_>,
         consume: impl for<'current> FnOnce(BuildView<'current>) -> R,
     ) -> Result<R, BuildError> {
         check_claim(&self.retained, view)?;
-        if !std::ptr::eq(self.plan, plan) { return Err(BuildError::FrameMismatch); }
+        if !std::ptr::eq(self.plan, plan) {
+            return Err(BuildError::FrameMismatch);
+        }
         // One request consumes one read, including a later failed check. There
         // is no public scalar/current setter and no refund on a rejected read.
         self.plan.debit_current(view)?;
@@ -32,7 +36,9 @@ impl OwnedSourceBuildOrigin<'_, '_, '_> {
     }
 
     fn check_current(
-        &self, services: &mut BuildServices<'_, '_>, view: &ResourceReservationView<'_>,
+        &self,
+        services: &mut BuildServices<'_, '_>,
+        view: &ResourceReservationView<'_>,
     ) -> Result<(), BuildError> {
         check_claim(&self.retained, view)?;
         self.plan.check(view)?;
@@ -57,8 +63,14 @@ impl OwnedSourceBuildOrigin<'_, '_, '_> {
     }
 
     fn check_witnesses(&self) -> Result<(), BuildError> {
-        let stages = [BuildStage::CompilerVersion, BuildStage::CompilerSysroot, BuildStage::Link];
-        if self.children.len() != stages.len() { return Err(BuildError::BuildFailed); }
+        let stages = [
+            BuildStage::CompilerVersion,
+            BuildStage::CompilerSysroot,
+            BuildStage::Link,
+        ];
+        if self.children.len() != stages.len() {
+            return Err(BuildError::BuildFailed);
+        }
         for (child, stage) in self.children.iter().zip(stages) {
             if child.stage != stage || child.exit_code != Some(0) || !child.cleanup_verified {
                 return Err(BuildError::BuildFailed);
@@ -71,26 +83,39 @@ impl OwnedSourceBuildOrigin<'_, '_, '_> {
                 || child.cwd_digest != self.plan.cwd_digest()
                 || child.environment_digest != self.plan.environment_digest()
                 || child.test_scope != self.plan.execution_scope(stage)
-            { return Err(BuildError::FrameMismatch); }
+            {
+                return Err(BuildError::FrameMismatch);
+            }
         }
         Ok(())
     }
 }
 
 fn compare_capture(
-    previous: &OwnedDeclaredBuildCapture<'_>, current: &OwnedDeclaredBuildCapture<'_>,
+    previous: &OwnedDeclaredBuildCapture<'_>,
+    current: &OwnedDeclaredBuildCapture<'_>,
 ) -> Result<(), BuildError> {
-    if previous.root() != current.root() || previous.program() != current.program()
-        || previous.plan() != current.plan() || previous.content_pins() != current.content_pins()
-    { return Err(BuildError::SourceDrift); }
-    let before = previous.authority_after().ok_or(BuildError::Capture(SnapshotCaptureError::InvalidSnapshot))?;
+    if previous.root() != current.root()
+        || previous.program() != current.program()
+        || previous.plan() != current.plan()
+        || previous.content_pins() != current.content_pins()
+    {
+        return Err(BuildError::SourceDrift);
+    }
+    let before = previous
+        .authority_after()
+        .ok_or(BuildError::Capture(SnapshotCaptureError::InvalidSnapshot))?;
     let current_before = current.authority_before();
-    let current_after = current.authority_after().ok_or(BuildError::Capture(SnapshotCaptureError::InvalidSnapshot))?;
+    let current_after = current
+        .authority_after()
+        .ok_or(BuildError::Capture(SnapshotCaptureError::InvalidSnapshot))?;
     for stamp in [current_before, current_after] {
         if stamp.principal != before.principal || stamp.host != before.host {
             return Err(BuildError::Capture(SnapshotCaptureError::PrincipalChanged));
         }
-        if stamp.checked_epoch < before.checked_epoch { return Err(BuildError::ClockRollback); }
+        if stamp.checked_epoch < before.checked_epoch {
+            return Err(BuildError::ClockRollback);
+        }
         if stamp.revocation_revision < before.revocation_revision {
             return Err(BuildError::RevocationRollback);
         }

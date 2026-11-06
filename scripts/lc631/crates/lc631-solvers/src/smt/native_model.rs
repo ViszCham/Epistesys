@@ -33,10 +33,7 @@ impl<'query> NativeCheckedModel<'query, '_> {
     /// Recheck this actual owner's resource reservation and lifetime only.
     /// Root constraints, source mapping, registry and executable freshness need
     /// their separate current checks; this neither dispatches nor grants authority.
-    pub fn check_current(
-        &self,
-        view: &ResourceReservationView<'_>,
-    ) -> Result<(), ResourceError> {
+    pub fn check_current(&self, view: &ResourceReservationView<'_>) -> Result<(), ResourceError> {
         self.check_reservation(view)
     }
 

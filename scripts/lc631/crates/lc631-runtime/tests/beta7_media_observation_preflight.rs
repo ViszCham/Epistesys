@@ -64,7 +64,10 @@ fn wrong_registered_configuration_rejects_before_child_replay_and_context_admiss
         };
         let branch = valid_context.get(revision).unwrap();
         assert_eq!(branch.premises().len(), 2);
-        assert!(branch.premises().iter().all(|p| p.basis() == PremiseBasis::Proposed));
+        assert!(branch
+            .premises()
+            .iter()
+            .all(|p| p.basis() == PremiseBasis::Proposed));
         assert!(valid.root.join("backend.ran").is_file());
         assert_eq!(valid_replay.observed_count(), 1);
     });
@@ -74,16 +77,26 @@ fn wrong_registered_configuration_rejects_before_child_replay_and_context_admiss
     let foreign = Fixture::new(1000, false);
     let mut registration = foreign.registration.clone();
     registration.configuration = lc631_core::stable_sha256("beta7 foreign media configuration");
-    assert_ne!(registration.configuration, foreign.registration.configuration);
+    assert_ne!(
+        registration.configuration,
+        foreign.registration.configuration
+    );
     let marker = foreign.root.join("backend.ran");
     assert!(!marker.exists());
     let mut contexts = consumer();
     let mut replay = ReplayGuard::default();
     foreign.funded(Cancellation::default(), |view| {
         let result = observe(&foreign, &registration, &mut replay, &mut contexts, view);
-        assert!(matches!(result, Err(MediaConnectionError::RegistrationMismatch)));
+        assert!(matches!(
+            result,
+            Err(MediaConnectionError::RegistrationMismatch)
+        ));
         assert_eq!(
-            (marker.exists(), replay.observed_count(), contexts.states().len()),
+            (
+                marker.exists(),
+                replay.observed_count(),
+                contexts.states().len()
+            ),
             (false, 0, 1),
             "registration mismatch dispatched the backend, consumed replay, or admitted a branch"
         );

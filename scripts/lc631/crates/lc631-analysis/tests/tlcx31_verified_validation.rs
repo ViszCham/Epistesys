@@ -83,7 +83,9 @@ impl DgclRepairDriver for ObservingDriver<'_> {
         remaining: Duration,
     ) -> Result<DgclRepairValidation, DgclRepairDriverError> {
         let mut result = self.inner.revalidate(request, application, remaining)?;
-        if matches!(self.cut, Cut::ValidationReceipt) { result.attestation = None; }
+        if matches!(self.cut, Cut::ValidationReceipt) {
+            result.attestation = None;
+        }
         Ok(result)
     }
 }
@@ -332,9 +334,16 @@ fn tlcx31_revalidation_receipt_cut_retains_actual_effect_charge_without_callback
     assert_eq!(result.actual, result.correct);
     assert_eq!(result.backup, vec![result.initial]);
     assert_eq!(result.report.repair.status, DgclRepairStatus::Conflict);
-    assert_eq!(result.report.repair.attempts[0].effect_state, RepairEffectState::ReceiptVerified);
-    assert!(result.report.repair.attempts[0].application_receipt_digest.is_some());
-    assert!(result.report.repair.attempts[0].validation_receipt_digest.is_none());
+    assert_eq!(
+        result.report.repair.attempts[0].effect_state,
+        RepairEffectState::ReceiptVerified
+    );
+    assert!(result.report.repair.attempts[0]
+        .application_receipt_digest
+        .is_some());
+    assert!(result.report.repair.attempts[0]
+        .validation_receipt_digest
+        .is_none());
     assert_eq!(result.report.budget.charged_bytes, result.cost);
     assert_eq!(result.report.budget.reserved_bytes, 0);
     assert!(!result.report.repair.remaining_gap_ids.is_empty());

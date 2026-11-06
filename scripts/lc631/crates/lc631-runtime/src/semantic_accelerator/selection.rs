@@ -3,9 +3,9 @@
 #![forbid(unsafe_code)]
 
 #[cfg(feature = "semantic-gpu")]
-pub mod gpu;
-#[cfg(feature = "semantic-gpu")]
 pub mod given_points;
+#[cfg(feature = "semantic-gpu")]
+pub mod gpu;
 #[cfg(feature = "semantic-gpu")]
 pub mod tiled;
 use crate::joint_selection::{
@@ -195,7 +195,8 @@ pub fn prepare_numeric_batch_with_profile<'a, 'p, 'v, 'r>(
     {
         return Err(ConsumerError::WorkLimit);
     }
-    crate::joint_selection::validate_policy(policy, rows.len()).map_err(ConsumerError::Selection)?;
+    crate::joint_selection::validate_policy(policy, rows.len())
+        .map_err(ConsumerError::Selection)?;
     let scratch = resources
         .claim_resources(&[request(ResourceKind::Ram, SCRATCH_RAM)?])
         .map_err(ConsumerError::Resource)?;

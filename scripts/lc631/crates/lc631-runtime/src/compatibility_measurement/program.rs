@@ -56,13 +56,20 @@ impl<'p, 'i, 'v> Program<'p, 'i, 'v> {
         expected_plan: &Plan<'i, 'v>,
         view: &ResourceReservationView<'_>,
         consume: impl for<'s> FnOnce(
-            &'s Plan<'i, 'v>, &'s Program<'p, 'i, 'v>, PlanInput<'i>,
-            &'s [PortMap; 3], &'s [PortMap; 3],
+            &'s Plan<'i, 'v>,
+            &'s Program<'p, 'i, 'v>,
+            PlanInput<'i>,
+            &'s [PortMap; 3],
+            &'s [PortMap; 3],
         ) -> R,
     ) -> Result<R, Error> {
         self.check(expected_plan, view)?;
         let result = consume(
-            self.plan, self, self.plan.input, &self.forward, &self.inverse,
+            self.plan,
+            self,
+            self.plan.input,
+            &self.forward,
+            &self.inverse,
         );
         self.check(expected_plan, view)?;
         Ok(result)

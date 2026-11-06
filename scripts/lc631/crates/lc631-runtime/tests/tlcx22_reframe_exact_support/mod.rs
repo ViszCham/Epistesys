@@ -1,16 +1,26 @@
 //! Given finite fixtures/literal gold and resource scaffolding; no local oracle.
 pub use lc631_analysis::creativity_measurement::{
-    ComponentReport, ComponentState, InputBasis, SemanticValidation, IndependenceStatus, RationalInterval,
+    ComponentReport, ComponentState, IndependenceStatus, InputBasis, RationalInterval,
+    SemanticValidation,
 };
 pub use lc631_core::{context::*, AuthorityRevision, CandidateId};
 pub use lc631_runtime::{
-    contextual_distillation::{consumer::*, *}, resource::*,
-    structural_gain_measurement::{ClosedGraph, Edge, Vertex},
-    joint_selection::{PairRelation, SelectionPins, project_component_reported, ReportedComponentAxis, AxisValue},
+    contextual_distillation::{consumer::*, *},
+    joint_selection::{
+        project_component_reported, AxisValue, PairRelation, ReportedComponentAxis, SelectionPins,
+    },
     reorganization_measurement::reframe as f,
+    resource::*,
+    structural_gain_measurement::{ClosedGraph, Edge, Vertex},
 };
-pub use lc631_substrate::{source::{SourceStore, SourceSpan}, Digest32};
-pub use std::{sync::Arc, time::{Duration, Instant}};
+pub use lc631_substrate::{
+    source::{SourceSpan, SourceStore},
+    Digest32,
+};
+pub use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 pub const DIRECT_BASE: &str = "frame-v2:direct;name=base";
 pub const DIRECT_CANDIDATE: &str = "frame-v2:direct;name=candidate";
@@ -21,26 +31,53 @@ pub const EDGE_01: &str = "edge(0,1)";
 pub const EDGE_02: &str = "edge(0,2)";
 pub const MACRO_02: &str = "macro(0,2)";
 pub const ROOT_GOAL: Edge = Edge(Vertex(0), Vertex(2));
-pub fn d(n: u8) -> Digest32 { Digest32::from_bytes([n; 32]) }
+pub fn d(n: u8) -> Digest32 {
+    Digest32::from_bytes([n; 32])
+}
 pub fn ratio(n: i64, den: i64) -> RationalInterval {
     RationalInterval::exact_ratio(n, den).unwrap()
 }
 pub fn relation(a: u8, b: u8) -> RelationEdit {
-    RelationEdit { from: RelationNode(a), to: RelationNode(b) }
+    RelationEdit {
+        from: RelationNode(a),
+        to: RelationNode(b),
+    }
 }
 pub fn state(context: ContextRevision, scope: ContextScope) -> ContextualDistillation {
-    let basis = ImmutableRelationBasis::checked(context, scope, 3,
-        &[relation(0, 1), relation(1, 2)], BasisAvailability::Given).unwrap();
-    let mut state = ContextualDistillation::new(basis,
-        DistillationLimits { max_epochs: 2, max_proposals: 2, max_relations: 4 }).unwrap();
-    state.epoch(&[RelationProposal { context, scope, edit: relation(0, 2) }]).unwrap();
+    let basis = ImmutableRelationBasis::checked(
+        context,
+        scope,
+        3,
+        &[relation(0, 1), relation(1, 2)],
+        BasisAvailability::Given,
+    )
+    .unwrap();
+    let mut state = ContextualDistillation::new(
+        basis,
+        DistillationLimits {
+            max_epochs: 2,
+            max_proposals: 2,
+            max_relations: 4,
+        },
+    )
+    .unwrap();
+    state
+        .epoch(&[RelationProposal {
+            context,
+            scope,
+            edit: relation(0, 2),
+        }])
+        .unwrap();
     state
 }
 pub fn path(state: &ContextualDistillation) -> DependencyPath<'_> {
     let request = NextRelationQuery {
-        context: state.basis().context(), scope: state.basis().scope(),
-        state_revision: state.state_revision(), basis_digest: state.basis().digest(),
-        relation: relation(0, 2), basis: ValidationBasis::GivenFiniteReachability,
+        context: state.basis().context(),
+        scope: state.basis().scope(),
+        state_revision: state.state_revision(),
+        basis_digest: state.basis().digest(),
+        relation: relation(0, 2),
+        basis: ValidationBasis::GivenFiniteReachability,
     };
     consume_dependency_path(revalidate_next_query(state, request, 64).unwrap()).unwrap()
 }

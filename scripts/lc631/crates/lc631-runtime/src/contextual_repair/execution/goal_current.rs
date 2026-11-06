@@ -54,9 +54,17 @@ impl<'a, 'obs, 'lease> GoalInvocationGate<'a, 'obs, 'lease> {
         resources: &'a ResourceReservationView<'lease>,
     ) -> Result<Self, ProbeError> {
         if !owner.clock.is_legacy() {
-            return Err(ProbeError::ClockDomain(crate::goal_clock_domain::ClockFault::BindingMismatch));
+            return Err(ProbeError::ClockDomain(
+                crate::goal_clock_domain::ClockFault::BindingMismatch,
+            ));
         }
-        Self::admit_with(plan, owner, ProbeInputs::without_clock(input), DirectClock::Legacy(input.clock), resources)
+        Self::admit_with(
+            plan,
+            owner,
+            ProbeInputs::without_clock(input),
+            DirectClock::Legacy(input.clock),
+            resources,
+        )
     }
 
     pub(crate) fn admit_registered(
@@ -66,9 +74,11 @@ impl<'a, 'obs, 'lease> GoalInvocationGate<'a, 'obs, 'lease> {
         resources: &'a ResourceReservationView<'lease>,
     ) -> Result<Self, ProbeError> {
         if owner.clock.is_legacy() {
-            return Err(ProbeError::ClockDomain(crate::goal_clock_domain::ClockFault::NeedsEvidence(
-                crate::goal_clock_domain::ClockGap::LegacyClockProvenanceUnassessed,
-            )));
+            return Err(ProbeError::ClockDomain(
+                crate::goal_clock_domain::ClockFault::NeedsEvidence(
+                    crate::goal_clock_domain::ClockGap::LegacyClockProvenanceUnassessed,
+                ),
+            ));
         }
         Self::admit_with(plan, owner, input, DirectClock::Registered, resources)
     }
@@ -82,7 +92,13 @@ impl<'a, 'obs, 'lease> GoalInvocationGate<'a, 'obs, 'lease> {
     ) -> Result<Self, ProbeError> {
         resources.check()?;
         bounds(input)?;
-        let gate = Self { plan, owner, input, direct, resources };
+        let gate = Self {
+            plan,
+            owner,
+            input,
+            direct,
+            resources,
+        };
         gate.binding_current()?;
         let scratch = super::super::measurement::claim(resources, SCRATCH_RAM)?;
         let registration = input.registration;
@@ -129,7 +145,11 @@ impl<'a, 'obs, 'lease> GoalInvocationGate<'a, 'obs, 'lease> {
         let now = match self.direct {
             DirectClock::Legacy(clock) => {
                 let now = clock();
-                match self.owner.observed_epoch.observe(now, self.owner.expires_epoch) {
+                match self
+                    .owner
+                    .observed_epoch
+                    .observe(now, self.owner.expires_epoch)
+                {
                     Ok(()) => now,
                     Err(ProbeError::Stale) if now >= self.owner.expires_epoch => {
                         return Err(GoalEpochError::ObservedExpiry);
@@ -138,7 +158,9 @@ impl<'a, 'obs, 'lease> GoalInvocationGate<'a, 'obs, 'lease> {
                 }
             }
             DirectClock::Registered => self.owner.clock.sample(
-                &self.owner.observed_epoch, self.owner.expires_epoch, self.resources,
+                &self.owner.observed_epoch,
+                self.owner.expires_epoch,
+                self.resources,
             )?,
         };
         if now < self.owner.checked_epoch || now < self.input.authority.now_epoch {

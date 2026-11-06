@@ -50,11 +50,22 @@ impl CurrentReducedSelection<'_, '_, '_, '_, '_> {
         &self,
         resources: &ResourceReservationView<'_>,
     ) -> Result<&JointSelectionReport<'_, '_>, ReducedSelectionError> {
-        let report = self.base.report_current(resources).map_err(ReducedSelectionError::Axes)?;
-        validate(self.policy, report.candidates, self.owners, self.reductions, resources)?;
+        let report = self
+            .base
+            .report_current(resources)
+            .map_err(ReducedSelectionError::Axes)?;
+        validate(
+            self.policy,
+            report.candidates,
+            self.owners,
+            self.reductions,
+            resources,
+        )?;
         // Recheck after reduction traversal. Cancellation can still race after
         // returning; this borrowed observation is not an atomic publication.
-        self.base.report_current(resources).map_err(ReducedSelectionError::Axes)
+        self.base
+            .report_current(resources)
+            .map_err(ReducedSelectionError::Axes)
     }
 }
 
@@ -72,7 +83,12 @@ pub fn select_current_reduced<'a, 'owner, 'root, 'input, 'view>(
     validate(policy, rows, owners, reductions, resources)?;
     let base = current_axes::select_current(policy, rows, owners, coverage, resources)
         .map_err(ReducedSelectionError::Axes)?;
-    let result = CurrentReducedSelection { base, policy, owners, reductions };
+    let result = CurrentReducedSelection {
+        base,
+        policy,
+        owners,
+        reductions,
+    };
     result.report_current(resources)?;
     Ok(result)
 }
@@ -85,21 +101,50 @@ fn validate(
     resources: &ResourceReservationView<'_>,
 ) -> Result<(), ReducedSelectionError> {
     resources.check().map_err(ReducedSelectionError::Resource)?;
-    if rows.is_empty() || rows.len() > 64 || reductions.len() != rows.len()
-        || owners.len() != rows.len() || policy.axes.len() != 3
-        || policy.axes.iter().filter(|a| matches!(a, AxisKind::Goal(_))).count() != 1
-        || policy.axes.iter().filter(|a| **a == AxisKind::TemporalLoss).count() != 1
-        || policy.axes.iter().filter(|a| **a == AxisKind::SpatialLoss).count() != 1
+    if rows.is_empty()
+        || rows.len() > 64
+        || reductions.len() != rows.len()
+        || owners.len() != rows.len()
+        || policy.axes.len() != 3
+        || policy
+            .axes
+            .iter()
+            .filter(|a| matches!(a, AxisKind::Goal(_)))
+            .count()
+            != 1
+        || policy
+            .axes
+            .iter()
+            .filter(|a| **a == AxisKind::TemporalLoss)
+            .count()
+            != 1
+        || policy
+            .axes
+            .iter()
+            .filter(|a| **a == AxisKind::SpatialLoss)
+            .count()
+            != 1
     {
         return Err(ReducedSelectionError::InvalidRows);
     }
-    let root = reductions.first().ok_or(ReducedSelectionError::InvalidRows)?.owner.root;
+    let root = reductions
+        .first()
+        .ok_or(ReducedSelectionError::InvalidRows)?
+        .owner
+        .root;
     for (index, reduction) in reductions.iter().enumerate() {
-        if reductions[..index].iter().any(|prior| prior.row == reduction.row) {
+        if reductions[..index]
+            .iter()
+            .any(|prior| prior.row == reduction.row)
+        {
             return Err(ReducedSelectionError::InvalidRows);
         }
-        let row = rows.get(reduction.row).ok_or(ReducedSelectionError::InvalidRows)?;
-        let axis_owners = owners.iter().find(|owner| owner.row == reduction.row)
+        let row = rows
+            .get(reduction.row)
+            .ok_or(ReducedSelectionError::InvalidRows)?;
+        let axis_owners = owners
+            .iter()
+            .find(|owner| owner.row == reduction.row)
             .ok_or(ReducedSelectionError::InvalidRows)?;
         check_reduction(root, row, axis_owners, reduction.owner, resources)?;
     }
@@ -124,7 +169,8 @@ fn check_reduction(
     {
         return Err(ReducedSelectionError::BindingMismatch);
     }
-    let report = reduction.current(reduction.root, reduction.candidate, resources)
+    let report = reduction
+        .current(reduction.root, reduction.candidate, resources)
         .map_err(ReducedSelectionError::Reduction)?;
     let expected = total_axis(report)?;
     if !same_axis(&row.total_loss, &expected) {
@@ -134,11 +180,19 @@ fn check_reduction(
 }
 fn total_axis(report: &Report) -> Result<AxisValue<'_>, ReducedSelectionError> {
     if let Some(total) = report.total() {
-        return Ok(if total.is_exact() { AxisValue::Exact(total) } else { AxisValue::Bounded(total) });
+        return Ok(if total.is_exact() {
+            AxisValue::Exact(total)
+        } else {
+            AxisValue::Bounded(total)
+        });
     }
     // Fixed first-gap order, retaining its declared typed cause. Never reweight
     // away a missing axis or manufacture a total from an observed subset.
-    let reason = report.gaps().into_iter().flatten().next()
+    let reason = report
+        .gaps()
+        .into_iter()
+        .flatten()
+        .next()
         .ok_or(ReducedSelectionError::BindingMismatch)?;
     Ok(AxisValue::Unavailable(match reason {
         NoScalar::MissingOwner => MissingAxis::MissingEvaluator,
@@ -154,8 +208,16 @@ fn same_axis(actual: &AxisValue<'_>, expected: &AxisValue<'_>) -> bool {
     }
 }
 fn same_temporal(a: Option<&TemporalOwner<'_, '_>>, b: Option<&TemporalOwner<'_, '_>>) -> bool {
-    match (a, b) { (Some(a), Some(b)) => std::ptr::eq(a, b), (None, None) => true, _ => false }
+    match (a, b) {
+        (Some(a), Some(b)) => std::ptr::eq(a, b),
+        (None, None) => true,
+        _ => false,
+    }
 }
 fn same_spatial(a: Option<&SpatialOwner<'_, '_>>, b: Option<&SpatialOwner<'_, '_>>) -> bool {
-    match (a, b) { (Some(a), Some(b)) => std::ptr::eq(a, b), (None, None) => true, _ => false }
+    match (a, b) {
+        (Some(a), Some(b)) => std::ptr::eq(a, b),
+        (None, None) => true,
+        _ => false,
+    }
 }

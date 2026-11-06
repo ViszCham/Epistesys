@@ -116,10 +116,7 @@ impl<'v> PreparedRequest<'v> {
         }
     }
 
-    pub(super) fn check_current(
-        &self,
-        view: &ResourceReservationView<'_>,
-    ) -> Result<(), Failure> {
+    pub(super) fn check_current(&self, view: &ResourceReservationView<'_>) -> Result<(), Failure> {
         if !self.claim.same_reservation(view) {
             return Err(Failure::ForeignReservation);
         }
@@ -136,11 +133,15 @@ fn copy_os(value: &OsStr) -> Result<OsString, Failure> {
 }
 
 fn add(left: usize, right: usize) -> Result<usize, ResourceError> {
-    left.checked_add(right).ok_or(ResourceError::ArithmeticOverflow)
+    left.checked_add(right)
+        .ok_or(ResourceError::ArithmeticOverflow)
 }
 
 fn descriptor_ram(request: &RunRequest<'_>) -> Result<u64, ResourceError> {
-    let mut raw = add(request.executable.len(), request.current_dir.as_os_str().len())?;
+    let mut raw = add(
+        request.executable.len(),
+        request.current_dir.as_os_str().len(),
+    )?;
     raw = add(raw, request.stdin.map_or(0, <[u8]>::len))?;
     for argument in request.arguments {
         raw = add(raw, argument.len())?;
@@ -155,7 +156,11 @@ fn descriptor_ram(request: &RunRequest<'_>) -> Result<u64, ResourceError> {
         .checked_mul(2 * std::mem::size_of::<OsString>())
         .ok_or(ResourceError::ArithmeticOverflow)?;
     let backing = add(
-        add(raw.checked_mul(2).ok_or(ResourceError::ArithmeticOverflow)?, descriptors)?,
+        add(
+            raw.checked_mul(2)
+                .ok_or(ResourceError::ArithmeticOverflow)?,
+            descriptors,
+        )?,
         add(DIAGNOSTIC_SCRATCH, 4096)?,
     )?;
     u64::try_from(backing).map_err(|_| ResourceError::ArithmeticOverflow)
@@ -173,7 +178,10 @@ fn request_identity(request: &RunRequest<'_>, purpose: Purpose) -> [u8; 32] {
         Purpose::NegativeCompile => 1,
     }]);
     bytes(&mut hash, request.executable.as_encoded_bytes());
-    bytes(&mut hash, request.current_dir.as_os_str().as_encoded_bytes());
+    bytes(
+        &mut hash,
+        request.current_dir.as_os_str().as_encoded_bytes(),
+    );
     hash.update((request.arguments.len() as u64).to_le_bytes());
     for argument in request.arguments {
         bytes(&mut hash, argument.as_encoded_bytes());

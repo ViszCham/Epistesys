@@ -26,13 +26,13 @@ use lc631_core::{
     ExecutionPermitContext, PermitValidation, PrincipalBinding, SourceSpan, TurnId,
     VerifiedAuthorityEvent,
 };
+use lc631_process_supervisor::filesystem::{DirectoryAnchor, ReadOnlyAnchoredFile};
 use lc631_receipt_kernel::{
     generate_key, ReceiptClass, ReceiptError, ReceiptIssuer, ReceiptPolicy, ReceiptScope,
     ReceiptVerifier, ReplayGuard, SubjectRevision, UntrustedReceipt, VerifiedReceipt,
 };
 use pulldown_cmark::{Event, Options, Parser, Tag};
 use serde::{Deserialize, Serialize};
-use lc631_process_supervisor::filesystem::{DirectoryAnchor, ReadOnlyAnchoredFile};
 #[cfg(test)]
 use std::fs;
 use std::ops::Range;
@@ -1474,7 +1474,8 @@ impl HostReceiptContext {
                 match root.create_private_file(leaf) {
                     Ok(mut file) => {
                         file.validate_current().map_err(key_path_error)?;
-                        file.write_and_sync(&encoded_key(&key)).map_err(key_path_error)?;
+                        file.write_and_sync(&encoded_key(&key))
+                            .map_err(key_path_error)?;
                         file.validate_current().map_err(key_path_error)?;
                         key
                     }
@@ -1554,14 +1555,19 @@ impl HostReceiptContext {
         }
         let root_path = bounded_reader::checked_absolute(owned_root).map_err(key_path_error)?;
         let root = DirectoryAnchor::open_existing(&root_path).map_err(key_path_error)?;
-        let file = root.open_read_only(Path::new("receipt-root-v1.key")).map_err(key_path_error)?;
+        let file = root
+            .open_read_only(Path::new("receipt-root-v1.key"))
+            .map_err(key_path_error)?;
         let key = read_key(file, resources)?;
         Self::from_anchored_key(&root, &key)
     }
 
     fn from_anchored_key(root: &DirectoryAnchor, key: &[u8; 32]) -> Result<Self, HostError> {
         // Canonicalize only the published locator, after handle-relative admission.
-        let key_path = root.path().canonicalize().map_err(key_path_error)?
+        let key_path = root
+            .path()
+            .canonicalize()
+            .map_err(key_path_error)?
             .join("receipt-root-v1.key");
         root.validate_current().map_err(key_path_error)?;
         Ok(Self {
@@ -1792,9 +1798,18 @@ fn authority_statement_vetoes(polarity: DeonticPolarity, surface: &str) -> bool 
             word.trim_matches(['(', ')', '[', ']', ',', ':']),
             "if" | "unless" | "until"
         )
-    }) || ["if ", "only if", "unless ", "until ", "場合", "ない限り", "まで", "ただし"]
-        .iter()
-        .any(|marker| lower.contains(marker));
+    }) || [
+        "if ",
+        "only if",
+        "unless ",
+        "until ",
+        "場合",
+        "ない限り",
+        "まで",
+        "ただし",
+    ]
+    .iter()
+    .any(|marker| lower.contains(marker));
     let negative = polarity == DeonticPolarity::Grant
         && [
             "do not",
@@ -1900,7 +1915,10 @@ fn authority_action_verbs(action: Action) -> &'static [&'static str] {
 fn japanese_authority_surface(action: Action, polarity: DeonticPolarity, surface: &str) -> bool {
     // Accept terminal sentence punctuation, but not a quoted or conditional
     // instruction. Both the selected bytes and their enclosing prose are checked.
-    let surface = surface.trim().trim_end_matches(['。', '！', '.', '!']).trim_end();
+    let surface = surface
+        .trim()
+        .trim_end_matches(['。', '！', '.', '!'])
+        .trim_end();
     let action_terms: &[&str] = match action {
         Action::Edit => &["編集", "変更", "修正"],
         Action::Test => &["テスト", "検証", "確認"],
@@ -1921,10 +1939,11 @@ fn japanese_authority_surface(action: Action, polarity: DeonticPolarity, surface
                 };
                 action_terms.iter().any(|term| {
                     stem.strip_suffix(*term).is_some_and(|prefix| {
-                        prefix.is_empty() || prefix.strip_suffix('を').is_some_and(|object| {
-                            !object.trim().is_empty()
-                                && !object.contains([':', '：', '「', '『', '、', ';', '；'])
-                        })
+                        prefix.is_empty()
+                            || prefix.strip_suffix('を').is_some_and(|object| {
+                                !object.trim().is_empty()
+                                    && !object.contains([':', '：', '「', '『', '、', ';', '；'])
+                            })
                     })
                 })
             }),
@@ -2071,7 +2090,9 @@ fn authority_quote_ranges(source: &str) -> Vec<Range<usize>> {
         if matches!(character, '\'' | '’') {
             let before = source[..offset].chars().next_back();
             let after = source[offset + character.len_utf8()..].chars().next();
-            let closing_single_quote = stack.last().is_some_and(|(_, close, _)| *close == character);
+            let closing_single_quote = stack
+                .last()
+                .is_some_and(|(_, close, _)| *close == character);
             if before.is_some_and(char::is_alphanumeric)
                 && (after.is_some_and(char::is_alphanumeric) || !closing_single_quote)
             {

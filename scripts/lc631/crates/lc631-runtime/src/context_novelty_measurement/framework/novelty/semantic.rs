@@ -14,8 +14,10 @@ mod status;
 mod types;
 
 use super as m;
-use super::{f, n, ComponentMetric, ComponentReport, ComponentState, Digest32, MeasurementError,
-    Rational, RationalInterval, ResourceClaim, ResourceError, ResourceReservationView};
+use super::{
+    f, n, ComponentMetric, ComponentReport, ComponentState, Digest32, MeasurementError, Rational,
+    RationalInterval, ResourceClaim, ResourceError, ResourceReservationView,
+};
 use lc631_substrate::measurement_numeric as numeric;
 use std::cell::Cell;
 
@@ -36,9 +38,17 @@ impl From<m::Error> for Error {
         }
     }
 }
-fn framework(e: f::Error) -> Error { m::framework(e).into() }
-fn native(e: n::Error) -> Error { m::native(e).into() }
+fn framework(e: f::Error) -> Error {
+    m::framework(e).into()
+}
+fn native(e: n::Error) -> Error {
+    m::native(e).into()
+}
 fn reserve<T>(n: usize, max: usize) -> Result<Vec<T>, Error> {
     m::budget::vector(n, max).map_err(Into::into)
 }
-const ROLES: [f::QueryRole; 3] = [f::QueryRole::GoalEcho, f::QueryRole::Placement, f::QueryRole::BridgeLaw];
+const ROLES: [f::QueryRole; 3] = [
+    f::QueryRole::GoalEcho,
+    f::QueryRole::Placement,
+    f::QueryRole::BridgeLaw,
+];

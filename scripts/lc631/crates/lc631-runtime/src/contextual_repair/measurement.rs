@@ -176,7 +176,9 @@ impl OwnedCodingProbeObservation<'_> {
         {
             return Err(ProbeError::BindingMismatch);
         }
-        let now = self.clock.sample(&self.observed_epoch, self.expires_epoch, resources)?;
+        let now = self
+            .clock
+            .sample(&self.observed_epoch, self.expires_epoch, resources)?;
         if now < self.checked_epoch {
             return Err(ProbeError::ClockRollback);
         }
@@ -251,7 +253,11 @@ impl OwnedCodingProbeGain<'_> {
             return Err(ProbeError::BindingMismatch);
         }
         for (role, clock) in self.clocks.iter().enumerate() {
-            let now = clock.sample(&self.observed_epochs[role], self.expires_epochs[role], resources)?;
+            let now = clock.sample(
+                &self.observed_epochs[role],
+                self.expires_epochs[role],
+                resources,
+            )?;
             if now < self.checked_epochs[role] {
                 return Err(ProbeError::ClockRollback);
             }

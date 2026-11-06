@@ -28,11 +28,17 @@ pub enum BuildError {
     NotExecutable,
 }
 impl From<ResourceError> for BuildError {
-    fn from(value: ResourceError) -> Self { Self::Resource(value) }
+    fn from(value: ResourceError) -> Self {
+        Self::Resource(value)
+    }
 }
 impl From<SnapshotCaptureError> for BuildError {
-    fn from(value: SnapshotCaptureError) -> Self { Self::Capture(value) }
+    fn from(value: SnapshotCaptureError) -> Self {
+        Self::Capture(value)
+    }
 }
 impl From<std::io::Error> for BuildError {
-    fn from(value: std::io::Error) -> Self { Self::Io(value.kind()) }
+    fn from(value: std::io::Error) -> Self {
+        Self::Io(value.kind())
+    }
 }

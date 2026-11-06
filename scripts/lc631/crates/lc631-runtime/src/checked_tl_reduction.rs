@@ -15,10 +15,10 @@ use lc631_substrate::resource::{
     ResourceReservationView,
 };
 pub use plan::{RootPlan, TupleCandidate};
-pub use reduce::{reduce_current, OwnedReduction, Owners};
 pub use reduce::selection::{
     select_current_reduced, CurrentReducedSelection, ReducedSelectionError, ReductionRow,
 };
+pub use reduce::{reduce_current, OwnedReduction, Owners};
 
 pub const PROFILE: &str = "finite-formal-v1.4/TL-TOTAL/given-temporal-spatial-tuple-1-3.v1";
 pub const DENOMINATOR: u64 = 4;

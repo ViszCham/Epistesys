@@ -5,14 +5,14 @@ use super::{
     BudgetError, BudgetPhase, BudgetSession, BudgetSummary, PersistedBudgetReservation,
     ReservationProposal,
 };
+use lc631_analysis::declared_build_capture::{
+    CurrentSnapshotAuthority, SnapshotCaptureAttempt, SnapshotCaptureError,
+};
 use lc631_analysis::{
     dgcl_repair_application_payload_digest, dgcl_repository_root_digest, DgclFileEffectOwner,
     DgclFileRepairConfig, DgclFileRepairDriver, DgclRepairApplication, DgclRepairDriver,
     DgclRepairDriverError, DgclRepairRequest, DgclRepairValidation, DgclVerifiedRepairApplication,
     ToolProcessRunner,
-};
-use lc631_analysis::declared_build_capture::{
-    CurrentSnapshotAuthority, SnapshotCaptureAttempt, SnapshotCaptureError,
 };
 use lc631_core::ExecutionPermit;
 use lc631_substrate::Digest32;
@@ -135,7 +135,11 @@ impl<'driver, 'budget, 'trust> BudgetedFileRepairDriver<'driver, 'budget, 'trust
             return SnapshotCaptureAttempt::failure(SnapshotCaptureError::RootMismatch);
         }
         self.inner.recapture_current_build(
-            expected_root, expected_program, expected_plan, authority, resources,
+            expected_root,
+            expected_program,
+            expected_plan,
+            authority,
+            resources,
         )
     }
     fn fail(&mut self, error: BudgetError) -> DgclRepairDriverError {

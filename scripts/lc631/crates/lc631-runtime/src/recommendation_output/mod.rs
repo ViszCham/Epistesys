@@ -10,8 +10,8 @@ mod dependency_tests;
 mod whole_context_tests;
 
 pub use connector::{
-    connect_joint_reported, connect_joint_whole_context_reported, ConnectedDecision, ConnectionError,
-    ExplanationBinding,
+    connect_joint_reported, connect_joint_whole_context_reported, ConnectedDecision,
+    ConnectionError, ExplanationBinding,
 };
 use lc631_core::context::{ContextApplicability, ContextState, PremiseBasis, SourceRevision};
 use lc631_substrate::Digest32;

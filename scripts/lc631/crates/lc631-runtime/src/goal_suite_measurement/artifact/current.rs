@@ -1,7 +1,7 @@
 //! Cheap bounded admission precedes hashing, providers and physical artifact I/O.
 use super::*;
-use crate::goal_clock_domain as clock;
 use crate::contextual_repair::execution::{GoalEpochError, GoalInvocationGate};
+use crate::goal_clock_domain as clock;
 use lc631_analysis::declared_build_capture::{declared_capture_digest, SnapshotAuthorityView};
 use lc631_core::ExecutionPermitContext;
 use std::path::{Component, Path};
@@ -265,8 +265,14 @@ pub(super) fn check(
     // target/native hashing in that shared checked helper; no caller Pass flag.
     baseline.check_artifact_current().map_err(epoch_error)?;
     candidate.check_artifact_current().map_err(epoch_error)?;
-    physical_root(&clock::ProbeInputs::without_clock(&gate.baseline_invocation), root.baseline_before.root())?;
-    physical_root(&clock::ProbeInputs::without_clock(&gate.candidate_invocation), root.candidate_expected.root())?;
+    physical_root(
+        &clock::ProbeInputs::without_clock(&gate.baseline_invocation),
+        root.baseline_before.root(),
+    )?;
+    physical_root(
+        &clock::ProbeInputs::without_clock(&gate.candidate_invocation),
+        root.candidate_expected.root(),
+    )?;
     capture(
         root.baseline_before,
         gate.baseline_build,
@@ -319,22 +325,32 @@ pub(super) fn check_registered<'o, 'p, 'v>(
     port(root.expected.actual(), ports.candidate_build, view)?;
 
     let before = [
-        pair.baseline.check_invocation_current(root.plan(), base, view)?,
-        pair.candidate.check_invocation_current(root.plan(), next, view)?,
+        pair.baseline
+            .check_invocation_current(root.plan(), base, view)?,
+        pair.candidate
+            .check_invocation_current(root.plan(), next, view)?,
     ];
-    if before.iter().zip(root.artifact.epochs.get()).any(|(now, floor)| *now < floor) {
+    if before
+        .iter()
+        .zip(root.artifact.epochs.get())
+        .any(|(now, floor)| *now < floor)
+    {
         return Err(clock::ClockFault::ClockRollback.into());
     }
-    pair.baseline.check_artifact_current(root.plan(), base, view)?;
-    pair.candidate.check_artifact_current(root.plan(), next, view)?;
+    pair.baseline
+        .check_artifact_current(root.plan(), base, view)?;
+    pair.candidate
+        .check_artifact_current(root.plan(), next, view)?;
     physical_root(&base, root.before.actual().root())?;
     physical_root(&next, root.expected.actual().root())?;
     capture_registered(root.baseline, root.before, ports.baseline_build, view)?;
     capture_registered(root.candidate, root.expected, ports.candidate_build, view)?;
     root.artifact.check(view)?;
     let after = [
-        pair.baseline.check_invocation_current(root.plan(), base, view)?,
-        pair.candidate.check_invocation_current(root.plan(), next, view)?,
+        pair.baseline
+            .check_invocation_current(root.plan(), base, view)?,
+        pair.candidate
+            .check_invocation_current(root.plan(), next, view)?,
     ];
     if after.iter().zip(before).any(|(end, start)| *end < start) {
         return Err(clock::ClockFault::ClockRollback.into());
@@ -347,7 +363,8 @@ pub(super) fn check_registered<'o, 'p, 'v>(
 fn capture_registered<'o, 'p, 'v>(
     session: &clock::RoleSession<'o, 'p, 'v>,
     origin: &clock::RegisteredCapture<'o, 'p, 'v>,
-    port: &mut CodingBuildPort<'_, '_>, view: &'v ResourceReservationView<'_>,
+    port: &mut CodingBuildPort<'_, '_>,
+    view: &'v ResourceReservationView<'_>,
 ) -> Result<(), clock::Error> {
     let attempt = session.capture_current(port, view);
     let captured = attempt.current()?;
@@ -357,4 +374,3 @@ fn capture_registered<'o, 'p, 'v>(
     match_capture(origin.actual(), captured.actual(), view)?;
     Ok(())
 }
-

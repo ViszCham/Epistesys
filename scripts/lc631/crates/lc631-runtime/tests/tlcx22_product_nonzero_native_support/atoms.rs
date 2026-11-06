@@ -1,8 +1,8 @@
 //! Independent Given case specification and exhaustive two-bit hand oracle.
+use super::{models, Variant};
 use lc631_runtime::adversarial_measurement::SemanticAtom;
 use lc631_solvers::typed_query::{BoolExpr, BoolSymbolId, SmtEmitLimits, SmtStatusQuery};
 use lc631_substrate::semantic_term::Term;
-use super::{models, Variant};
 
 pub struct Inputs {
     pub declared: Vec<SemanticAtom<'static>>,
@@ -16,48 +16,100 @@ pub struct Inputs {
 }
 pub fn input(variant: Variant, single: bool) -> Inputs {
     let renamed = matches!(variant, Variant::RenamedBoth);
-    let a = BoolSymbolId::new(if renamed { 71 } else if single { 17 } else { 91 });
+    let a = BoolSymbolId::new(if renamed {
+        71
+    } else if single {
+        17
+    } else {
+        91
+    });
     let b = BoolSymbolId::new(if renamed { 12 } else { 17 });
-    let alpha = SemanticAtom { symbol: a, meaning: b"alpha" };
-    let beta = SemanticAtom { symbol: b, meaning: b"beta" };
+    let alpha = SemanticAtom {
+        symbol: a,
+        meaning: b"alpha",
+    };
+    let beta = SemanticAtom {
+        symbol: b,
+        meaning: b"beta",
+    };
     // Deliberately reverse meaning order. In the two-atom normal case raw91
     // (alpha) must normalize to0, while smaller raw17 (beta) normalizes to1.
-    let declared = if single { vec![alpha] } else { vec![beta, alpha] };
+    let declared = if single {
+        vec![alpha]
+    } else {
+        vec![beta, alpha]
+    };
     let mut actual = declared.clone();
-    let actual_a = if matches!(variant, Variant::SymbolOnly) { BoolSymbolId::new(38) } else { a };
+    let actual_a = if matches!(variant, Variant::SymbolOnly) {
+        BoolSymbolId::new(38)
+    } else {
+        a
+    };
     for atom in &mut actual {
         if atom.meaning == b"alpha" {
             atom.symbol = actual_a;
-            if matches!(variant, Variant::MeaningOnly) { atom.meaning = b"changed-alpha"; }
+            if matches!(variant, Variant::MeaningOnly) {
+                atom.meaning = b"changed-alpha";
+            }
         } else if matches!(variant, Variant::UnusedMeaning) {
             atom.meaning = b"changed-beta";
         }
     }
     if matches!(variant, Variant::ExtraUnusedAtom) {
-        actual.push(SemanticAtom { symbol: BoolSymbolId::new(55), meaning: b"gamma-unused" });
+        actual.push(SemanticAtom {
+            symbol: BoolSymbolId::new(55),
+            meaning: b"gamma-unused",
+        });
     }
     let reference = BoolExpr::Variable(actual_a);
     let baseline = BoolExpr::Not(Box::new(reference.clone()));
     let target = if matches!(variant, Variant::ResponseOnly) {
         BoolExpr::Not(Box::new(BoolExpr::Not(Box::new(reference.clone()))))
-    } else { reference.clone() };
+    } else {
+        reference.clone()
+    };
     let assertions = if matches!(variant, Variant::TheoryOnly) {
         vec![BoolExpr::Or(vec![reference.clone(), baseline.clone()])]
-    } else { vec![] };
-    let theory = SmtStatusQuery::checked(actual.iter().map(|a| a.symbol).collect(), vec![], assertions, SmtEmitLimits::default()).unwrap();
-    Inputs { declared, actual, theory, reference, baseline, target,
+    } else {
+        vec![]
+    };
+    let theory = SmtStatusQuery::checked(
+        actual.iter().map(|a| a.symbol).collect(),
+        vec![],
+        assertions,
+        SmtEmitLimits::default(),
+    )
+    .unwrap();
+    Inputs {
+        declared,
+        actual,
+        theory,
+        reference,
+        baseline,
+        target,
         reported_baseline: BoolExpr::Not(Box::new(BoolExpr::Variable(a))),
-        reported_target: BoolExpr::Variable(a) }
+        reported_target: BoolExpr::Variable(a),
+    }
 }
 pub fn spec(single: bool) -> Vec<u8> {
-    let meanings = if single { vec![models::symbol("alpha")] } else { vec![models::symbol("alpha"),models::symbol("beta")] };
-    models::encoded(Term::Apply("stage-b-case-spec-v1".into(),vec![
-        models::symbol("BooleanReferenceAgreement"),Term::Apply("atoms-v1".into(),meanings),
-        Term::Apply("theory-v1".into(),vec![]),models::symbol("SoftFiniteValidation"),
-        models::symbol("AllAdmissibleAssignments")]))
+    let meanings = if single {
+        vec![models::symbol("alpha")]
+    } else {
+        vec![models::symbol("alpha"), models::symbol("beta")]
+    };
+    models::encoded(Term::Apply(
+        "stage-b-case-spec-v1".into(),
+        vec![
+            models::symbol("BooleanReferenceAgreement"),
+            Term::Apply("atoms-v1".into(), meanings),
+            Term::Apply("theory-v1".into(), vec![]),
+            models::symbol("SoftFiniteValidation"),
+            models::symbol("AllAdmissibleAssignments"),
+        ],
+    ))
 }
 pub fn reference_contract() -> Vec<u8> {
-    models::encoded(Term::Apply("atom-v1".into(),vec![models::symbol("alpha")]))
+    models::encoded(Term::Apply("atom-v1".into(), vec![models::symbol("alpha")]))
 }
 
 /// Independent truth table, not a call back into production normalization or
@@ -67,18 +119,18 @@ pub fn hand_oracle() {
     // alpha,beta,admissible,reference,not-alpha,alpha,double-not-alpha.
     // Literal manual gold, never generated by the production evaluator.
     let rows = [
-        (false,false,true,false,true,false,false),
-        (false,true,true,false,true,false,false),
-        (true,false,true,true,false,true,true),
-        (true,true,true,true,false,true,true),
+        (false, false, true, false, true, false, false),
+        (false, true, true, false, true, false, false),
+        (true, false, true, true, false, true, true),
+        (true, true, true, true, false, true, true),
     ];
     let mut baseline_disagreements = 0;
     let mut target_disagreements = 0;
-    for (_alpha,_beta,admissible,reference,baseline,target,double_not) in rows {
+    for (_alpha, _beta, admissible, reference, baseline, target, double_not) in rows {
         assert!(admissible);
-        assert_eq!(double_not,target);
+        assert_eq!(double_not, target);
         baseline_disagreements += usize::from(baseline != reference);
         target_disagreements += usize::from(target != reference);
     }
-    assert_eq!((baseline_disagreements,target_disagreements),(4,0));
+    assert_eq!((baseline_disagreements, target_disagreements), (4, 0));
 }

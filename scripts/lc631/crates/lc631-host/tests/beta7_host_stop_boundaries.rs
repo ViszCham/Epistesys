@@ -30,7 +30,8 @@ impl Entry {
             Self::Legacy => persist_stop_hook_observation(root, report),
             Self::Owned => {
                 let lease = bounded_test_lease(71).unwrap();
-                let result = persist_stop_hook_observation_with_resources(root, report, &lease.view());
+                let result =
+                    persist_stop_hook_observation_with_resources(root, report, &lease.view());
                 lease.close_confirmed().unwrap();
                 result
             }
@@ -52,9 +53,14 @@ impl Entry {
 
 fn outer() -> PathBuf {
     static SERIAL: AtomicU64 = AtomicU64::new(0);
-    let time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+    let time = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
     let p = std::env::temp_dir().canonicalize().unwrap().join(format!(
-        "beta7-host-stop-{}-{time}-{}", std::process::id(), SERIAL.fetch_add(1, Ordering::Relaxed),
+        "beta7-host-stop-{}-{time}-{}",
+        std::process::id(),
+        SERIAL.fetch_add(1, Ordering::Relaxed),
     ));
     fs::create_dir(&p).unwrap();
     p
@@ -65,12 +71,23 @@ fn observation() -> StopHookObservation {
     let issuer = ReceiptIssuer::from_key_bytes(actor, &[17; 32]).unwrap();
     let verifier = ReceiptVerifier::from_key_bytes(actor, &[17; 32]).unwrap();
     let event: CodexStopHookEvent = serde_json::from_str(RAW).unwrap();
-    bind_codex_stop_hook_attested(&event, RAW, &issuer, &verifier, &mut ReplayGuard::default(), 11)
-        .unwrap().1
+    bind_codex_stop_hook_attested(
+        &event,
+        RAW,
+        &issuer,
+        &verifier,
+        &mut ReplayGuard::default(),
+        11,
+    )
+    .unwrap()
+    .1
 }
 
 fn entries(path: &Path) -> Vec<std::ffi::OsString> {
-    let mut names: Vec<_> = fs::read_dir(path).unwrap().map(|e| e.unwrap().file_name()).collect();
+    let mut names: Vec<_> = fs::read_dir(path)
+        .unwrap()
+        .map(|e| e.unwrap().file_name())
+        .collect();
     names.sort();
     names
 }
@@ -84,9 +101,18 @@ fn beta7_host_regular_stop_is_idempotent_without_host_flags_in_both_entries() {
         assert_eq!(path.parent().unwrap(), root.join("observations"));
         let bytes = fs::read(&path).unwrap();
         let value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-        assert_eq!(value["output_digest"].as_str(), Some(report.output_digest.as_str()));
-        assert_eq!(value["automatic_host_callback_observed"].as_bool(), Some(false));
-        assert_eq!(value["persistent_supervision_observed"].as_bool(), Some(false));
+        assert_eq!(
+            value["output_digest"].as_str(),
+            Some(report.output_digest.as_str())
+        );
+        assert_eq!(
+            value["automatic_host_callback_observed"].as_bool(),
+            Some(false)
+        );
+        assert_eq!(
+            value["persistent_supervision_observed"].as_bool(),
+            Some(false)
+        );
         assert_eq!(mode.persist(&root, &report).unwrap(), path);
         assert_eq!(fs::read(path).unwrap(), bytes);
     }
@@ -119,8 +145,15 @@ fn beta7_host_all_four_stop_digests_require_canonical_bytes_before_root_creation
         }
     }
     for (mode, field, result, visible) in observations {
-        assert_eq!(result, Err(HostError::InvalidStopHookEvent), "{mode:?}, {field}");
-        assert!(visible.is_empty(), "{mode:?}, {field} created a root, lock or file");
+        assert_eq!(
+            result,
+            Err(HostError::InvalidStopHookEvent),
+            "{mode:?}, {field}"
+        );
+        assert!(
+            visible.is_empty(),
+            "{mode:?}, {field} created a root, lock or file"
+        );
     }
 }
 
@@ -155,7 +188,10 @@ fn beta7_host_identical_stop_bytes_cannot_make_a_hardlink_idempotent() {
         assert_eq!(fs::read(&alias).unwrap(), before);
         assert_eq!(fs::read(&file).unwrap(), before);
         assert_eq!(entries(&root), members);
-        assert!(result.is_err(), "{mode:?} accepted an observation with a second name");
+        assert!(
+            result.is_err(),
+            "{mode:?} accepted an observation with a second name"
+        );
     }
 }
 
@@ -172,16 +208,26 @@ fn alias_observations(p: &Path) {
     let root = p.canonicalize().unwrap();
     let link = root.join("store/observations");
     let sibling = root.join("sibling");
-    assert_eq!(link.parent().unwrap().canonicalize().unwrap(), link.parent().unwrap());
+    assert_eq!(
+        link.parent().unwrap().canonicalize().unwrap(),
+        link.parent().unwrap()
+    );
     assert_eq!(sibling.canonicalize().unwrap(), sibling);
-    assert!(matches!(fs::symlink_metadata(&link), Err(e) if e.kind() == std::io::ErrorKind::NotFound));
+    assert!(
+        matches!(fs::symlink_metadata(&link), Err(e) if e.kind() == std::io::ErrorKind::NotFound)
+    );
     let operand = |path: &Path| {
         assert!(path.is_absolute() && path.starts_with(&root));
-        assert!(matches!(path.components().next(), Some(Component::Prefix(prefix))
-            if matches!(prefix.kind(), Prefix::Disk(_) | Prefix::VerbatimDisk(_))));
+        assert!(
+            matches!(path.components().next(), Some(Component::Prefix(prefix))
+            if matches!(prefix.kind(), Prefix::Disk(_) | Prefix::VerbatimDisk(_)))
+        );
         let absolute = path.to_str().expect("fixture path must be Unicode");
         let dos = absolute.strip_prefix(r"\\?\").unwrap_or(absolute);
-        assert!(!dos.contains(['[', ']', '*', '?', '\x60']), "fixture path contains a wildcard");
+        assert!(
+            !dos.contains(['[', ']', '*', '?', '\x60']),
+            "fixture path contains a wildcard"
+        );
         dos.to_owned()
     };
     let powershell = PathBuf::from(std::env::var_os("SystemRoot").unwrap())
@@ -195,7 +241,10 @@ fn alias_observations(p: &Path) {
         .env("BETA7_JUNCTION_SIBLING", operand(&sibling))
         .creation_flags(0x08000000) // CREATE_NO_WINDOW
         .status().unwrap();
-    assert!(status.success(), "test fixture could not create its directory junction");
+    assert!(
+        status.success(),
+        "test fixture could not create its directory junction"
+    );
 }
 
 #[cfg(any(unix, windows))]
@@ -209,13 +258,25 @@ fn beta7_host_stop_cannot_write_through_an_observations_directory_alias() {
         fs::create_dir(&store).unwrap();
         fs::create_dir(&sibling).unwrap();
         alias_observations(&p);
-        assert_eq!(fs::canonicalize(store.join("observations")).unwrap(), sibling.canonicalize().unwrap());
+        assert_eq!(
+            fs::canonicalize(store.join("observations")).unwrap(),
+            sibling.canonicalize().unwrap()
+        );
         let before = entries(&store);
         let result = mode.persist(&store, &report);
-        assert!(entries(&sibling).is_empty(), "{mode:?} wrote through the alias");
-        assert!(!store.join(LOCK).exists(), "{mode:?} created a lock before rejection");
+        assert!(
+            entries(&sibling).is_empty(),
+            "{mode:?} wrote through the alias"
+        );
+        assert!(
+            !store.join(LOCK).exists(),
+            "{mode:?} created a lock before rejection"
+        );
         assert_eq!(entries(&store), before);
-        assert!(result.is_err(), "{mode:?} accepted an aliased observations directory");
+        assert!(
+            result.is_err(),
+            "{mode:?} accepted an aliased observations directory"
+        );
     }
 }
 

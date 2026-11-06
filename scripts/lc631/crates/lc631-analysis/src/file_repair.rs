@@ -19,8 +19,8 @@ use std::collections::BTreeMap;
 use std::path::{Component, Path};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-mod effects;
 mod current_build;
+mod effects;
 pub use effects::{DgclFileEffectOwner, DgclFileEffectPlan};
 
 pub trait DgclFileEvidenceValidator {

@@ -3,11 +3,11 @@
 #![forbid(unsafe_code)]
 /// Versioned owned budget history, separate from legacy checkpoint semantics.
 pub mod budget;
-/// Historical application bindings; never renewed authority or quota.
-pub mod transition;
 /// Fresh execution of the same fixed coding probes after history inspection.
 pub mod fresh_reselection;
 pub mod production_contract;
+/// Historical application bindings; never renewed authority or quota.
+pub mod transition;
 
 use crate::journal::{
     inspect_checkpoint_chain_resume, CheckpointChainResumeDecision, CheckpointChainResumeHold,

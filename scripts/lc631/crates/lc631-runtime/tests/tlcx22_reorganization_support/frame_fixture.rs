@@ -1,20 +1,32 @@
 //! Preserve the earlier oracle scenarios through the implemented exact v2 path.
 //! No v1 root inference, local oracle, measurement stub or success certificate.
 #![allow(dead_code)]
-#[path = "../tlcx22_reframe_exact_support/mod.rs"]
-mod support;
 #[path = "../tlcx22_reframe_exact_support/scenario.rs"]
 mod exact;
+#[path = "../tlcx22_reframe_exact_support/mod.rs"]
+mod support;
 
 pub use lc631_analysis::creativity_measurement::ComponentMetric;
-pub use support::{f, ratio, ComponentReport, ComponentState,
-    ContextError, IndependenceStatus, InputBasis, SemanticValidation};
+pub use support::{
+    f, ratio, ComponentReport, ComponentState, ContextError, IndependenceStatus, InputBasis,
+    SemanticValidation,
+};
 
 #[derive(Clone, Copy)]
 pub enum Case {
-    CheckedMacro, MissingPath, WrongEndpoint, TinyOracleBudget, MissingBaselineOwner,
-    UnusedMacro, IdentityFrame, LabelOnlyDelta, UnregisteredMacroRule, OracleSwap,
-    HardErase, AuthoritySwap, GoalScopeSwap,
+    CheckedMacro,
+    MissingPath,
+    WrongEndpoint,
+    TinyOracleBudget,
+    MissingBaselineOwner,
+    UnusedMacro,
+    IdentityFrame,
+    LabelOnlyDelta,
+    UnregisteredMacroRule,
+    OracleSwap,
+    HardErase,
+    AuthoritySwap,
+    GoalScopeSwap,
 }
 pub struct Observed {
     pub report: ComponentReport,

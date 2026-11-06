@@ -31,7 +31,10 @@ pub(super) fn with_registry<T>(
             return Err(Error::Clock(unavailable()));
         };
         let checked = verify(view);
-        let result = checked.as_ref().map(|_| ()).map_err(|fault| Error::Clock(fault.clone()));
+        let result = checked
+            .as_ref()
+            .map(|_| ())
+            .map_err(|fault| Error::Clock(fault.clone()));
         first = Some(checked);
         result
     });
@@ -119,7 +122,12 @@ impl RegistryHistory {
             return Err(ClockFault::BudgetExhausted);
         }
         let index = self.known.len();
-        self.known.push(RegisteredValidity { digest, expiry, revoked: false, expired: false });
+        self.known.push(RegisteredValidity {
+            digest,
+            expiry,
+            revoked: false,
+            expired: false,
+        });
         Ok(index)
     }
 

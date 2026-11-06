@@ -77,7 +77,8 @@ impl<'a, 'v> Root<'a, 'v> {
             self.attempts.set(self.attempts.get() + 1);
             m::budget::debit(&self.parent.framework, 1024)?;
             let limits = self.registration.limits;
-            let retained = m::budget::claim(view, limits.assessment_ram, Some(limits.output_bytes))?;
+            let retained =
+                m::budget::claim(view, limits.assessment_ram, Some(limits.output_bytes))?;
             let scratch = m::budget::claim(view, limits.scratch_ram, None)?;
             // 日本語: P2は、この返却された実owner上のcase検査を完了している。
             // English: P2 finishes with actual case checks on this exact, freshly returned owner.
@@ -85,26 +86,53 @@ impl<'a, 'v> Root<'a, 'v> {
             let check = || self.parent.framework.native.check(view);
             let mut work = n::Work::new(
                 &self.parent.framework.native.meter,
-                self.parent.framework.native.state.declaration.limits.max_call_work,
+                self.parent
+                    .framework
+                    .native
+                    .state
+                    .declaration
+                    .limits
+                    .max_call_work,
                 &check,
             );
             let bank = bank::Bank::evaluate(self, expected.pair, view, &mut work)?;
-            let dpar = parent.reports.iter()
+            let dpar = parent
+                .reports
+                .iter()
                 .find(|report| report.metric == ComponentMetric::FrameworkDistance)
                 .ok_or(Error::ExpectedInputMismatch)?;
             let values = metrics::evaluate(self, expected.pair, dpar, &bank, &mut work)?;
-            let digest = identity::result(self, expected.pair, &parent.reports, &bank, &values, &mut work)?;
+            let digest = identity::result(
+                self,
+                expected.pair,
+                &parent.reports,
+                &bank,
+                &values,
+                &mut work,
+            )?;
             let reports = identity::reports(self, dpar, digest, values.states, &mut work)?;
             bank.check(expected.pair, view, &mut work)?;
             // 日本語: 公開時にP2の保持されたnative/archive実体を一度再検査する。
             // English: Validate P2's retained native/archive backing once at publication.
             parent.check(expected.pair, view)?;
             scratch.check().map_err(Error::Resource)?;
-            m::budget::current(&retained, view, self.parent.framework.native.state.source.id().digest())?;
+            m::budget::current(
+                &retained,
+                view,
+                self.parent.framework.native.state.source.id().digest(),
+            )?;
             Ok(Owned {
-                root: self, expected, parent, reports, bank, bridges: values.bridges,
-                semantic_total: values.semantic_total, bridge_total: values.bridge_total,
-                status: values.status, checks: Cell::new(0), retained,
+                root: self,
+                expected,
+                parent,
+                reports,
+                bank,
+                bridges: values.bridges,
+                semantic_total: values.semantic_total,
+                bridge_total: values.bridge_total,
+                status: values.status,
+                checks: Cell::new(0),
+                retained,
             })
         })
     }
@@ -117,7 +145,11 @@ impl<'s, 'a, 'v> Owned<'s, 'a, 'v> {
         view: &ResourceReservationView<'_>,
     ) -> Result<(), Error> {
         self.root.own_current(view)?;
-        let next = self.checks.get().checked_add(1).ok_or(Error::CurrentBudget)?;
+        let next = self
+            .checks
+            .get()
+            .checked_add(1)
+            .ok_or(Error::CurrentBudget)?;
         if next > self.root.registration.limits.max_current_checks {
             return Err(Error::CurrentBudget);
         }
@@ -131,7 +163,11 @@ impl<'s, 'a, 'v> Owned<'s, 'a, 'v> {
         let native = &self.root.parent.framework.native;
         m::budget::current(&self.retained, view, native.state.source.id().digest())?;
         let check = || native.check(view);
-        let mut work = n::Work::new(&native.meter, native.state.declaration.limits.max_call_work, &check);
+        let mut work = n::Work::new(
+            &native.meter,
+            native.state.declaration.limits.max_call_work,
+            &check,
+        );
         self.bank.check(expected.pair, view, &mut work)
     }
 
@@ -147,33 +183,40 @@ impl<'s, 'a, 'v> Owned<'s, 'a, 'v> {
     ) -> Result<R, Error> {
         m::budget::with_call(&self.root.parent.framework, || {
             self.guard(expected, view)?;
-            self.parent.with_current(expected.pair, view, |parent| {
-                let value = consume(Current {
-                    parent,
-                    reports: &self.reports,
-                    source_queries: self.bank.queries(Side::Source),
-                    target_queries: self.bank.queries(Side::Target),
-                    source: expected.pair.source.expected.subject_query,
-                    target: expected.pair.target.expected.subject_query,
-                    bridges: &self.bridges,
-                    semantic_total: &self.semantic_total,
-                    bridge_total: &self.bridge_total,
-                    status: self.status,
-                    counts: self.bank.counts,
-                });
-                self.guard(expected, view)?;
-                Ok(value)
-            }).map_err(Error::from)?
+            self.parent
+                .with_current(expected.pair, view, |parent| {
+                    let value = consume(Current {
+                        parent,
+                        reports: &self.reports,
+                        source_queries: self.bank.queries(Side::Source),
+                        target_queries: self.bank.queries(Side::Target),
+                        source: expected.pair.source.expected.subject_query,
+                        target: expected.pair.target.expected.subject_query,
+                        bridges: &self.bridges,
+                        semantic_total: &self.semantic_total,
+                        bridge_total: &self.bridge_total,
+                        status: self.status,
+                        counts: self.bank.counts,
+                    });
+                    self.guard(expected, view)?;
+                    Ok(value)
+                })
+                .map_err(Error::from)?
         })
     }
 }
 
 impl<'scope> Current<'scope> {
     pub fn report(&self, metric: ComponentMetric) -> Option<&'scope ComponentReport> {
-        self.parent.report(metric).or_else(|| self.reports.iter().find(|r| r.metric == metric))
+        self.parent
+            .report(metric)
+            .or_else(|| self.reports.iter().find(|r| r.metric == metric))
     }
     pub fn tnc(&self) -> Result<&'scope RationalInterval, Error> {
-        match self.report(ComponentMetric::NoveltyCompatibility).map(|report| &report.state) {
+        match self
+            .report(ComponentMetric::NoveltyCompatibility)
+            .map(|report| &report.state)
+        {
             Some(ComponentState::Measured(value)) => Ok(value),
             _ => Err(Error::NoScalar),
         }
@@ -185,11 +228,25 @@ impl<'scope> Current<'scope> {
         };
         queries.get(role as usize)
     }
-    pub fn bridge_results(&self) -> &'scope [BridgeResult] { self.bridges }
-    pub fn source_query(&self) -> &'scope f::SmtStatusQuery { self.source }
-    pub fn target_query(&self) -> &'scope f::SmtStatusQuery { self.target }
-    pub fn semantic_denominator(&self) -> &'scope Rational { self.semantic_total }
-    pub fn bridge_denominator(&self) -> &'scope Rational { self.bridge_total }
-    pub fn counts(&self) -> Counts { self.counts }
-    pub fn status(&self) -> Status { self.status }
+    pub fn bridge_results(&self) -> &'scope [BridgeResult] {
+        self.bridges
+    }
+    pub fn source_query(&self) -> &'scope f::SmtStatusQuery {
+        self.source
+    }
+    pub fn target_query(&self) -> &'scope f::SmtStatusQuery {
+        self.target
+    }
+    pub fn semantic_denominator(&self) -> &'scope Rational {
+        self.semantic_total
+    }
+    pub fn bridge_denominator(&self) -> &'scope Rational {
+        self.bridge_total
+    }
+    pub fn counts(&self) -> Counts {
+        self.counts
+    }
+    pub fn status(&self) -> Status {
+        self.status
+    }
 }

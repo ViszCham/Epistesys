@@ -76,7 +76,10 @@ fn paid_copy_report(
     assert_eq!(report.reconstruction_bytes(), Some(semantic));
     assert_eq!(report.inverse_state(), ExecutionState::Completed);
     assert_eq!(report.reconstruction_state(), ReconstructionState::Matched);
-    assert_eq!(report.compression_eligibility(), CompressionEligibility::Pending);
+    assert_eq!(
+        report.compression_eligibility(),
+        CompressionEligibility::Pending
+    );
     assert_eq!(report.dictionary_bytes(), package.dictionary);
     assert_eq!(report.declarations_bytes(), declarations);
     assert_eq!(report.input_basis(), basis);
@@ -151,18 +154,35 @@ fn actual_native_literal_adapter_requires_paid_join_closure() {
         .unwrap();
         {
             let normal = capture_baseline_current(
-                &profile, &fixture.input, package.as_inline(), fixture.view,
+                &profile,
+                &fixture.input,
+                package.as_inline(),
+                fixture.view,
             )
             .expect("funded genuine native baseline with the normal paid adapter");
             paid_copy_report(
-                normal.historical_report(), package.as_inline(), &fixture.expected_source,
-                &declaration_bytes, InputBasis::ActualOwnerObservedWithGivenMeanings, None,
+                normal.historical_report(),
+                package.as_inline(),
+                &fixture.expected_source,
+                &declaration_bytes,
+                InputBasis::ActualOwnerObservedWithGivenMeanings,
+                None,
             );
         }
-        let literal = adapter(app("literal", vec![expected::decode(&fixture.expected_source)]));
-        let constant = InlinePackage { adapter: &literal, ..package.as_inline() };
+        let literal = adapter(app(
+            "literal",
+            vec![expected::decode(&fixture.expected_source)],
+        ));
+        let constant = InlinePackage {
+            adapter: &literal,
+            ..package.as_inline()
+        };
         reported_and_isolated_control(
-            &profile, constant, &fixture.expected_source, &declaration_bytes, fixture.view,
+            &profile,
+            constant,
+            &fixture.expected_source,
+            &declaration_bytes,
+            fixture.view,
         );
         // 日本語: cost K0は入力にしない。元のgenuine native portsをそのまま渡す。
         // English: No cost K0 is an input. Keep the original genuine native ports unchanged.
@@ -183,7 +203,10 @@ fn actual_native_dictionary_constant_adapter_requires_paid_join_closure() {
             "dictionary-v1",
             vec![
                 declarations,
-                app("constants-v1", vec![expected::decode(&fixture.expected_source)]),
+                app(
+                    "constants-v1",
+                    vec![expected::decode(&fixture.expected_source)],
+                ),
                 app("helper-data-v1", vec![]),
                 app("residuals-v1", vec![]),
             ],
@@ -197,20 +220,35 @@ fn actual_native_dictionary_constant_adapter_requires_paid_join_closure() {
         .unwrap();
         {
             let normal = capture_baseline_current(
-                &profile, &fixture.input, package.as_inline(), fixture.view,
+                &profile,
+                &fixture.input,
+                package.as_inline(),
+                fixture.view,
             )
             .expect("funded native baseline with unchanged declarations and a paid unused S0");
             paid_copy_report(
-                normal.historical_report(), package.as_inline(), &fixture.expected_source,
-                &declaration_bytes, InputBasis::ActualOwnerObservedWithGivenMeanings, None,
+                normal.historical_report(),
+                package.as_inline(),
+                &fixture.expected_source,
+                &declaration_bytes,
+                InputBasis::ActualOwnerObservedWithGivenMeanings,
+                None,
             );
         }
         let from_dictionary = adapter(app(
-            "dictionary", vec![integer(1), app("literal", vec![integer(0)])],
+            "dictionary",
+            vec![integer(1), app("literal", vec![integer(0)])],
         ));
-        let constant = InlinePackage { adapter: &from_dictionary, ..package.as_inline() };
+        let constant = InlinePackage {
+            adapter: &from_dictionary,
+            ..package.as_inline()
+        };
         reported_and_isolated_control(
-            &profile, constant, &fixture.expected_source, &declaration_bytes, fixture.view,
+            &profile,
+            constant,
+            &fixture.expected_source,
+            &declaration_bytes,
+            fixture.view,
         );
         require_native_join_gap(
             capture_baseline_current(&profile, &fixture.input, constant, fixture.view),

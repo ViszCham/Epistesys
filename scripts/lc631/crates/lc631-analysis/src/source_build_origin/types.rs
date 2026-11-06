@@ -2,22 +2,36 @@
 //! English: Untrusted descriptors are separate from producer-only borrowed owners.
 use super::{compiler_image::BuildImages, BuildError, BuildPlan};
 use crate::{
-    declared_build_capture::{CurrentSnapshotAuthority, OwnedDeclaredBuildCapture, SourceReadBinding},
+    declared_build_capture::{
+        CurrentSnapshotAuthority, OwnedDeclaredBuildCapture, SourceReadBinding,
+    },
     ToolProcessRunner,
 };
 use lc631_core::{ExecutionPermit, ExecutionPermitContext};
 use lc631_receipt_kernel::{ReceiptVerifier, UntrustedReceipt};
 use lc631_substrate::{
-    resource::{ResourceClaim, ResourceReservationView}, source::SourceStore, Digest32,
+    resource::{ResourceClaim, ResourceReservationView},
+    source::SourceStore,
+    Digest32,
 };
 use std::path::Path;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum StandaloneProfile { CheckedU32AddFourV1 }
+pub enum StandaloneProfile {
+    CheckedU32AddFourV1,
+}
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Emission { LinkExecutable, MetadataOnly }
+pub enum Emission {
+    LinkExecutable,
+    MetadataOnly,
+}
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum BuildStage { CompilerVersion, CompilerSysroot, Link, CurrentOrigin }
+pub enum BuildStage {
+    CompilerVersion,
+    CompilerSysroot,
+    Link,
+    CurrentOrigin,
+}
 impl BuildStage {
     pub(super) fn label(self) -> &'static str {
         match self {
@@ -29,17 +43,29 @@ impl BuildStage {
     }
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum OriginKind { CompilerObservedDeclaredBuild }
+pub enum OriginKind {
+    CompilerObservedDeclaredBuild,
+}
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum OutputState { AbsentBeforeObservedAfterLink }
+pub enum OutputState {
+    AbsentBeforeObservedAfterLink,
+}
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum SemanticAcceptance { NotAssessed }
+pub enum SemanticAcceptance {
+    NotAssessed,
+}
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Independence { SharedDependency }
+pub enum Independence {
+    SharedDependency,
+}
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum HermeticClosure { UnobservedExternalToolchain }
+pub enum HermeticClosure {
+    UnobservedExternalToolchain,
+}
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum SourceC1 { BlockedNeedsLaterGates }
+pub enum SourceC1 {
+    BlockedNeedsLaterGates,
+}
 
 #[derive(Clone, Copy)]
 pub struct CompilerSpec<'a> {
@@ -50,7 +76,10 @@ pub struct CompilerSpec<'a> {
     pub toolchain_profile: Digest32,
 }
 #[derive(Clone, Copy)]
-pub struct EnvironmentEntry<'a> { pub name: &'a str, pub value: &'a str }
+pub struct EnvironmentEntry<'a> {
+    pub name: &'a str,
+    pub value: &'a str,
+}
 #[derive(Clone, Copy)]
 pub struct ProcessFrame<'a> {
     pub cwd: &'a Path,
@@ -100,7 +129,9 @@ pub struct BuildAuthorityView<'a> {
 }
 pub trait CurrentBuildAuthority {
     fn current(
-        &mut self, plan: &BuildPlan<'_, '_>, stage: BuildStage,
+        &mut self,
+        plan: &BuildPlan<'_, '_>,
+        stage: BuildStage,
     ) -> Result<BuildAuthorityView<'_>, BuildError>;
 }
 pub trait BuildEventObserver {
@@ -112,8 +143,12 @@ pub struct BuildEvent<'a> {
     pub(super) children: &'a [CompilerChildWitness],
 }
 impl BuildEvent<'_> {
-    pub fn stage(&self) -> BuildStage { self.stage }
-    pub fn artifact_fingerprint(&self) -> Option<Digest32> { self.artifact_fingerprint }
+    pub fn stage(&self) -> BuildStage {
+        self.stage
+    }
+    pub fn artifact_fingerprint(&self) -> Option<Digest32> {
+        self.artifact_fingerprint
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -143,18 +178,42 @@ pub struct CompilerChildWitness {
     pub(super) stderr: Vec<u8>,
 }
 impl CompilerChildWitness {
-    pub fn stage(&self) -> BuildStage { self.stage }
-    pub fn exit_code(&self) -> Option<i32> { self.exit_code }
-    pub fn cleanup_verified(&self) -> bool { self.cleanup_verified }
-    pub fn frame_digest(&self) -> Digest32 { self.frame_digest }
-    pub fn invocation_digest(&self) -> Digest32 { self.invocation_digest }
-    pub fn options_digest(&self) -> Digest32 { self.options_digest }
-    pub fn source_revision(&self) -> Digest32 { self.source_revision }
-    pub fn compiler_digest(&self) -> Digest32 { self.compiler_digest }
-    pub fn cwd_digest(&self) -> Digest32 { self.cwd_digest }
-    pub fn environment_digest(&self) -> Digest32 { self.environment_digest }
-    pub fn test_scope(&self) -> &str { &self.test_scope }
-    pub fn test_checked_epoch(&self) -> u64 { self.test_checked_epoch }
+    pub fn stage(&self) -> BuildStage {
+        self.stage
+    }
+    pub fn exit_code(&self) -> Option<i32> {
+        self.exit_code
+    }
+    pub fn cleanup_verified(&self) -> bool {
+        self.cleanup_verified
+    }
+    pub fn frame_digest(&self) -> Digest32 {
+        self.frame_digest
+    }
+    pub fn invocation_digest(&self) -> Digest32 {
+        self.invocation_digest
+    }
+    pub fn options_digest(&self) -> Digest32 {
+        self.options_digest
+    }
+    pub fn source_revision(&self) -> Digest32 {
+        self.source_revision
+    }
+    pub fn compiler_digest(&self) -> Digest32 {
+        self.compiler_digest
+    }
+    pub fn cwd_digest(&self) -> Digest32 {
+        self.cwd_digest
+    }
+    pub fn environment_digest(&self) -> Digest32 {
+        self.environment_digest
+    }
+    pub fn test_scope(&self) -> &str {
+        &self.test_scope
+    }
+    pub fn test_checked_epoch(&self) -> u64 {
+        self.test_checked_epoch
+    }
 }
 
 pub struct OwnedSourceBuildOrigin<'p, 's, 'v> {
@@ -177,16 +236,23 @@ pub struct OwnedBuildFailure<'p, 's, 'v> {
     pub(super) retained: Option<ResourceClaim<'v>>,
 }
 impl OwnedBuildFailure<'_, '_, '_> {
-    pub fn cause(&self) -> &BuildError { &self.cause }
-    pub fn observed_child_count(&self) -> usize { self.observed_children }
-    pub fn has_origin(&self) -> bool { false }
+    pub fn cause(&self) -> &BuildError {
+        &self.cause
+    }
+    pub fn observed_child_count(&self) -> usize {
+        self.observed_children
+    }
+    pub fn has_origin(&self) -> bool {
+        false
+    }
 }
 impl std::fmt::Debug for OwnedBuildFailure<'_, '_, '_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("OwnedBuildFailure")
             .field("cause", &self.cause)
             .field("observed_child_count", &self.observed_children)
-            .field("has_origin", &false).finish_non_exhaustive()
+            .field("has_origin", &false)
+            .finish_non_exhaustive()
     }
 }
 pub struct BuildView<'current> {
@@ -197,37 +263,88 @@ pub struct BuildView<'current> {
     pub(super) artifact_digest: Digest32,
 }
 impl<'c> BuildView<'c> {
-    pub fn kind(&self) -> OriginKind { OriginKind::CompilerObservedDeclaredBuild }
-    pub fn output_state(&self) -> OutputState { OutputState::AbsentBeforeObservedAfterLink }
-    pub fn subject_digest(&self) -> Digest32 { self.plan.subject_digest }
-    pub fn driver_digest(&self) -> Digest32 { self.plan.driver_digest }
-    pub fn entrypoint(&self) -> &'c str { self.plan.input.entrypoint }
-    pub fn frame_digest(&self) -> Digest32 { self.plan.frame_digest() }
-    pub fn before_source(&self) -> &'c OwnedDeclaredBuildCapture<'c> { self.before }
-    pub fn after_source(&self) -> &'c OwnedDeclaredBuildCapture<'c> { self.after }
-    pub fn root_digest(&self) -> Digest32 { self.plan.root_digest() }
-    pub fn program_digest(&self) -> Digest32 { self.plan.program_digest() }
-    pub fn plan_digest(&self) -> Digest32 { self.plan.plan_digest() }
-    pub fn compiler_digest(&self) -> Digest32 { self.plan.input.compiler.expected_image }
-    pub fn verbose_digest(&self) -> Digest32 { self.plan.input.compiler.expected_verbose }
-    pub fn sysroot(&self) -> &'c Path { self.plan.input.compiler.declared_sysroot }
-    pub fn cwd(&self) -> &'c Path { self.plan.input.frame.cwd }
-    pub fn environment_digest(&self) -> Digest32 { self.plan.environment_digest() }
-    pub fn artifact_path(&self) -> &'c Path { &self.plan.output_path }
-    pub fn artifact_digest(&self) -> Digest32 { self.artifact_digest }
-    pub fn children(&self) -> &'c [CompilerChildWitness] { self.children }
-    pub fn semantic_acceptance(&self) -> SemanticAcceptance { SemanticAcceptance::NotAssessed }
-    pub fn independence(&self) -> Independence { Independence::SharedDependency }
-    pub fn hermetic_closure(&self) -> HermeticClosure { HermeticClosure::UnobservedExternalToolchain }
-    pub fn source_goal(&self) -> Option<Digest32> { None }
-    pub fn source_c1(&self) -> SourceC1 { SourceC1::BlockedNeedsLaterGates }
+    pub fn kind(&self) -> OriginKind {
+        OriginKind::CompilerObservedDeclaredBuild
+    }
+    pub fn output_state(&self) -> OutputState {
+        OutputState::AbsentBeforeObservedAfterLink
+    }
+    pub fn subject_digest(&self) -> Digest32 {
+        self.plan.subject_digest
+    }
+    pub fn driver_digest(&self) -> Digest32 {
+        self.plan.driver_digest
+    }
+    pub fn entrypoint(&self) -> &'c str {
+        self.plan.input.entrypoint
+    }
+    pub fn frame_digest(&self) -> Digest32 {
+        self.plan.frame_digest()
+    }
+    pub fn before_source(&self) -> &'c OwnedDeclaredBuildCapture<'c> {
+        self.before
+    }
+    pub fn after_source(&self) -> &'c OwnedDeclaredBuildCapture<'c> {
+        self.after
+    }
+    pub fn root_digest(&self) -> Digest32 {
+        self.plan.root_digest()
+    }
+    pub fn program_digest(&self) -> Digest32 {
+        self.plan.program_digest()
+    }
+    pub fn plan_digest(&self) -> Digest32 {
+        self.plan.plan_digest()
+    }
+    pub fn compiler_digest(&self) -> Digest32 {
+        self.plan.input.compiler.expected_image
+    }
+    pub fn verbose_digest(&self) -> Digest32 {
+        self.plan.input.compiler.expected_verbose
+    }
+    pub fn sysroot(&self) -> &'c Path {
+        self.plan.input.compiler.declared_sysroot
+    }
+    pub fn cwd(&self) -> &'c Path {
+        self.plan.input.frame.cwd
+    }
+    pub fn environment_digest(&self) -> Digest32 {
+        self.plan.environment_digest()
+    }
+    pub fn artifact_path(&self) -> &'c Path {
+        &self.plan.output_path
+    }
+    pub fn artifact_digest(&self) -> Digest32 {
+        self.artifact_digest
+    }
+    pub fn children(&self) -> &'c [CompilerChildWitness] {
+        self.children
+    }
+    pub fn semantic_acceptance(&self) -> SemanticAcceptance {
+        SemanticAcceptance::NotAssessed
+    }
+    pub fn independence(&self) -> Independence {
+        Independence::SharedDependency
+    }
+    pub fn hermetic_closure(&self) -> HermeticClosure {
+        HermeticClosure::UnobservedExternalToolchain
+    }
+    pub fn source_goal(&self) -> Option<Digest32> {
+        None
+    }
+    pub fn source_c1(&self) -> SourceC1 {
+        SourceC1::BlockedNeedsLaterGates
+    }
 }
 
 pub(super) fn check_claim(
-    claim: &ResourceClaim<'_>, view: &ResourceReservationView<'_>,
+    claim: &ResourceClaim<'_>,
+    view: &ResourceReservationView<'_>,
 ) -> Result<(), BuildError> {
     view.check()?;
     claim.check()?;
-    if !claim.same_reservation(view) { return Err(lc631_substrate::resource::ResourceError::ForeignOwner.into()); }
+    if !claim.same_reservation(view) {
+        return Err(lc631_substrate::resource::ResourceError::ForeignOwner.into());
+    }
     Ok(())
 }

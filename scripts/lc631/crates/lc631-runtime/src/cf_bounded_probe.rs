@@ -83,10 +83,8 @@ pub fn run<'v>(
             return attempt;
         }
     };
-    let captured = lc631_process_supervisor::run_bounded_with_resources_observed(
-        prepared.as_request(),
-        view,
-    );
+    let captured =
+        lc631_process_supervisor::run_bounded_with_resources_observed(prepared.as_request(), view);
     attempt.prepared = Some(prepared);
     match captured {
         Ok(capture) => {

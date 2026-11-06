@@ -191,10 +191,14 @@ impl<'p> Iterator for ProductAtomIter<'p> {
             meaning: &atom.meaning,
         })
     }
-    fn size_hint(&self) -> (usize, Option<usize>) { self.inner.size_hint() }
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.inner.size_hint()
+    }
 }
 impl ExactSizeIterator for ProductAtomIter<'_> {
-    fn len(&self) -> usize { self.inner.len() }
+    fn len(&self) -> usize {
+        self.inner.len()
+    }
 }
 pub(crate) struct ProductCaseView<'p> {
     pub(crate) key: &'p [u8],
@@ -216,7 +220,9 @@ impl<'p> Iterator for ProductCaseIter<'p> {
         match (self.cases.next(), self.terms.next()) {
             (Some(case), Some(response)) => Some(ProductCaseView {
                 key: &case.key,
-                atoms: ProductAtomIter { inner: case.atoms.iter().enumerate() },
+                atoms: ProductAtomIter {
+                    inner: case.atoms.iter().enumerate(),
+                },
                 theory: &case.theory,
                 reference: &case.reference,
                 response,
@@ -226,10 +232,14 @@ impl<'p> Iterator for ProductCaseIter<'p> {
             _ => None,
         }
     }
-    fn size_hint(&self) -> (usize, Option<usize>) { self.cases.size_hint() }
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.cases.size_hint()
+    }
 }
 impl ExactSizeIterator for ProductCaseIter<'_> {
-    fn len(&self) -> usize { self.cases.len() }
+    fn len(&self) -> usize {
+        self.cases.len()
+    }
 }
 /// Actual immutable admissible attack domain/reference; candidate terms cannot
 /// constrain Γ. Registration checks inhabitedness BEFORE binary uncertainty.
@@ -430,8 +440,11 @@ impl FrozenResponses<'_, '_> {
         &self,
         view: &ResourceReservationView<'_>,
         consume: impl for<'p> FnOnce(
-            CatalogBinding, CandidateBinding, AttackLimits,
-            &'p Rational, ProductCaseIter<'p>,
+            CatalogBinding,
+            CandidateBinding,
+            AttackLimits,
+            &'p Rational,
+            ProductCaseIter<'p>,
         ) -> R,
     ) -> Result<R, Error> {
         self.check(view)?;
@@ -439,7 +452,9 @@ impl FrozenResponses<'_, '_> {
             return Err(Error::BindingMismatch);
         }
         let result = consume(
-            self.catalog.binding, self.binding, self.catalog.limits,
+            self.catalog.binding,
+            self.binding,
+            self.catalog.limits,
             &self.catalog.weight,
             ProductCaseIter {
                 cases: self.catalog.cases.iter(),

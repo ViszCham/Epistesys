@@ -7,15 +7,21 @@ pub enum Node {
     Sym(String),
     App(String, Vec<Node>),
 }
-pub fn sym(value: &str) -> Node { Node::Sym(value.to_owned()) }
-pub fn app(name: &str, fields: Vec<Node>) -> Node { Node::App(name.to_owned(), fields) }
+pub fn sym(value: &str) -> Node {
+    Node::Sym(value.to_owned())
+}
+pub fn app(name: &str, fields: Vec<Node>) -> Node {
+    Node::App(name.to_owned(), fields)
+}
 pub fn encoded(node: &Node) -> Vec<u8> {
     fn length(mut n: usize, out: &mut Vec<u8>) {
         loop {
             let byte = (n & 127) as u8;
             n >>= 7;
             out.push(byte | if n == 0 { 0 } else { 128 });
-            if n == 0 { break; }
+            if n == 0 {
+                break;
+            }
         }
     }
     fn write(node: &Node, out: &mut Vec<u8>) {
@@ -28,17 +34,25 @@ pub fn encoded(node: &Node) -> Vec<u8> {
                 loop {
                     magnitude.push((n & 255) as u8);
                     n >>= 8;
-                    if n == 0 { break; }
+                    if n == 0 {
+                        break;
+                    }
                 }
                 length(magnitude.len(), out);
                 out.extend(magnitude);
             }
-            Node::Sym(v) => { out.push(3); length(v.len(), out); out.extend(v.as_bytes()); }
+            Node::Sym(v) => {
+                out.push(3);
+                length(v.len(), out);
+                out.extend(v.as_bytes());
+            }
             Node::App(name, fields) => {
                 out.push(4);
                 write(&Node::Sym(name.clone()), out);
                 length(fields.len(), out);
-                for field in fields { write(field, out); }
+                for field in fields {
+                    write(field, out);
+                }
             }
         }
     }
@@ -60,14 +74,18 @@ pub fn decoded(bytes: &[u8]) -> Node {
         for shift in (0..usize::BITS).step_by(7) {
             let b = take(bytes, at, 1)[0];
             n |= usize::from(b & 127).checked_shl(shift).unwrap();
-            if b & 128 == 0 { return n; }
+            if b & 128 == 0 {
+                return n;
+            }
         }
         panic!("invalid fixture length")
     }
     fn read(bytes: &[u8], at: &mut usize) -> Node {
         match take(bytes, at, 1)[0] {
             1 => match take(bytes, at, 1)[0] {
-                0 => Node::Bool(false), 1 => Node::Bool(true), _ => panic!("fixture bool"),
+                0 => Node::Bool(false),
+                1 => Node::Bool(true),
+                _ => panic!("fixture bool"),
             },
             2 => {
                 let sign = take(bytes, at, 1)[0];
@@ -76,14 +94,24 @@ pub fn decoded(bytes: &[u8]) -> Node {
                 let mut magnitude = [0u8; 16];
                 magnitude[..len].copy_from_slice(take(bytes, at, len));
                 let n = i128::try_from(u128::from_le_bytes(magnitude)).unwrap();
-                match sign { 0 => Node::Int(n), 1 => Node::Int(-n), _ => panic!("fixture sign") }
+                match sign {
+                    0 => Node::Int(n),
+                    1 => Node::Int(-n),
+                    _ => panic!("fixture sign"),
+                }
             }
             3 => {
                 let len = length(bytes, at);
-                Node::Sym(std::str::from_utf8(take(bytes, at, len)).unwrap().to_owned())
+                Node::Sym(
+                    std::str::from_utf8(take(bytes, at, len))
+                        .unwrap()
+                        .to_owned(),
+                )
             }
             4 => {
-                let Node::Sym(name) = read(bytes, at) else { panic!("fixture operator") };
+                let Node::Sym(name) = read(bytes, at) else {
+                    panic!("fixture operator")
+                };
                 let n = length(bytes, at);
                 let fields = (0..n).map(|_| read(bytes, at)).collect();
                 Node::App(name, fields)
@@ -98,7 +126,9 @@ pub fn decoded(bytes: &[u8]) -> Node {
 }
 
 pub fn field_mut<'a>(node: &'a mut Node, name: &str, index: usize) -> &'a mut Node {
-    let Node::App(actual, fields) = node else { panic!("fixture application") };
+    let Node::App(actual, fields) = node else {
+        panic!("fixture application")
+    };
     assert_eq!(actual, name);
     &mut fields[index]
 }

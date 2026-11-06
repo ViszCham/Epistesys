@@ -1,7 +1,7 @@
 use lc631_core::context::{ContextRevision, ContextScope, SourceRevision};
 use lc631_runtime::facet_ledger::{
-    ComparisonScope, Direction, Facet, FacetLedger, FiniteObservationBinding, GapReason, PropertyId,
-    Revision, ScopeId, TransformBinding, TransformId,
+    ComparisonScope, Direction, Facet, FacetLedger, FiniteObservationBinding, GapReason,
+    PropertyId, Revision, ScopeId, TransformBinding, TransformId,
 };
 use lc631_runtime::finite_modal_observation::{
     ModalError, ModalLedgerRequest, ModalObservationId, ModalObservationStore, ModalRequest,
@@ -109,7 +109,11 @@ fn tlcx15_cancel_after_actual_evaluation_blocks_new_ledger_entry_but_keeps_histo
             )
             .unwrap();
         assert_eq!(
-            store.lookup(id, context(), scope()).unwrap().evaluation().at_world(0),
+            store
+                .lookup(id, context(), scope())
+                .unwrap()
+                .evaluation()
+                .at_world(0),
             Ok(true)
         );
         let binding = store.binding(id, context(), scope()).unwrap();
@@ -130,7 +134,11 @@ fn tlcx15_cancel_after_actual_evaluation_blocks_new_ledger_entry_but_keeps_histo
         assert_eq!(store.len(), 1);
         assert_eq!(store.binding(id, context(), scope()).unwrap(), binding);
         assert_eq!(
-            store.lookup(id, context(), scope()).unwrap().evaluation().at_world(0),
+            store
+                .lookup(id, context(), scope())
+                .unwrap()
+                .evaluation()
+                .at_world(0),
             Ok(true)
         );
 

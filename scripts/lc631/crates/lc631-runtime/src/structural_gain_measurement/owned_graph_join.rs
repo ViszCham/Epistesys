@@ -12,8 +12,10 @@ use crate::description_measurement::{self as description, OwnedDescription};
 use crate::joint_selection::{compare_rows, AxisKind, PairRelation, SelectionError};
 use lc631_analysis::creativity_measurement::ComponentReport;
 use lc631_substrate::{
-    resource::{ResourceAmount, ResourceClaim, ResourceError, ResourceKind, ResourceRequest,
-        ResourceReservationView},
+    resource::{
+        ResourceAmount, ResourceClaim, ResourceError, ResourceKind, ResourceRequest,
+        ResourceReservationView,
+    },
     semantic_term::TermError,
     Digest32,
 };
@@ -62,7 +64,14 @@ impl<'j, 'i, 'r, 'a, 'p, 'v> OwnedGraphJoin<'j, 'i, 'r, 'a, 'p, 'v> {
         let retained = claim(resources, 16 * 1024)?;
         let binding = correspondence::verify(preservation, description, source, target, resources)?;
         retained.check().map_err(Error::Resource)?;
-        Ok(Self { preservation, description, source, target, binding, retained })
+        Ok(Self {
+            preservation,
+            description,
+            source,
+            target,
+            binding,
+            retained,
+        })
     }
 
     pub fn current(&self, resources: &ResourceReservationView<'_>) -> Result<Current<'_>, Error> {
@@ -71,15 +80,29 @@ impl<'j, 'i, 'r, 'a, 'p, 'v> OwnedGraphJoin<'j, 'i, 'r, 'a, 'p, 'v> {
             return Err(Error::ProfileMismatch);
         }
         let actual = correspondence::verify(
-            self.preservation, self.description, self.source, self.target, resources,
+            self.preservation,
+            self.description,
+            self.source,
+            self.target,
+            resources,
         )?;
         if actual != self.binding {
             return Err(Error::Correspondence);
         }
-        let preservation = self.preservation.report_current(resources).map_err(Error::Preservation)?;
-        let description = self.description.report_current(resources).map_err(Error::Description)?;
+        let preservation = self
+            .preservation
+            .report_current(resources)
+            .map_err(Error::Preservation)?;
+        let description = self
+            .description
+            .report_current(resources)
+            .map_err(Error::Description)?;
         self.retained.check().map_err(Error::Resource)?;
-        Ok(Current { preservation, description, binding: self.binding })
+        Ok(Current {
+            preservation,
+            description,
+            binding: self.binding,
+        })
     }
 }
 
@@ -90,9 +113,15 @@ pub struct Current<'a> {
     binding: JoinBinding,
 }
 impl Current<'_> {
-    pub fn preservation(&self) -> &ComponentReport { self.preservation }
-    pub fn description(&self) -> &ComponentReport { self.description }
-    pub const fn binding(&self) -> Digest32 { self.binding.0 }
+    pub fn preservation(&self) -> &ComponentReport {
+        self.preservation
+    }
+    pub fn description(&self) -> &ComponentReport {
+        self.description
+    }
+    pub const fn binding(&self) -> Digest32 {
+        self.binding.0
+    }
 }
 
 /// Actual consumer: compare only measured Preserve under the same fixed plans.
@@ -114,18 +143,30 @@ pub fn compare_current(
     // identity. Its numeric preference is not included in the Pareto comparison.
     description::compare_current(left.description, right.description, resources)
         .map_err(Error::Description)?;
-    let a = left.preservation.axis_current(resources).map_err(Error::Preservation)?;
-    let b = right.preservation.axis_current(resources).map_err(Error::Preservation)?;
-    let result = compare_rows(&[AxisKind::Preserve], &[a.value], &[b.value])
-        .map_err(Error::Selection)?;
+    let a = left
+        .preservation
+        .axis_current(resources)
+        .map_err(Error::Preservation)?;
+    let b = right
+        .preservation
+        .axis_current(resources)
+        .map_err(Error::Preservation)?;
+    let result =
+        compare_rows(&[AxisKind::Preserve], &[a.value], &[b.value]).map_err(Error::Selection)?;
     left.current(resources)?;
     right.current(resources)?;
     Ok(result)
 }
 
-fn claim<'v>(resources: &'v ResourceReservationView<'_>, bytes: u64) -> Result<ResourceClaim<'v>, Error> {
+fn claim<'v>(
+    resources: &'v ResourceReservationView<'_>,
+    bytes: u64,
+) -> Result<ResourceClaim<'v>, Error> {
     resources.check().map_err(Error::Resource)?;
-    resources.claim_resources(&[ResourceRequest::new(ResourceKind::Ram,
-        ResourceAmount::checked(bytes).map_err(Error::Resource)?)])
+    resources
+        .claim_resources(&[ResourceRequest::new(
+            ResourceKind::Ram,
+            ResourceAmount::checked(bytes).map_err(Error::Resource)?,
+        )])
         .map_err(Error::Resource)
 }

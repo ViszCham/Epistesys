@@ -156,8 +156,12 @@ impl<'s, 'a, 'v> OwnedFrameworkCase<'s, 'a, 'v> {
             || {
                 self.check_current(expected, view)?;
                 let (packages, capability): (&[Package], &[usize]) = match self.expected.kernel {
-                    Kernel::ClassicalPointV1 => (&[Package::C, Package::Kc], &self.root.capability.point),
-                    Kernel::PersistentChain2V1 => (&[Package::C, Package::Ki], &self.root.capability.chain),
+                    Kernel::ClassicalPointV1 => {
+                        (&[Package::C, Package::Kc], &self.root.capability.point)
+                    }
+                    Kernel::PersistentChain2V1 => {
+                        (&[Package::C, Package::Ki], &self.root.capability.chain)
+                    }
                 };
                 let result = consume(CurrentCase {
                     rows: &self.data.rows,

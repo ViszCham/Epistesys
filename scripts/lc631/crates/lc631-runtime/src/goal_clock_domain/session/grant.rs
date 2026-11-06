@@ -178,7 +178,9 @@ fn bound_material(input: &SnapshotGrantView<'_>, limit: usize) -> Result<(), Err
     .into_iter()
     .chain(c.revoked_permit_digests.iter().map(String::as_str))
     {
-        remaining = remaining.checked_sub(value.len()).ok_or(Error::InputLimit)?;
+        remaining = remaining
+            .checked_sub(value.len())
+            .ok_or(Error::InputLimit)?;
     }
     Ok(())
 }
