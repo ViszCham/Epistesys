@@ -32,8 +32,9 @@ use lc631_receipt_kernel::{
 };
 use pulldown_cmark::{Event, Options, Parser, Tag};
 use serde::{Deserialize, Serialize};
-use std::fs::{self, OpenOptions};
-use std::io::Write;
+use lc631_process_supervisor::filesystem::{DirectoryAnchor, ReadOnlyAnchoredFile};
+#[cfg(test)]
+use std::fs;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 
@@ -1372,7 +1373,12 @@ impl HostReceiptContext {
         if admission.span.start < seed.user_span.start
             || admission.span.end > seed.user_span.end
             || admission.span.slice(&seed.raw_user_message).is_err()
-            || !user_span_is_plain_prose(&seed.raw_user_message, admission.span)
+            || !authority_span_is_eligible(
+                &seed.raw_user_message,
+                admission.span,
+                DeonticPolarity::Grant,
+                None,
+            )
         {
             return Err(HostError::AuthoritySourceIneligible);
         }
@@ -1455,42 +1461,32 @@ impl HostReceiptContext {
         resources: Option<&lc631_process_supervisor::ResourceReservationView<'_>>,
     ) -> Result<Self, HostError> {
         bounded_reader::require_capacity(resources, 256)?;
+        let root_path = bounded_reader::checked_absolute(owned_root).map_err(key_path_error)?;
         if let Some(view) = resources {
-            return Self::load_or_create_owned(owned_root, view);
+            return Self::load_or_create_owned(&root_path, view);
         }
-        if let Some(view) = resources {
-            view.check()
-                .map_err(|error| HostError::Io(format!("host_resource:{error:?}")))?;
-        }
-        fs::create_dir_all(owned_root).map_err(|error| HostError::Io(error.to_string()))?;
-        let root = owned_root
-            .canonicalize()
-            .map_err(|error| HostError::Io(error.to_string()))?;
-        let key_path = root.join("receipt-root-v1.key");
-        if let Ok(metadata) = fs::symlink_metadata(&key_path) {
-            if metadata.file_type().is_symlink() || !metadata.file_type().is_file() {
-                return Err(HostError::ReceiptKeyPathUnsafe);
-            }
-        }
-        let key = if key_path.is_file() {
-            read_key(&key_path, resources)?
-        } else {
-            let key = generate_key().map_err(|_| HostError::ReceiptRejected)?;
-            match create_key_file(&key_path, &key) {
-                Ok(()) => key,
-                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-                    read_key(&key_path, resources)?
+        let root = bounded_reader::open_or_create_root(&root_path).map_err(key_path_error)?;
+        let leaf = Path::new("receipt-root-v1.key");
+        let key = match root.open_read_only(leaf) {
+            Ok(file) => read_key(file, None)?,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                let key = generate_key().map_err(|_| HostError::ReceiptRejected)?;
+                match root.create_private_file(leaf) {
+                    Ok(mut file) => {
+                        file.validate_current().map_err(key_path_error)?;
+                        file.write_and_sync(&encoded_key(&key)).map_err(key_path_error)?;
+                        file.validate_current().map_err(key_path_error)?;
+                        key
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                        read_key(root.open_read_only(leaf).map_err(key_path_error)?, None)?
+                    }
+                    Err(error) => return Err(key_path_error(error)),
                 }
-                Err(error) => return Err(HostError::Io(error.to_string())),
             }
+            Err(error) => return Err(key_path_error(error)),
         };
-        Ok(Self {
-            issuer: ReceiptIssuer::from_key_bytes("lc631-host-root", &key)
-                .map_err(|_| HostError::ReceiptRejected)?,
-            verifier: ReceiptVerifier::from_key_bytes("lc631-host-root", &key)
-                .map_err(|_| HostError::ReceiptRejected)?,
-            key_path,
-        })
+        Self::from_anchored_key(&root, &key)
     }
 
     pub fn load_existing(owned_root: &Path) -> Result<Self, HostError> {
@@ -1516,12 +1512,7 @@ impl HostReceiptContext {
             key
         } else {
             let key = generate_key().map_err(|_| HostError::ReceiptRejected)?;
-            let alphabet = b"0123456789abcdef";
-            let mut encoded = [b'\n'; 65];
-            for (index, byte) in key.iter().enumerate() {
-                encoded[index * 2] = alphabet[(byte >> 4) as usize];
-                encoded[index * 2 + 1] = alphabet[(byte & 15) as usize];
-            }
+            let encoded = encoded_key(&key);
             owner.before_write(65)?;
             let mut file = owner.create_target()?;
             file.write_and_sync(&encoded)
@@ -1561,25 +1552,22 @@ impl HostReceiptContext {
             view.check()
                 .map_err(|error| HostError::Io(format!("host_resource:{error:?}")))?;
         }
-        let metadata =
-            fs::symlink_metadata(owned_root).map_err(|error| HostError::Io(error.to_string()))?;
-        if metadata.file_type().is_symlink() || !metadata.file_type().is_dir() {
-            return Err(HostError::ReceiptKeyPathUnsafe);
-        }
-        let root = owned_root
-            .canonicalize()
-            .map_err(|error| HostError::Io(error.to_string()))?;
-        let key_path = root.join("receipt-root-v1.key");
-        let metadata =
-            fs::symlink_metadata(&key_path).map_err(|error| HostError::Io(error.to_string()))?;
-        if metadata.file_type().is_symlink() || !metadata.file_type().is_file() {
-            return Err(HostError::ReceiptKeyPathUnsafe);
-        }
-        let key = read_key(&key_path, resources)?;
+        let root_path = bounded_reader::checked_absolute(owned_root).map_err(key_path_error)?;
+        let root = DirectoryAnchor::open_existing(&root_path).map_err(key_path_error)?;
+        let file = root.open_read_only(Path::new("receipt-root-v1.key")).map_err(key_path_error)?;
+        let key = read_key(file, resources)?;
+        Self::from_anchored_key(&root, &key)
+    }
+
+    fn from_anchored_key(root: &DirectoryAnchor, key: &[u8; 32]) -> Result<Self, HostError> {
+        // Canonicalize only the published locator, after handle-relative admission.
+        let key_path = root.path().canonicalize().map_err(key_path_error)?
+            .join("receipt-root-v1.key");
+        root.validate_current().map_err(key_path_error)?;
         Ok(Self {
-            issuer: ReceiptIssuer::from_key_bytes("lc631-host-root", &key)
+            issuer: ReceiptIssuer::from_key_bytes("lc631-host-root", key)
                 .map_err(|_| HostError::ReceiptRejected)?,
-            verifier: ReceiptVerifier::from_key_bytes("lc631-host-root", &key)
+            verifier: ReceiptVerifier::from_key_bytes("lc631-host-root", key)
                 .map_err(|_| HostError::ReceiptRejected)?,
             key_path,
         })
@@ -1626,13 +1614,12 @@ impl HostReceiptContext {
         if seed.authorized_resource_scope.as_deref() != Some(event.scope.as_str()) {
             return Err(HostError::AuthorityScopeMismatch);
         }
-        let text = event
-            .span
-            .slice(&seed.raw_user_message)
-            .map_err(|_| HostError::AuthoritySpanInvalid)?;
-        if !user_span_is_plain_prose(&seed.raw_user_message, event.span)
-            || !authority_surface_matches(event.action, event.polarity, text)
-        {
+        if !authority_span_is_eligible(
+            &seed.raw_user_message,
+            event.span,
+            event.polarity,
+            Some(event.action),
+        ) {
             return Err(HostError::AuthoritySourceIneligible);
         }
         if expires_at_epoch <= now_epoch
@@ -1734,7 +1721,12 @@ impl HostReceiptContext {
         let submitted_span = request.permit.source_span();
         if submitted_span.start < seed.user_span.start
             || submitted_span.end > seed.user_span.end
-            || !user_span_is_plain_prose(&seed.raw_user_message, submitted_span)
+            || !authority_span_is_eligible(
+                &seed.raw_user_message,
+                submitted_span,
+                request.permit.polarity(),
+                None,
+            )
         {
             return PermitValidation::Rejected(lc631_core::PermitRejection::UnverifiedOrigin);
         }
@@ -1756,6 +1748,68 @@ impl HostReceiptContext {
             trusted_host_fingerprint: self.verifier.key_fingerprint(),
         })
     }
+}
+
+/// Inspect the enclosing prose while preserving the authenticated source offsets.
+fn authority_statement(source: &str, span: SourceSpan, prose: Range<usize>) -> &str {
+    let mut start = prose.start;
+    for (relative, character) in source[prose.clone()].char_indices() {
+        let offset = prose.start + relative;
+        let end = offset + character.len_utf8();
+        let terminator = matches!(character, '。' | '！' | '？')
+            || (matches!(character, '.' | '!' | '?')
+                && source[end..prose.end]
+                    .chars()
+                    .next()
+                    .is_none_or(char::is_whitespace));
+        if !terminator {
+            continue;
+        }
+        let token = source[prose.start..end]
+            .split_whitespace()
+            .next_back()
+            .unwrap_or("");
+        if character == '.'
+            && ["e.g.", "i.e.", "etc.", "mr.", "mrs.", "ms.", "dr.", "prof."]
+                .iter()
+                .any(|abbreviation| token.eq_ignore_ascii_case(abbreviation))
+        {
+            continue;
+        }
+        if end <= span.start {
+            start = end;
+        } else if end >= span.end {
+            return source[start..end].trim();
+        }
+    }
+    source[start..prose.end].trim()
+}
+
+fn authority_statement_vetoes(polarity: DeonticPolarity, surface: &str) -> bool {
+    let lower = surface.to_lowercase();
+    let conditional = lower.split_whitespace().any(|word| {
+        matches!(
+            word.trim_matches(['(', ')', '[', ']', ',', ':']),
+            "if" | "unless" | "until"
+        )
+    }) || ["if ", "only if", "unless ", "until ", "場合", "ない限り", "まで", "ただし"]
+        .iter()
+        .any(|marker| lower.contains(marker));
+    let negative = polarity == DeonticPolarity::Grant
+        && [
+            "do not",
+            "must not",
+            "should not",
+            "never",
+            "don't",
+            "don’t",
+            "禁止",
+            "しないで",
+            "してはいけない",
+        ]
+        .iter()
+        .any(|marker| lower.contains(marker));
+    conditional || negative
 }
 
 fn authority_surface_matches(action: Action, polarity: DeonticPolarity, surface: &str) -> bool {
@@ -1817,10 +1871,10 @@ fn authority_surface_matches(action: Action, polarity: DeonticPolarity, surface:
             explicit_english_deny || japanese_authority_surface(action, polarity, surface)
         }
         DeonticPolarity::Grant => {
-            if negative || words.is_empty() {
+            if negative {
                 return false;
             }
-            let first_action = verbs.contains(&words[0]);
+            let first_action = words.first().is_some_and(|word| verbs.contains(word));
             let prefixed_action = matches!(words.first(), Some(&"please" | &"must" | &"should"))
                 && words.get(1).is_some_and(|word| verbs.contains(word));
             first_action || prefixed_action || japanese_authority_surface(action, polarity, surface)
@@ -1844,6 +1898,9 @@ fn authority_action_verbs(action: Action) -> &'static [&'static str] {
 }
 
 fn japanese_authority_surface(action: Action, polarity: DeonticPolarity, surface: &str) -> bool {
+    // Accept terminal sentence punctuation, but not a quoted or conditional
+    // instruction. Both the selected bytes and their enclosing prose are checked.
+    let surface = surface.trim().trim_end_matches(['。', '！', '.', '!']).trim_end();
     let action_terms: &[&str] = match action {
         Action::Edit => &["編集", "変更", "修正"],
         Action::Test => &["テスト", "検証", "確認"],
@@ -1859,9 +1916,17 @@ fn japanese_authority_surface(action: Action, polarity: DeonticPolarity, surface
         DeonticPolarity::Grant => ["してください", "して下さい", "すること"]
             .iter()
             .any(|suffix| {
-                action_terms
-                    .iter()
-                    .any(|term| surface.ends_with(&format!("{term}{suffix}")))
+                let Some(stem) = surface.strip_suffix(*suffix) else {
+                    return false;
+                };
+                action_terms.iter().any(|term| {
+                    stem.strip_suffix(*term).is_some_and(|prefix| {
+                        prefix.is_empty() || prefix.strip_suffix('を').is_some_and(|object| {
+                            !object.trim().is_empty()
+                                && !object.contains([':', '：', '「', '『', '、', ';', '；'])
+                        })
+                    })
+                })
             }),
         DeonticPolarity::Deny => ["しないでください", "してはいけない", "しないこと", "禁止"]
             .iter()
@@ -1888,7 +1953,14 @@ fn host_action_name(action: Action) -> &'static str {
     }
 }
 
-fn user_span_is_plain_prose(source: &str, span: SourceSpan) -> bool {
+/// External admission authenticates a separately signed Authority receipt.
+/// Only the local issuer additionally requires an explicit action in the span.
+fn authority_span_is_eligible(
+    source: &str,
+    span: SourceSpan,
+    polarity: DeonticPolarity,
+    local_action: Option<Action>,
+) -> bool {
     const MAX_AUTHORITY_SOURCE_BYTES: usize = 65_536;
     const MAX_MARKDOWN_EVENTS: usize = 32_768;
     const MAX_MARKDOWN_DEPTH: usize = 256;
@@ -1903,12 +1975,19 @@ fn user_span_is_plain_prose(source: &str, span: SourceSpan) -> bool {
     let mut blocked_stack = Vec::<bool>::new();
     let mut masked = source.as_bytes().to_vec();
     let mut touched_bytes = 0usize;
+    let mut prose_range = 0..source.len();
     for (count, (event, range)) in Parser::new_ext(source, Options::ENABLE_TABLES)
         .into_offset_iter()
         .enumerate()
     {
         if count >= MAX_MARKDOWN_EVENTS || source.get(range.clone()).is_none() {
             return false;
+        }
+        if matches!(&event, Event::Start(Tag::Paragraph))
+            && range.start <= span.start
+            && span.end <= range.end
+        {
+            prose_range = range.clone();
         }
         let inherited_block = blocked_stack.last().copied().unwrap_or(false);
         let blocked = match event {
@@ -1964,22 +2043,35 @@ fn user_span_is_plain_prose(source: &str, span: SourceSpan) -> bool {
     if excerpt.contains('<') && excerpt.contains('>') {
         return false;
     }
-    let Ok(masked) = String::from_utf8(masked) else {
+    let Ok(prose) = std::str::from_utf8(&masked) else {
         return false;
     };
-    !authority_quote_ranges(&masked)
-        .iter()
-        .any(|quoted| span.start < quoted.end && quoted.start < span.end)
+    for quoted in authority_quote_ranges(prose) {
+        if span.start < quoted.end && quoted.start < span.end {
+            return false;
+        }
+        masked[quoted].fill(b' ');
+    }
+    let Ok(prose) = std::str::from_utf8(&masked) else {
+        return false;
+    };
+    let raw_statement = authority_statement(source, span, prose_range.clone());
+    let statement = authority_statement(prose, span, prose_range);
+    !authority_statement_vetoes(polarity, raw_statement)
+        && local_action.is_none_or(|action| {
+            authority_surface_matches(action, polarity, excerpt)
+                && authority_surface_matches(action, polarity, statement)
+        })
 }
 
 fn authority_quote_ranges(source: &str) -> Vec<Range<usize>> {
     let mut ranges = Vec::new();
     let mut stack = Vec::<(char, char, usize)>::new();
     for (offset, character) in source.char_indices() {
-        if character == '\'' {
+        if matches!(character, '\'' | '’') {
             let before = source[..offset].chars().next_back();
             let after = source[offset + character.len_utf8()..].chars().next();
-            let closing_single_quote = stack.last().is_some_and(|(_, close, _)| *close == '\'');
+            let closing_single_quote = stack.last().is_some_and(|(_, close, _)| *close == character);
             if before.is_some_and(char::is_alphanumeric)
                 && (after.is_some_and(char::is_alphanumeric) || !closing_single_quote)
             {
@@ -1988,6 +2080,7 @@ fn authority_quote_ranges(source: &str) -> Vec<Range<usize>> {
         }
         let opener = match character {
             '"' | '\'' => Some((character, character)),
+            '‘' => Some(('‘', '’')),
             '“' => Some(('“', '”')),
             '「' => Some(('「', '」')),
             '『' => Some(('『', '』')),
@@ -2021,10 +2114,21 @@ fn authority_quote_ranges(source: &str) -> Vec<Range<usize>> {
 }
 
 fn read_key(
-    path: &Path,
+    file: ReadOnlyAnchoredFile,
     resources: Option<&lc631_process_supervisor::ResourceReservationView<'_>>,
 ) -> Result<[u8; 32], HostError> {
-    bounded_reader::with_path_text(path, 256, resources, |encoded| decode_key(encoded.trim()))
+    bounded_reader::with_file_text(file, 256, resources, |encoded| decode_key(encoded.trim()))
+}
+
+fn key_path_error(error: std::io::Error) -> HostError {
+    if matches!(
+        error.kind(),
+        std::io::ErrorKind::InvalidInput | std::io::ErrorKind::PermissionDenied
+    ) {
+        HostError::ReceiptKeyPathUnsafe
+    } else {
+        HostError::Io(error.to_string())
+    }
 }
 
 fn decode_key(encoded: &str) -> Result<[u8; 32], HostError> {
@@ -2039,20 +2143,14 @@ fn decode_key(encoded: &str) -> Result<[u8; 32], HostError> {
     Ok(key)
 }
 
-fn create_key_file(path: &Path, key: &[u8; 32]) -> Result<(), std::io::Error> {
-    let mut options = OpenOptions::new();
-    options.write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
+fn encoded_key(key: &[u8; 32]) -> [u8; 65] {
+    let alphabet = b"0123456789abcdef";
+    let mut bytes = [b'\n'; 65];
+    for (i, byte) in key.iter().enumerate() {
+        bytes[2 * i] = alphabet[(byte >> 4) as usize];
+        bytes[2 * i + 1] = alphabet[(byte & 15) as usize];
     }
-    let mut file = options.open(path)?;
-    for byte in key {
-        write!(file, "{byte:02x}")?;
-    }
-    writeln!(file)?;
-    file.sync_all()
+    bytes
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]

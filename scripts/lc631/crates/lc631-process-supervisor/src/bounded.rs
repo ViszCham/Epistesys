@@ -18,9 +18,11 @@ mod read;
 pub use read::{read_bounded_bytes, BoundedBytes};
 mod stdin;
 use stdin::StdinPump;
+mod admitted;
 mod resources;
 pub use resources::{
-    run_bounded_with_resources, run_bounded_with_resources_observed, ResourceRunError,
+    run_bounded_with_resources, run_bounded_with_resources_attempt,
+    run_bounded_with_resources_observed, NativeProcessEffect, ResourceRunAttempt, ResourceRunError,
     ResourceRunOutcome,
 };
 

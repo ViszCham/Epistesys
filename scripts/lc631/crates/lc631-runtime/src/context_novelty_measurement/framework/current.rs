@@ -151,23 +151,28 @@ impl<'s, 'a, 'v> OwnedFrameworkCase<'s, 'a, 'v> {
         view: &ResourceReservationView<'_>,
         consume: impl for<'scope> FnOnce(CurrentCase<'scope>) -> R,
     ) -> Result<R, Error> {
-        self.check_current(expected, view)?;
-        let (packages, capability): (&[Package], &[usize]) = match self.expected.kernel {
-            Kernel::ClassicalPointV1 => (&[Package::C, Package::Kc], &self.root.capability.point),
-            Kernel::PersistentChain2V1 => (&[Package::C, Package::Ki], &self.root.capability.chain),
-        };
-        let result = consume(CurrentCase {
-            rows: &self.data.rows,
-            mapbacks: &self.data.mapbacks,
-            query: self.expected.subject_query,
-            roots: &self.data.bank.roots,
-            counts: self.data.counts,
-            roles: &ROLES,
-            packages,
-            capability,
-        });
-        self.check_current(expected, view)?;
-        Ok(result)
+        self.root.native.meter.with_call(
+            self.root.native.state.declaration.limits.max_call_work,
+            || {
+                self.check_current(expected, view)?;
+                let (packages, capability): (&[Package], &[usize]) = match self.expected.kernel {
+                    Kernel::ClassicalPointV1 => (&[Package::C, Package::Kc], &self.root.capability.point),
+                    Kernel::PersistentChain2V1 => (&[Package::C, Package::Ki], &self.root.capability.chain),
+                };
+                let result = consume(CurrentCase {
+                    rows: &self.data.rows,
+                    mapbacks: &self.data.mapbacks,
+                    query: self.expected.subject_query,
+                    roots: &self.data.bank.roots,
+                    counts: self.data.counts,
+                    roles: &ROLES,
+                    packages,
+                    capability,
+                });
+                self.check_current(expected, view)?;
+                Ok(result)
+            },
+        )
     }
 }
 impl<'scope> CurrentCase<'scope> {

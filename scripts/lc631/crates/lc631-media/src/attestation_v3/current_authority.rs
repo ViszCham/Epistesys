@@ -19,14 +19,11 @@ pub fn verify_media_backend_with_current_authority_v3(
     replay: &mut ReplayGuard,
     now_epoch: u64,
 ) -> Result<(), MediaAttestationV3Error> {
+    let (base_epoch, started) = authority
+        .elapsed_anchor(now_epoch)
+        .map_err(|_| MediaAttestationV3Error::InvalidBinding)?;
     verify_from_execution(
-        report,
-        authority,
-        verifier,
-        replay,
-        now_epoch,
-        Instant::now(),
-        None,
+        report, authority, verifier, replay, base_epoch, started, None,
     )
 }
 
@@ -40,13 +37,16 @@ pub fn verify_media_backend_with_current_authority_v3_with_resources<'a>(
     now_epoch: u64,
     resources: &'a lc631_process_supervisor::ResourceReservationView<'a>,
 ) -> Result<(), MediaAttestationV3Error> {
+    let (base_epoch, started) = authority
+        .elapsed_anchor(now_epoch)
+        .map_err(|_| MediaAttestationV3Error::InvalidBinding)?;
     verify_from_execution(
         report,
         authority,
         verifier,
         replay,
-        now_epoch,
-        Instant::now(),
+        base_epoch,
+        started,
         Some(resources),
     )
 }
@@ -61,7 +61,12 @@ pub(crate) fn verify_from_execution<'a>(
     started: Instant,
     resources: Option<&'a lc631_process_supervisor::ResourceReservationView<'a>>,
 ) -> Result<(), MediaAttestationV3Error> {
-    let now_epoch = super::clock::epoch_after_elapsed(base_epoch, started.elapsed())?;
+    let now_epoch = authority
+        .current_epoch(super::clock::epoch_after_elapsed(
+            base_epoch,
+            started.elapsed(),
+        )?)
+        .map_err(|_| MediaAttestationV3Error::InvalidBinding)?;
     crate::validate_current_media_authority(authority, verifier, now_epoch)
         .map_err(|_| MediaAttestationV3Error::InvalidBinding)?;
     if authority.source_snapshot_sha256.as_deref() != Some(report.source_sha256.as_str())
@@ -80,13 +85,26 @@ pub(crate) fn verify_from_execution<'a>(
         &report.source_sha256,
         resources,
     )?;
-    if observed != report.source_sha256 {
+    let source_binding = authority
+        .authenticated_source
+        .as_ref()
+        .ok_or(MediaAttestationV3Error::InvalidBinding)?;
+    if observed.sha256 != report.source_sha256
+        || observed.bytes != source_binding.bytes
+        || observed.identity != source_binding.file_identity
+        || observed.canonical_path != source_binding.path
+    {
         return Err(MediaAttestationV3Error::InvalidBinding);
     }
     // Include bounded report hashing time in the last current-source/cancel
     // check. Rehashing after that check would reopen a stale-time window.
     let payload = media_backend_payload_digest_v3(report)?;
-    let observed_epoch = super::clock::epoch_after_elapsed(base_epoch, started.elapsed())?;
+    let observed_epoch = authority
+        .current_epoch(super::clock::epoch_after_elapsed(
+            base_epoch,
+            started.elapsed(),
+        )?)
+        .map_err(|_| MediaAttestationV3Error::InvalidBinding)?;
     crate::validate_current_media_authority(authority, verifier, observed_epoch)
         .map_err(|_| MediaAttestationV3Error::InvalidBinding)?;
     if let Some(view) = resources {

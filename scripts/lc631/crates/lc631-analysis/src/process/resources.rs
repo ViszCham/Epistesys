@@ -2,6 +2,9 @@
 use super::*;
 use lc631_process_supervisor::{ResourceError, ResourceReservationView, ResourceRunOutcome};
 
+mod attempt;
+pub use attempt::{run_bounded_tool_attempt, NativeProcessEffect, ResourceToolAttempt};
+
 /// Captured buffers are never cloned into the legacy DTO. Their digest/flags
 /// are reported unchanged; raw access stays borrowed from the live claim.
 pub struct ResourceToolResult<'a> {

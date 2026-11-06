@@ -52,6 +52,7 @@ pub struct ManagedChild {
     process: OwnedHandle,
     job: OwnedHandle,
     process_id: u32,
+    job_assigned: bool,
 }
 
 impl ManagedChild {
@@ -135,6 +136,26 @@ impl ManagedChild {
     }
 
     pub fn terminate_tree(&self, timeout: Duration) -> io::Result<bool> {
+        if !self.job_assigned {
+            // The initial thread has not resumed before successful Job assignment.
+            // SAFETY: the root process handle is owned; no unrelated PID is used.
+            let killed = unsafe {
+                windows_sys::Win32::System::Threading::TerminateProcess(self.process.0, 1)
+            };
+            if killed == 0 && self.try_wait()?.is_none() {
+                return Err(io::Error::last_os_error());
+            }
+            let deadline = Instant::now() + timeout;
+            loop {
+                if self.try_wait()?.is_some() {
+                    return Ok(true);
+                }
+                if Instant::now() >= deadline {
+                    return Ok(false);
+                }
+                thread::sleep(Duration::from_millis(2));
+            }
+        }
         if self.active_process_count()? == 0 {
             return Ok(true);
         }
@@ -172,7 +193,27 @@ pub fn spawn(request: SpawnRequest<'_>) -> io::Result<SpawnedProcess> {
 pub(crate) fn spawn_observed(
     request: SpawnRequest<'_>,
 ) -> Result<SpawnedProcess, crate::spawn_failure::SpawnFailure> {
-    let mut child_created = false;
+    let mut legacy = || Ok::<_, std::convert::Infallible>(());
+    spawn_inner_owned(request, None, None, &mut legacy)
+        .map_err(crate::native_attempt::NativeSpawnFailure::into_legacy)
+}
+pub(crate) fn spawn_owned<E>(
+    request: SpawnRequest<'_>,
+    view: &lc631_substrate::resource::ResourceReservationView<'_>,
+    deadline: Instant,
+    admit: &mut dyn FnMut() -> Result<(), E>,
+) -> Result<SpawnedProcess, crate::native_attempt::NativeSpawnFailure<E>> {
+    spawn_inner_owned(request, Some(view), Some(deadline), admit)
+}
+fn spawn_inner_owned<E>(
+    request: SpawnRequest<'_>,
+    view: Option<&lc631_substrate::resource::ResourceReservationView<'_>>,
+    deadline: Option<Instant>,
+    admit: &mut dyn FnMut() -> Result<(), E>,
+) -> Result<SpawnedProcess, crate::native_attempt::NativeSpawnFailure<E>> {
+    use crate::native_attempt::{NativePartialOwner, NativeSpawnFailure};
+    let mut partial: Option<NativePartialOwner> = None;
+    let mut gate_failure = None;
     let result = (|| -> io::Result<SpawnedProcess> {
         validate_input(&request)?;
         let stdin_pipe = Pipe::new(false)?;
@@ -217,6 +258,10 @@ pub(crate) fn spawn_observed(
         // SAFETY: all strings/blocks are NUL-terminated and alive during the call;
         // startup handle values are restricted with PROC_THREAD_ATTRIBUTE_HANDLE_LIST.
         // The process starts suspended so it cannot execute before job assignment.
+        if let Err(error) = crate::native_attempt::admit(view, deadline, admit) {
+            gate_failure = Some(error);
+            return Err(io::Error::other("native admission rejected before child"));
+        }
         let created = unsafe {
             CreateProcessW(
                 executable.as_ptr(),
@@ -234,69 +279,59 @@ pub(crate) fn spawn_observed(
         if created == 0 {
             return Err(io::Error::last_os_error());
         }
-        child_created = true;
-        let process = OwnedHandle::new(information.hProcess)?;
-        let thread = OwnedHandle::new(information.hThread)?;
-        let mut rollback = SpawnRollback {
-            job: &job,
-            process: &process,
-            committed: false,
-        };
-        // SAFETY: both handles are owned above; the process's initial thread is still suspended.
-        if unsafe { AssignProcessToJobObject(job.0, process.0) } == 0 {
+        // CreateProcessW success transfers these actual handles to this owner
+        // before any subsequent fallible Job/Resume operation. No reconstruction.
+        let process = OwnedHandle(information.hProcess);
+        let thread = OwnedHandle(information.hThread);
+        partial = Some(NativePartialOwner {
+            child: Some(ManagedChild {
+                process,
+                job,
+                process_id: information.dwProcessId,
+                job_assigned: false,
+            }),
+            pipes: [
+                Some(stdin_pipe.parent.into_file()),
+                Some(stdout_pipe.parent.into_file()),
+                Some(stderr_pipe.parent.into_file()),
+            ],
+        });
+        let owner = partial
+            .as_mut()
+            .ok_or_else(|| io::Error::other("native owner absent"))?;
+        let child = owner
+            .child
+            .as_mut()
+            .ok_or_else(|| io::Error::other("native child absent"))?;
+        // SAFETY: actual owned handles; the initial thread remains suspended.
+        if unsafe { AssignProcessToJobObject(child.job.0, child.process.0) } == 0 {
             return Err(io::Error::last_os_error());
         }
-        // SAFETY: `thread` is the initial thread returned by CreateProcessW and is still suspended.
+        child.job_assigned = true;
+        // SAFETY: actual initial thread handle returned by successful creation.
         if unsafe { ResumeThread(thread.0) } == u32::MAX {
             return Err(io::Error::last_os_error());
         }
         crate::native_dispatch::record_started(information.dwProcessId);
-        rollback.committed = true;
-        drop(rollback);
         drop(thread);
         drop(attributes);
         drop(stdin_pipe.child);
         drop(stdout_pipe.child);
         drop(stderr_pipe.child);
-        let child = ManagedChild {
-            process,
-            job,
-            process_id: information.dwProcessId,
-        };
-        Ok(SpawnedProcess {
-            child,
-            stdin: stdin_pipe.parent.into_file(),
-            stdout: stdout_pipe.parent.into_file(),
-            stderr: stderr_pipe.parent.into_file(),
-        })
+        crate::native_attempt::take_spawned(&mut partial)
     })();
-    result.map_err(|error| {
-        if child_created {
-            crate::native_dispatch::record_may_have_started();
-            crate::spawn_failure::SpawnFailure::MayHaveStarted(error)
-        } else {
-            crate::spawn_failure::SpawnFailure::BeforeChild(error)
-        }
-    })
-}
-
-struct SpawnRollback<'a> {
-    job: &'a OwnedHandle,
-    process: &'a OwnedHandle,
-    committed: bool,
-}
-
-impl Drop for SpawnRollback<'_> {
-    fn drop(&mut self) {
-        if !self.committed {
-            // SAFETY: both handles remain owned and open until rollback completes.
-            let _ = unsafe { TerminateJobObject(self.job.0, 1) };
-            // SAFETY: process is an owned handle; this covers failure before job assignment.
-            let _ = unsafe {
-                windows_sys::Win32::System::Threading::TerminateProcess(self.process.0, 1)
-            };
-            // SAFETY: the process handle remains owned until this rollback guard drops.
-            let _ = unsafe { WaitForSingleObject(self.process.0, 1_000) };
+    match result {
+        Ok(launch) => Ok(launch),
+        Err(error) => {
+            if let Some(failure) = gate_failure {
+                return Err(failure);
+            }
+            if let Some(owner) = partial {
+                crate::native_dispatch::record_may_have_started();
+                Err(NativeSpawnFailure::AfterChild { error, owner })
+            } else {
+                Err(NativeSpawnFailure::BeforeChild(error))
+            }
         }
     }
 }

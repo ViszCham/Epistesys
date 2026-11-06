@@ -1,7 +1,7 @@
 //! Static validation includes unused bodies and the complete local call graph.
 use super::super::{
     codec::{
-        equal_str, forbidden_metered,
+        equal_str, equal_term, forbidden_metered,
         package::{program, table, Function},
         Package,
     },
@@ -31,6 +31,66 @@ pub(in crate::product_cost) fn validate_package(
     ];
     validate(&h, &r, &entries, l, false, work)
 }
+
+pub(in crate::product_cost) fn matches_registered_closure(
+    actual: &Package,
+    registered: &Package,
+    limits: CostLimits,
+    work: &mut Meter<'_>,
+) -> Result<bool, CostError> {
+    let entry = program(&registered.adapter, "adapter")?;
+    if !equal_term(program(&actual.adapter, "adapter")?, entry, work)? {
+        return Ok(false);
+    }
+    let actual_helpers = table(&actual.helpers, "helpers-v1", "function-v1")?;
+    let actual_runtime = table(&actual.runtime, "runtime-v1", "operation-v1")?;
+    let helpers = table(&registered.helpers, "helpers-v1", "function-v1")?;
+    let runtime = table(&registered.runtime, "runtime-v1", "operation-v1")?;
+    let count = helpers
+        .len()
+        .checked_add(runtime.len())
+        .ok_or(CostError::ResourceExhausted)?;
+    if count as u64 > limits.local_entries {
+        return Err(CostError::ResourceExhausted);
+    }
+    let context = ValidationContext {
+        limits,
+        helpers: &helpers,
+        runtime: &runtime,
+        profile_only: false,
+    };
+    let mut pending = Vec::new();
+    pending
+        .try_reserve_exact(count)
+        .map_err(|_| CostError::ResourceExhausted)?;
+    let mut seen = Vec::new();
+    seen.try_reserve_exact(count)
+        .map_err(|_| CostError::ResourceExhausted)?;
+    seen.resize(count, false);
+    gather(entry, &mut pending, 1, &context, work)?;
+    while let Some(index) = pending.pop() {
+        work.debit(1)?;
+        if seen[index] {
+            continue;
+        }
+        seen[index] = true;
+        let (required, candidates) = if index < helpers.len() {
+            (&helpers[index], actual_helpers.as_slice())
+        } else {
+            (&runtime[index - helpers.len()], actual_runtime.as_slice())
+        };
+        let Some(found) = lookup(required.name, candidates, work)? else {
+            return Ok(false);
+        };
+        let candidate = &candidates[found];
+        if candidate.arity != required.arity || !equal_term(candidate.body, required.body, work)? {
+            return Ok(false);
+        }
+        gather(required.body, &mut pending, 1, &context, work)?;
+    }
+    Ok(true)
+}
+
 struct ValidationContext<'a, 'term> {
     limits: CostLimits,
     helpers: &'a [Function<'term>],

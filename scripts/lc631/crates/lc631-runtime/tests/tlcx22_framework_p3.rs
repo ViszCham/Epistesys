@@ -1,6 +1,10 @@
 //! P3 TEST-FIRST only. Missing semantic module is construction RED, not behavior success.
 mod tlcx22_framework_p3_support;
 use tlcx22_framework_p3_support::*;
+#[path = "beta7_framework_fixture_support/mod.rs"]
+mod native_fixture;
+#[path = "beta7_framework_inconsistent_support/mod.rs"]
+mod inconsistent_fixture;
 
 #[test]
 fn tlcx22_p3_n01_duplicate_roles_zero_weights_and_detached_probe_ast_are_rejected() {
@@ -215,15 +219,11 @@ fn tlcx22_p3_n05_required_lem_is_hard_failure_not_soft_half_compatibility() {
 
 #[test]
 fn tlcx22_p3_n06_zero_feasible_models_are_context_inconsistent_not_vacuous_supported() {
-    framework_fixture!(h,2,false,Duration::from_secs(60),{
-        let (h,view,_,_)=h;let one=q(1,1);let bs=bridges(&one);
-        let bad=query(&h,vec![BoolExpr::Constant(false),var(p(&h))]);
-        let bp=[GivenPremise {id:d(5),span:h.premises[0].span,formula:&bad.assertions()[0]},
-            GivenPremise {id:d(6),span:h.premises[1].span,formula:&bad.assertions()[1]}];
-        let h=Inputs {theory:&bad,premises:&bp,..h};
-        let ps=[lem_probe(&h,&one)];let sr=semantic_registration(&ps,&bs);p3_root!(h,view,fd,nr,sr,root);
-        let e=root.expected_case_current(f::Subject::Original,f::Kernel::PersistentChain2V1,view).unwrap();
-        assert!(matches!(root.execute_case_current(e,view),Err(s::Error::Novelty(m::Error::Framework(f::Error::ContextInconsistent)))));
+    framework_fixture!(h, 2, false, Duration::from_secs(60), {
+        let (h, view, _, _) = h;
+        // Each admitted classical assignment embeds as a constant two-world
+        // valuation. An inconsistent original Γ cannot supply a P1/P2/P3 owner.
+        inconsistent_fixture::assert_inconsistent_native_admission(h, view);
     });
 }
 

@@ -19,6 +19,8 @@ lc631-receipt-kernel = { path = "../lc631-receipt-kernel" }
 lc631-substrate = { path = "../lc631-substrate" }
 lc631-solvers = { path = "../lc631-solvers" }
 lc631-world = { path = "../lc631-world" }
+serde.workspace = true
+serde_json.workspace = true
 sha2.workspace = true
 
 [dev-dependencies]

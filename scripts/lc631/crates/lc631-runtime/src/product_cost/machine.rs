@@ -6,7 +6,7 @@ use super::{CostError, ExecutionStats};
 pub(super) use eval::run;
 pub(super) use eval::Engine;
 use lc631_substrate::resource::{ResourceClaim, ResourceReservationView};
-pub(super) use validate::{validate_package, validate_runtime};
+pub(super) use validate::{matches_registered_closure, validate_package, validate_runtime};
 pub(super) trait Resources {
     fn check(&self) -> Result<(), CostError>;
     fn claim(&self, bytes: u64) -> Result<ResourceClaim<'_>, CostError>;

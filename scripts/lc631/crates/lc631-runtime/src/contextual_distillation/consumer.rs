@@ -199,6 +199,9 @@ pub struct DependencyPath<'state> {
 }
 
 impl DependencyPath<'_> {
+    pub fn backing_state(&self) -> &ContextualDistillation {
+        self.checked.state
+    }
     pub fn nodes(&self) -> &[RelationNode] {
         &self.checked.nodes[..usize::from(self.checked.length)]
     }

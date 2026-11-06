@@ -1,48 +1,32 @@
 ---
 name: lc631-coding-projector
-description: Default Epistesys 6.9.0-beta.1 facade for coding, debugging, tests, patches, and review unless the user explicitly selects another reasoning line.
+description: Use Epistesys 7.0.0-beta.1 for coding, debugging, tests, patches and review when selected by the user or host policy.
 ---
 
 # Epistesys Coding Projector
 
 ## 日本語
 
-Beta 6.9は未完成のsource保存版です。このfacadeはこの版を選択した場合の手順であり、既存hostのplugin更新・配布準備・全接続完了を意味しません。
+このpluginが選択されているcoding turnで使用し、conversation facadeや別lineと二重起動しません。[plugin接続契約](../../docs/plugin-host-integration.md)に従って、元のuser seedをUTF-8 stdinで同梱binaryのDGCL経路へ渡してください。
 
-coding seedではlc631-tldg-doctorも実行し、lossless source、UnifiedSyntaxHypergraph、ProjectionDefectGraph v3、geometry非Authority、output binding residualを確認します。これはEpistesys 6.9.0-beta.1に継承されたv6.3.1経路です。GPU検証を明示された場合だけlc631-tldg-gpu-doctorへexecuteを渡します。`lc631-tldg-release-gate --execute`はlegacy boolean経路のfail-closed検査であり、release成功経路ではありません。
+- 通常は `scripts/run-epistesys.ps1 lc631-dgcl-run --prompt-stdin` を一度実行します。同じturn内で元入力・binary・対象snapshotが変わらなければ同じ診断を再起動せず参照できます。重要な差分後は現在の証跡を確認し、古いtest結果を再利用しません。
+- 返却version `7.0.0-beta.1`、source roundtrip、Program IR→EpiMapLoss→plan→candidateのdigest対応、未解決状態を確認します。互換wire field `translation_projection` は保持します。
+- 構文・射影の診断が必要な場合だけ `lc631-tldg-doctor`、個別損失の検査には `lc631-tl-doctor`、repositoryの診断には `lc631-doctor --repo <root>` を使います。毎turn全doctorを実行する必要はありません。
+- 修復・再開・package操作では[DGCL実行契約](../../docs/dgcl-operating-profile-and-closure.md)を読み、現在の権限・snapshot・登録tool・検証計画を確認します。checkpointは古い完了や期限切れ権限を復元しません。
+- GPU、Media、外部取得、host送信、永続化は依頼と各操作の条件がある場合だけ実行します。low loss・test成功・schema適合・候補はproofやGrantではありません。
+- 故障時は診断を示し、旧binaryへのfallbackや暗黙buildをしません。Holdや未観測は、利用者が許可した作業そのものへの禁止ではありません。
 
-明示的な別line指定がなければEpistesys 6.9.0-beta.1を既定として使用します。別のLabyrinth lineと自動的に二重実行しません。
-
-判断前・重要な差分後・最終回答前に、plugin rootから`scripts/run-epistesys.ps1 lc631-dgcl-run --prompt-stdin`へ元のuser seedをUTF-8 stdinで渡します。versionが`6.9.0-beta.1`であること、同artifactのProgram IR/TL/plan/candidateと未解決状態を確認します。これはalpha.3 DGCLのbounded standalone経路であり、旧v6の67-stage DecisionEnvelopeとのsemantic parityや実hostのabsolute enforcementを名乗りません。外部modelなしのprofileをconfigured Stanza実観測へ昇格せず、故障時は診断を示して黙って別engineへfallbackしません。`implementation_complete_candidate=false`やhost未観測を、userが許可した作業への禁止と同一視しません。codeの完了判定は実検証とcurrent evidenceを必要とします。
-
-1. plugin rootから`scripts/run-lc631.ps1 lc631-doctor --repo <repository-root>`を実行します。
-2. TranslationLoss判断には`lc631-tl-doctor --prompt <seed>`を使い、scalar値ではなくProjectionWitness defectを保持します。
-3. GPU実行が許可された場合、`lc631-gpu-doctor --execute`を使います。負荷・VRAM観測が必要な場合だけ`lc631-gpu-stress`を使い、利用率とoccupancyを同一視しません。
-4. local media解析は、権利assertに加えてauthenticated source receipt、receipt root、backend ID、model license receiptがあるlocal fileだけを`lc631-media-execute`へ渡します。YouTube URL取得は行いません。
-5. durable replayは、exact seed/output/callback、seed/output attestation JSON、owned ledger rootがある場合だけ`lc631-host-bind`で実行します。legacy非空文字列receiptは拒否します。
-6. Epistesysの結果は、編集、test、commit、push、install、restart、network acquisition、永続化の権限を生成しません。
-7. 継承元の[ARC631実装検証記録](../../docs/v6.3.1-arc631-authenticity-and-closure-implementation-record-2026-08-26.md)は履歴です。DGCL作業には[現対応範囲](../../docs/dgcl-operating-profile-and-closure.md)を読み、source closureとresearch/host pendingを分離します。修復の再開はcheckpointから完了を復元せず、fresh権限・snapshot・検証を要求します。
-
-Epistesysのclone identityは、継承元の他のlineと独立して扱います。Epistesysの有効化は別lineの置換を意味しません。
-
----
+Beta名称は全OS・外部backend・一般性能・実host配信の検証完了を意味しません。[検証範囲](../../docs/epistesys-7.0.0-beta.1-release-notes-2026-11-06.md)を保持してください。
 
 ## English
 
-Beta 6.9 is an unfinished source checkpoint. This facade describes use of this selected version; it does not establish plugin updates in an existing host, distribution readiness, or end-to-end completion.
+Use this facade for coding turns when the plugin is selected. Do not double-run the conversation facade or another line. Follow the [plugin integration contract](../../docs/plugin-host-integration.md), passing the original user seed as UTF-8 stdin to the packaged DGCL route.
 
-For coding seeds, also run lc631-tldg-doctor and inspect lossless source, UnifiedSyntaxHypergraph, ProjectionDefectGraph v3, geometry non-Authority, and output-binding residuals. This is the inherited v6.3.1 route under Epistesys 6.9.0-beta.1. Pass execute to lc631-tldg-gpu-doctor only when GPU validation is explicitly requested. `lc631-tldg-release-gate --execute` tests fail-closed behavior of the legacy boolean route; it is not a release-success route.
+- Normally run `scripts/run-epistesys.ps1 lc631-dgcl-run --prompt-stdin` once. Reuse that diagnostic within the turn only while the original input, binary and target snapshot remain unchanged. Recheck current evidence after meaningful changes; do not reuse stale tests.
+- Check returned version `7.0.0-beta.1`, source roundtrip, matching Program IR→EpiMapLoss→plan→candidate digests and unresolved states. Retain the compatible `translation_projection` wire field.
+- Use `lc631-tldg-doctor` for syntax/projection diagnostics, `lc631-tl-doctor` for a specific loss check, and `lc631-doctor --repo <root>` for repository diagnostics only when relevant. Do not run every doctor each turn.
+- For repair, resume or package operations, read the [DGCL execution contract](../../docs/dgcl-operating-profile-and-closure.md) and check current authority, snapshots, registered tools and validation plans. Checkpoints do not restore old completion or expired permission.
+- Run GPU, Media, external acquisition, host sending or persistence only under the request and operation-specific conditions. Low loss, passing tests, schemas and candidates are not proof or Grants.
+- Report failures without an old-binary fallback or implicit build. Hold and unobserved states do not prohibit the work authorized by the user.
 
-Use Epistesys 6.9.0-beta.1 by default unless the user explicitly selects another line. Do not automatically double-run another Labyrinth line.
-
-Before decisions, after meaningful diffs, and before final responses, pass the original user seed as UTF-8 stdin to `scripts/run-epistesys.ps1 lc631-dgcl-run --prompt-stdin` from the plugin root. Check version `6.9.0-beta.1`, same-artifact Program IR/TL/plan/candidate, and unresolved states. This is alpha.3's bounded standalone DGCL path, not semantic parity with the old v6 67-stage DecisionEnvelope or absolute real-host enforcement. Do not promote a no-external-model profile into observed configured Stanza; show failures and never silently fall back to another engine. A false implementation-complete candidate or unobserved host is not a denial of work explicitly authorized by the user. Actual code completion still requires validation and current evidence.
-
-1. Run `scripts/run-lc631.ps1 lc631-doctor --repo <repository-root>` from the plugin root.
-2. For TranslationLoss decisions, run `lc631-tl-doctor --prompt <seed>` and preserve ProjectionWitness defects rather than inventing a scalar loss.
-3. For GPU evidence, run `lc631-gpu-doctor --execute` only when local GPU execution is authorized. Use `lc631-gpu-stress` only for authorized load/VRAM observation, and never equate utilization with occupancy.
-4. Pass a local file to `lc631-media-execute` only with a rights assertion, authenticated source receipt, receipt root, backend ID, and model-license receipt. Never acquire YouTube media from a URL.
-5. Run `lc631-host-bind` only with exact seed/output/callback bytes, a seed/output-attestation JSON file, and an explicitly owned persistent ledger root. Legacy nonempty receipt strings are rejected.
-6. Epistesys output grants no edit, test, commit, push, install, restart, network-acquisition, or persistence authority.
-7. The inherited [ARC631 implementation record](../../docs/v6.3.1-arc631-authenticity-and-closure-implementation-record-2026-08-26.md) is historical. For DGCL work read the [current operating scope](../../docs/dgcl-operating-profile-and-closure.md), separating source closure from pending research/hosts. Repair resume never restores completion from checkpoints; require fresh authority, snapshots, and validation.
-
-Other installed plugins remain independent. Enabling Epistesys does not replace them.
+The Beta name does not establish all-OS, external-backend, general-performance or real-host-delivery validation. Preserve the [verification scope](../../docs/epistesys-7.0.0-beta.1-release-notes-2026-11-06.md).

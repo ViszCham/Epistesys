@@ -20,6 +20,8 @@ const LAYERS: &[(&str, &[&str])] = &[
             "lc631-analysis",
             "lc631-core",
             "lc631-host",
+            // TLCX30: runtime consumes source-bound Media candidates; no reverse edge.
+            "lc631-media",
             "lc631-process-supervisor",
             "lc631-receipt-kernel",
             "lc631-solvers",
@@ -126,6 +128,8 @@ fn tlcx_01_forbidden_reverse_edges_are_rejected() {
     assert!(allowed("lc631-process-supervisor", "lc631-substrate"));
     assert!(allowed("lc631-runtime", "lc631-core"));
     assert!(allowed("lc631-runtime", "lc631-host"));
+    assert!(allowed("lc631-runtime", "lc631-media"));
+    assert!(!allowed("lc631-media", "lc631-runtime"));
     assert!(allowed("lc631-runtime", "lc631-analysis"));
     assert!(allowed("lc631-runtime", "lc631-world"));
     assert!(allowed("lc631-solvers", "lc631-process-supervisor"));

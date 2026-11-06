@@ -44,6 +44,12 @@ pub(super) fn limits(l: Limits) -> Result<(), Error> {
 pub(super) fn debit(root: &f::FrameworkRoot<'_, '_>, n: usize) -> Result<(), Error> {
     f::bounds::debit(&root.native, n).map_err(framework)
 }
+/// The native root meter enforces every nested predebit, including P1 guards.
+pub(super) fn with_call<T>(root: &f::FrameworkRoot<'_, '_>, body: impl FnOnce() -> T) -> T {
+    root.native
+        .meter
+        .with_call(root.native.state.declaration.limits.max_call_work, body)
+}
 pub(super) fn vector<T>(n: usize, cap: usize) -> Result<Vec<T>, Error> {
     f::bounds::reserve(n, cap).map_err(framework)
 }

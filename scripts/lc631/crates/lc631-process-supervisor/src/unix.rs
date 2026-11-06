@@ -125,7 +125,27 @@ pub fn spawn(request: SpawnRequest<'_>) -> io::Result<SpawnedProcess> {
 pub(crate) fn spawn_observed(
     request: SpawnRequest<'_>,
 ) -> Result<SpawnedProcess, crate::spawn_failure::SpawnFailure> {
-    let mut child_created = false;
+    let mut legacy = || Ok::<_, std::convert::Infallible>(());
+    spawn_inner_owned(request, None, None, &mut legacy)
+        .map_err(crate::native_attempt::NativeSpawnFailure::into_legacy)
+}
+pub(crate) fn spawn_owned<E>(
+    request: SpawnRequest<'_>,
+    view: &lc631_substrate::resource::ResourceReservationView<'_>,
+    deadline: Instant,
+    admit: &mut dyn FnMut() -> Result<(), E>,
+) -> Result<SpawnedProcess, crate::native_attempt::NativeSpawnFailure<E>> {
+    spawn_inner_owned(request, Some(view), Some(deadline), admit)
+}
+fn spawn_inner_owned<E>(
+    request: SpawnRequest<'_>,
+    view: Option<&lc631_substrate::resource::ResourceReservationView<'_>>,
+    deadline: Option<Instant>,
+    admit: &mut dyn FnMut() -> Result<(), E>,
+) -> Result<SpawnedProcess, crate::native_attempt::NativeSpawnFailure<E>> {
+    use crate::native_attempt::{NativePartialOwner, NativeSpawnFailure};
+    let mut partial: Option<NativePartialOwner> = None;
+    let mut gate_failure = None;
     let result = (|| -> io::Result<SpawnedProcess> {
         if request.executable.is_empty() || !request.current_dir.is_absolute() {
             return Err(io::Error::new(
@@ -143,58 +163,79 @@ pub(crate) fn spawn_observed(
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
-        let mut root = command.spawn()?;
-        child_created = true;
-        crate::native_dispatch::record_started(root.id());
-        let group_id = match libc::pid_t::try_from(root.id()) {
-            Ok(id) => id,
-            Err(_) => {
-                let _ = root.kill();
-                let _ = root.wait();
-                return Err(io::Error::other("process id outside pid_t"));
-            }
-        };
-        let mut child = ManagedChild {
+        if let Err(error) = crate::native_attempt::admit(view, deadline, admit) {
+            gate_failure = Some(error);
+            return Err(io::Error::other("native admission rejected before child"));
+        }
+        let root = command.spawn()?;
+        let pid = root.id();
+        crate::native_dispatch::record_started(pid);
+        partial = Some(NativePartialOwner {
+            child: None,
+            ungrouped_root: Some(root),
+            pipes: std::array::from_fn(|_| None),
+        });
+        let group_id =
+            libc::pid_t::try_from(pid).map_err(|_| io::Error::other("process id outside pid_t"))?;
+        let owner = partial
+            .as_mut()
+            .ok_or_else(|| io::Error::other("native owner absent"))?;
+        let root = owner
+            .ungrouped_root
+            .take()
+            .ok_or_else(|| io::Error::other("native root absent"))?;
+        owner.child = Some(ManagedChild {
             child: root,
             group_id,
             cleaned: false,
-        };
-        let stdin = child
+        });
+        let child = owner
             .child
-            .stdin
-            .take()
-            .ok_or_else(|| io::Error::other("missing stdin"))?;
-        let stdout = child
-            .child
-            .stdout
-            .take()
-            .ok_or_else(|| io::Error::other("missing stdout"))?;
-        let stderr = child
-            .child
-            .stderr
-            .take()
-            .ok_or_else(|| io::Error::other("missing stderr"))?;
-        let stdin = File::from(OwnedFd::from(stdin));
-        let stdout = File::from(OwnedFd::from(stdout));
-        let stderr = File::from(OwnedFd::from(stderr));
-        for pipe in [&stdin, &stdout, &stderr] {
-            set_nonblocking(pipe)?;
+            .as_mut()
+            .ok_or_else(|| io::Error::other("native child absent"))?;
+        owner.pipes[0] = Some(File::from(OwnedFd::from(
+            child
+                .child
+                .stdin
+                .take()
+                .ok_or_else(|| io::Error::other("missing stdin"))?,
+        )));
+        owner.pipes[1] = Some(File::from(OwnedFd::from(
+            child
+                .child
+                .stdout
+                .take()
+                .ok_or_else(|| io::Error::other("missing stdout"))?,
+        )));
+        owner.pipes[2] = Some(File::from(OwnedFd::from(
+            child
+                .child
+                .stderr
+                .take()
+                .ok_or_else(|| io::Error::other("missing stderr"))?,
+        )));
+        for pipe in &owner.pipes {
+            set_nonblocking(
+                pipe.as_ref()
+                    .ok_or_else(|| io::Error::other("native pipe absent"))?,
+            )?;
         }
-        Ok(SpawnedProcess {
-            child,
-            stdin,
-            stdout,
-            stderr,
-        })
+        crate::native_attempt::take_spawned(&mut partial)
     })();
-    result.map_err(|error| {
-        if child_created {
-            crate::native_dispatch::record_may_have_started();
-            crate::spawn_failure::SpawnFailure::MayHaveStarted(error)
-        } else {
-            crate::spawn_failure::SpawnFailure::BeforeChild(error)
+    match result {
+        Ok(launch) => Ok(launch),
+        Err(error) => {
+            if let Some(failure) = gate_failure {
+                return Err(failure);
+            }
+            if let Some(owner) = partial {
+                crate::native_dispatch::record_may_have_started();
+                Err(NativeSpawnFailure::AfterChild { error, owner })
+            } else {
+                Err(NativeSpawnFailure::BeforeChild(error))
+            }
         }
-    })
+    }
 }
 
 fn set_nonblocking(file: &File) -> io::Result<()> {

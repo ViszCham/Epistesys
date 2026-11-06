@@ -6,24 +6,24 @@ Epistesys（エピステシス）は、コードの変更を元の要求と検�
 
 たとえば「既存の出力形式を変えずに機能を追加してほしい」という依頼では、ビルドが通ること、新機能が呼び出されること、従来の出力形式が保たれることは別々の確認です。Epistesysはモデルの重みを変更せず、その外側で元の要求、許可された操作、対象となるコードの版、検証結果、未確認の項目を対応づけます。具体的な使い方は[コーディング支援](#coding-assistance-ja)、現時点で何が動き、何が未検証かは以下の表で確認できます。
 
-[使い方](docs/execution-guide.md) · [EpiMapLossの式](docs/epimaploss-epirecompscore-formulas.md#map-ja) · [EpiRecompScoreの式](docs/epimaploss-epirecompscore-formulas.md#score-ja) · [現在の検証範囲](docs/epistesys-6.9.0-beta.1-source-snapshot-2026-11-05.md)
+[使い方](docs/execution-guide.md) · [EpiMapLossの式](docs/epimaploss-epirecompscore-formulas.md#map-ja) · [EpiRecompScoreの式](docs/epimaploss-epirecompscore-formulas.md#score-ja) · [現在の検証範囲](docs/epistesys-7.0.0-beta.1-release-notes-2026-11-06.md)
 
 ### 現在の位置付け
 
 | 項目 | 現在の状態 |
 | --- | --- |
-| バージョン | **Beta 6.9 — `6.9.0-beta.1`**（開発途中のソース保存版） |
+| バージョン | **Beta-7.0 — `7.0.0-beta.1`** |
 | 実装の由来 | Labyrinth-Codex v6.3.1の選択source snapshotに、DGCLの構文解析・検証・修復経路を追加 |
-| ソース検証 | 今回の状態は[Beta 6.9保存記録](docs/epistesys-6.9.0-beta.1-source-snapshot-2026-11-05.md)をご覧ください。全体監査とrelease gateは未完了です。[alpha.3検証記録](validation/epr-release-verification-2026-10-27.md)と[alpha.2の最終検証](validation/epia2-alpha2-release-verification-2026-10-02.md)は履歴であり、この版の合格結果には読み替えません |
-| 配布 | source-only。モデルweight、秘密鍵、個人設定、未監査の配布binaryを同梱しない |
+| ソース検証 | 今回の状態は[Beta-7.0検証記録](docs/epistesys-7.0.0-beta.1-release-notes-2026-11-06.md)をご覧ください。既存試験の一巡と実失敗の修復を、OS・feature・配布・hostの各確認から分けて記録しています。[alpha.3検証記録](validation/epr-release-verification-2026-10-27.md)と[alpha.2の最終検証](validation/epia2-alpha2-release-verification-2026-10-02.md)は履歴であり、この版の合格結果には読み替えません |
+| 配布 | 公開sourceとローカルplugin packageを区別。モデルweight、秘密鍵、個人設定、build cacheは同梱しない |
 | ホスト接続 | adapter・receipt・replayの実装を含む。実ホストのcallback／delivery観測は`PendingHostObservation` |
 | 開発上の効果 | Epistesys自体が作業の失敗をどれだけ減らすかは未検証です。独立評価に使う正解データは`PendingNoCorpus`です |
 
-ソース経路の局所検証は、任意指示の意味的正確性、ハルシネーション抑制、長期対話の性能を実証するものではありません。Beta 6.9は、現在の実装を一度保存するための中間スナップショットです。完成・配布準備・host activationを示す版ではありません。Alpha.3は[独立した保守ブランチ](https://github.com/ViszCham/Epistesys/tree/main-alpha.3)に残し、全接続の監査と修復は後続のBeta-7.0に向けて続けます。
+ソース経路の局所検証は、任意指示の意味的正確性、ハルシネーション抑制、長期対話の性能を実証するものではありません。Beta-7.0は、既存試験で検出した失敗を修復した開発版です。全OS・一般性能・実host配信の検証完了を示す名称ではありません。Alpha.3は[独立した保守ブランチ](https://github.com/ViszCham/Epistesys/tree/main-alpha.3)に残し、この版の試験・配布・plugin適用は、それぞれ[検証記録](validation/beta7-onepass-verification-2026-11-06.md)で確認できます。
 
-### TLCXで追加中の実装
+### TLCXの実装と測定
 
-現在のソースには、文脈の再構成、複数の有限論理による検査、変換ごとの四記録、再編候補の評価、バイナリ状態・journal、資源所有権、Coding・Media・hostへの接続作業があります。ソースと試験コードがある一方、まだ呼び出し経路につながっていない機能や未確定の試験もあります。[測定契約](docs/tlcx-tl-screative-measurement-contract-v1-2026-10-29.md)に適用条件、[実装ロードマップ](docs/epistesys-tlcx-contextual-multilogic-loss-creativity-roadmap-2026-10-28.md)に依存順と完了条件を記載しています。
+現在のソースには、文脈の再構成、複数の有限論理による検査、変換ごとの四記録、再編候補の評価、バイナリ状態・journal、資源所有権、Coding・Media・hostへの接続作業があります。今回の試験で到達した失敗は修復しましたが、他OS・機能設定・外部backendなど、未観測の範囲は区別しています。[測定契約](docs/tlcx-tl-screative-measurement-contract-v1-2026-10-29.md)に適用条件、[実装ロードマップ](docs/epistesys-tlcx-contextual-multilogic-loss-creativity-roadmap-2026-10-28.md)に依存順と完了条件を記載しています。
 
 [EpiMapLoss：写像保存損失](docs/epimaploss-epirecompscore-formulas.md#map-ja)は、表現を移したときに保存すべき性質がどれだけ失われたかを扱います。[EpiRecompScore：構造再編評価値](docs/epimaploss-epirecompscore-formulas.md#score-ja)は、候補が新しく組み替えたものと、その利得・損失・コストを比較します。
 
@@ -134,6 +134,8 @@ Epistesysを明示的に選択した場合、Coding Projectorが設計・実装�
 
 launcherは自身の配置からrunnerを解決します。別cwdからの起動を含む手順は[実行ガイド](docs/execution-guide.md)、Epistesysを明示選択した場合のCodexのUTF-8 stdin／facadeは[ルーティング契約](docs/codex-default-routing.md)を参照してください。インストールと利用の選択は別の操作です。
 
+plugin登録・起動・診断の再利用条件は[plugin接続契約](docs/plugin-host-integration.md)にまとめています。
+
 ### 文書の読み順
 
 | 読者の関心 | 入口 |
@@ -144,7 +146,7 @@ launcherは自身の配置からrunnerを解決します。別cwdからの起動
 | wire形式・互換性 | [DGCL wire互換性](docs/dgcl-wire-compatibility.md) → [schema契約](schemas/closure-and-receipt-contract.md) |
 | 指標の数式・適用条件 | [EpiMapLoss](docs/epimaploss-epirecompscore-formulas.md#map-ja) → [EpiRecompScore F1・F2](docs/epimaploss-epirecompscore-formulas.md#score-ja) → [全40成分](docs/epimaploss-epirecompscore-formulas.md#catalog-ja) |
 | 設計の評価・前身の測定結果 | [設計仮説と評価項目](docs/research-hypotheses.md) → [GB-CC75の評価報告](docs/research/gb-cc75-study.md) |
-| 現行の検証・残存条件 | [Beta 6.9保存記録](docs/epistesys-6.9.0-beta.1-source-snapshot-2026-11-05.md) → [既知の制約](docs/known-limitations.md) |
+| 現行の検証・残存条件 | [Beta-7.0検証記録](docs/epistesys-7.0.0-beta.1-release-notes-2026-11-06.md) → [既知の制約](docs/known-limitations.md) |
 | sourceの由来・除外・履歴 | [移行契約](docs/migration-contract.md) → [文書索引](docs/README.md) |
 
 初期cloneは独立したGit履歴で保存され、個人状態、credentials、cache、receipt root、replay ledgerを継承していません。`lc631-*`は挙動差を抑える互換識別子です。詳細な実装記録と継承元の設計・監査文書は[文書索引](docs/README.md)で現行仕様から区別しています。
@@ -157,22 +159,22 @@ Epistesys is a **development tool** that connects a code change to its original 
 
 For example, a request to “add a feature without changing the existing output format” needs three distinct checks: the build passes, the new feature is invoked, and the old format is preserved. Without changing model weights, Epistesys relates the original requirements, permitted operations, code revision, validation results, and outstanding checks. See [Coding assistance](#coding-assistance-en) for the workflow and the table below for what currently works and what remains unverified.
 
-[How to use it](docs/execution-guide.md) · [EpiMapLoss equations](docs/epimaploss-epirecompscore-formulas.md#map-en) · [EpiRecompScore equations](docs/epimaploss-epirecompscore-formulas.md#score-en) · [Current verification scope](docs/epistesys-6.9.0-beta.1-source-snapshot-2026-11-05.md)
+[How to use it](docs/execution-guide.md) · [EpiMapLoss equations](docs/epimaploss-epirecompscore-formulas.md#map-en) · [EpiRecompScore equations](docs/epimaploss-epirecompscore-formulas.md#score-en) · [Current verification scope](docs/epistesys-7.0.0-beta.1-release-notes-2026-11-06.md)
 
 ### Current status
 
 | Item | Current state |
 | --- | --- |
-| Version | **Beta 6.9 — `6.9.0-beta.1`** (unfinished source checkpoint) |
+| Version | **Beta-7.0 — `7.0.0-beta.1`** |
 | Implementation provenance | Selected Labyrinth-Codex v6.3.1 source snapshot with added DGCL parsing, validation, and repair paths |
-| Source verification | See the [Beta 6.9 snapshot record](docs/epistesys-6.9.0-beta.1-source-snapshot-2026-11-05.md) for this checkpoint. Whole-system audit and release gates are incomplete. The [alpha.3 record](validation/epr-release-verification-2026-10-27.md) and [alpha.2 final verification](validation/epia2-alpha2-release-verification-2026-10-02.md) are historical, not passing results for this version |
-| Distribution | Source-only; excludes model weights, private keys, personal settings, and unaudited distribution binaries |
+| Source verification | See the [Beta-7.0 verification record](docs/epistesys-7.0.0-beta.1-release-notes-2026-11-06.md) for the existing-test pass and actual-failure repairs, recorded separately from OS/features, distribution and host observations. The [alpha.3 record](validation/epr-release-verification-2026-10-27.md) and [alpha.2 final verification](validation/epia2-alpha2-release-verification-2026-10-02.md) are historical, not passing results for this version |
+| Distribution | Public source and local plugin packages are separate; exclude model weights, private keys, personal settings and build caches |
 | Host integration | Includes adapter/receipt/replay implementations; real-host callback/delivery observations remain `PendingHostObservation` |
 | Effect on development work | How much Epistesys itself reduces development failures is unverified. The independent reference corpus remains `PendingNoCorpus` |
 
-Local source-path verification does not establish arbitrary-instruction semantic accuracy, hallucination containment, or long-session performance. Beta 6.9 is an intermediate checkpoint of the current implementation, not completion, distribution readiness, or host activation. Alpha.3 remains on its [independent maintenance branch](https://github.com/ViszCham/Epistesys/tree/main-alpha.3), while end-to-end audit and repairs continue toward Beta-7.0.
+Local source-path verification does not establish arbitrary-instruction semantic accuracy, hallucination containment, or long-session performance. Beta-7.0 is a development version incorporating repairs of observed test failures, not a claim of all-OS, general-performance or real-host-delivery validation. Alpha.3 remains on its [independent maintenance branch](https://github.com/ViszCham/Epistesys/tree/main-alpha.3), and this version's tests, distribution and plugin rollout are tracked separately in the [verification record](validation/beta7-onepass-verification-2026-11-06.md).
 
-### Implementation being added through TLCX
+### TLCX implementation and measures
 
 The current source contains context reconstruction, checks across several finite logics, four records per transformation, evaluation of recomposed candidates, binary state and journals, resource ownership, and Coding/Media/host integration work. There is source and test code, but some features still lack a caller and some tests are unresolved. The [measurement contract](docs/tlcx-tl-screative-measurement-contract-v1-2026-10-29.md) defines applicability; the [implementation roadmap](docs/epistesys-tlcx-contextual-multilogic-loss-creativity-roadmap-2026-10-28.md) gives dependency order and completion criteria.
 
@@ -285,6 +287,8 @@ The launcher examples below require a matching packaged binary. Current TLCX dev
 
 The launcher resolves its runner relative to its installation. See the [execution guide](docs/execution-guide.md) for startup including other working directories, and the [routing contract](docs/codex-default-routing.md) for UTF-8 stdin/facades when Epistesys is explicitly selected in Codex. Installation and selection for use are separate operations.
 
+See the [plugin integration contract](docs/plugin-host-integration.md) for registration, invocation and diagnostic reuse.
+
 ### Documentation routes
 
 | Reader interest | Entry point |
@@ -295,7 +299,7 @@ The launcher resolves its runner relative to its installation. See the [executio
 | Wire formats and compatibility | [DGCL wire compatibility](docs/dgcl-wire-compatibility.md) → [schema contract](schemas/closure-and-receipt-contract.md) |
 | Measurement equations and applicability | [EpiMapLoss](docs/epimaploss-epirecompscore-formulas.md#map-en) → [EpiRecompScore F1/F2](docs/epimaploss-epirecompscore-formulas.md#score-en) → [all 40 components](docs/epimaploss-epirecompscore-formulas.md#catalog-en) |
 | Design evaluation and predecessor results | [Design hypotheses and evaluation criteria](docs/research-hypotheses.md) → [GB-CC75 evaluation report](docs/research/gb-cc75-study.md) |
-| Current verification and residual conditions | [Beta 6.9 snapshot record](docs/epistesys-6.9.0-beta.1-source-snapshot-2026-11-05.md) → [Known limitations](docs/known-limitations.md) |
+| Current verification and residual conditions | [Beta-7.0 verification record](docs/epistesys-7.0.0-beta.1-release-notes-2026-11-06.md) → [Known limitations](docs/known-limitations.md) |
 | Source provenance, exclusions, history | [Migration contract](docs/migration-contract.md) → [Documentation index](docs/README.md) |
 
 The initial clone uses independent Git history and excludes personal state, credentials, caches, receipt roots, and replay ledgers. `lc631-*` names are compatibility identifiers retained to limit behavior changes. The [documentation index](docs/README.md) separates detailed implementation records and inherited design/audit history from the current specification.

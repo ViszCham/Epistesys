@@ -47,7 +47,7 @@ pub struct Current<'scope> {
     corpus: Digest32,
 }
 impl<'s, 'a, 'v> Owned<'s, 'a, 'v> {
-    fn check(
+    pub(super) fn check(
         &self,
         e: ExpectedPair<'_, 'a, 'v>,
         view: &ResourceReservationView<'_>,
@@ -96,20 +96,22 @@ impl<'s, 'a, 'v> Owned<'s, 'a, 'v> {
         view: &ResourceReservationView<'_>,
         consume: impl for<'scope> FnOnce(Current<'scope>) -> R,
     ) -> Result<R, Error> {
-        self.check(e, view)?;
-        let result = consume(Current {
-            reports: &self.reports,
-            union: &self.union,
-            signature: &self.root.signature,
-            known_unions: &self.archive.unions,
-            status: self.archive.status,
-            counts: self.archive.counts,
-            queries: &self.archive.queries,
-            candidate: self.expected.target.expected.subject_query,
-            corpus: self.root.registration.corpus_revision,
-        });
-        self.check(e, view)?;
-        Ok(result)
+        budget::with_call(&self.root.framework, || {
+            self.check(e, view)?;
+            let result = consume(Current {
+                reports: &self.reports,
+                union: &self.union,
+                signature: &self.root.signature,
+                known_unions: &self.archive.unions,
+                status: self.archive.status,
+                counts: self.archive.counts,
+                queries: &self.archive.queries,
+                candidate: self.expected.target.expected.subject_query,
+                corpus: self.root.registration.corpus_revision,
+            });
+            self.check(e, view)?;
+            Ok(result)
+        })
     }
 }
 impl<'scope> Current<'scope> {

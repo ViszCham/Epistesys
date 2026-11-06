@@ -2,7 +2,7 @@
 
 ## 日本語
 
-現在の[Beta 6.9保存記録](epistesys-6.9.0-beta.1-source-snapshot-2026-11-05.md)に、この版で確認したことと未完了点があります。下表は `6.3.2-alpha.3` で記録した制約と、その確認に必要な材料です。機構があること、テストを通ること、実際の開発で役立つこと、配布や実ホストで動くことは別々に確認します。[指標の数式と適用範囲](epimaploss-epirecompscore-formulas.md#map-ja)、[用語と境界](system-architecture.md)、[alpha.3検証記録](../validation/epr-release-verification-2026-10-27.md)も参照できます。
+現在の[Beta-7.0検証記録](epistesys-7.0.0-beta.1-release-notes-2026-11-06.md)に、この版で確認したことと未完了点があります。下表は `6.3.2-alpha.3` で記録した制約と、その確認に必要な材料です。機構があること、テストを通ること、実際の開発で役立つこと、配布や実ホストで動くことは別々に確認します。[指標の数式と適用範囲](epimaploss-epirecompscore-formulas.md#map-ja)、[用語と境界](system-architecture.md)、[alpha.3検証記録](../validation/epr-release-verification-2026-10-27.md)も参照できます。
 
 ### 残存条件
 
@@ -55,7 +55,7 @@ alpha.3では以下の不具合対策と制限を追加しました。局所的�
 
 ## English
 
-The current [Beta 6.9 snapshot record](epistesys-6.9.0-beta.1-source-snapshot-2026-11-05.md) lists what was checked for that version and what remains open. The table below records limitations identified in `6.3.2-alpha.3` and the evidence needed to check them. Implementation, passing tests, practical utility, distribution, and operation on a real host require separate observations. See the [measurement equations and scope](epimaploss-epirecompscore-formulas.md#map-en), [terminology](system-architecture.md), and [alpha.3 verification](../validation/epr-release-verification-2026-10-27.md).
+The current [Beta-7.0 verification record](epistesys-7.0.0-beta.1-release-notes-2026-11-06.md) lists what was checked for that version and what remains open. The table below records limitations identified in `6.3.2-alpha.3` and the evidence needed to check them. Implementation, passing tests, practical utility, distribution, and operation on a real host require separate observations. See the [measurement equations and scope](epimaploss-epirecompscore-formulas.md#map-en), [terminology](system-architecture.md), and [alpha.3 verification](../validation/epr-release-verification-2026-10-27.md).
 
 ### Residual conditions
 

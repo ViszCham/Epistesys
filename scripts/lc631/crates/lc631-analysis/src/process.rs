@@ -15,7 +15,10 @@ use sha2::{Digest, Sha256};
 mod resources;
 mod runner;
 pub(crate) use resources::{capture_tool, ToolCapture};
-pub use resources::{run_bounded_tool_with_resources, ResourceToolResult};
+pub use resources::{
+    run_bounded_tool_attempt, run_bounded_tool_with_resources, NativeProcessEffect,
+    ResourceToolAttempt, ResourceToolResult,
+};
 pub use runner::ToolProcessRunner;
 pub(crate) use runner::{with_input_result, with_tool_result};
 

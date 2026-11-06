@@ -1,9 +1,18 @@
 //! Small typed expression fragment. No let/quantifier/function/nonlinear guess.
-use super::{commands::Builder, FormalError, FormalErrorKind, FormalSymbol, ResidualReason};
+use super::{
+    commands::Builder, DeclaredLogic, FormalError, FormalErrorKind, FormalSymbol, ResidualReason,
+};
 use lc631_solvers::{
     protocol::sexpr::NodeId,
     typed_query::{BoolExpr, IntExpr},
 };
+
+// Equality between Boolean operands is outside this profile. Validate those
+// operands without retaining a Boolean AST for an unsupported comparison.
+enum ComparisonOperand {
+    Boolean,
+    Integer(IntExpr),
+}
 
 impl Builder<'_, '_> {
     pub(super) fn boolean(&mut self, node: NodeId, depth: usize) -> Result<BoolExpr, FormalError> {
@@ -12,6 +21,7 @@ impl Builder<'_, '_> {
             return match atom {
                 "true" => Ok(BoolExpr::Constant(true)),
                 "false" => Ok(BoolExpr::Constant(false)),
+                number if decimal(number) => Err(self.error(node, FormalErrorKind::SortMismatch)),
                 _ => match self.symbol(node)? {
                     FormalSymbol::Boolean(id) => Ok(BoolExpr::Variable(id)),
                     FormalSymbol::Integer(_) => {
@@ -55,18 +65,26 @@ impl Builder<'_, '_> {
                     ">=" => 3,
                     _ => 4,
                 };
-                // Boolean equality is outside this first typed-core fragment.
-                if fields[1..]
-                    .iter()
-                    .any(|child| matches!(self.symbol(*child), Ok(FormalSymbol::Boolean(_))))
-                {
+                let left = self.comparison_operand(fields[1], depth + 1)?;
+                let right = self.comparison_operand(fields[2], depth + 1)?;
+                let (a, b) = match (left, right) {
+                    (ComparisonOperand::Integer(a), ComparisonOperand::Integer(b)) => (a, b),
+                    (ComparisonOperand::Boolean, ComparisonOperand::Boolean) if operator == 0 => {
+                        return Err(self.error(
+                            node,
+                            FormalErrorKind::Unsupported(ResidualReason::UnsupportedExpression),
+                        ));
+                    }
+                    _ => return Err(self.error(node, FormalErrorKind::SortMismatch)),
+                };
+                // The emitter uses QF_LIA for the conservative Boolean subset.
+                // An integer comparison cannot cross that source-logic boundary.
+                if self.logic != Some(DeclaredLogic::QfLia) {
                     return Err(self.error(
                         node,
                         FormalErrorKind::Unsupported(ResidualReason::UnsupportedExpression),
                     ));
                 }
-                let a = self.integer(fields[1], depth + 1)?;
-                let b = self.integer(fields[2], depth + 1)?;
                 Ok(match operator {
                     0 => BoolExpr::Equal(a, b),
                     1 => BoolExpr::LessEqual(a, b),
@@ -85,6 +103,42 @@ impl Builder<'_, '_> {
         }
     }
 
+    fn comparison_operand(
+        &mut self,
+        node: NodeId,
+        depth: usize,
+    ) -> Result<ComparisonOperand, FormalError> {
+        match self.atom(node) {
+            Some("true" | "false") => {
+                self.visit(node, depth)?;
+                return Ok(ComparisonOperand::Boolean);
+            }
+            Some(number) if decimal(number) => {
+                return self.integer(node, depth).map(ComparisonOperand::Integer);
+            }
+            Some(_) => {
+                self.visit(node, depth)?;
+                return Ok(match self.symbol(node)? {
+                    FormalSymbol::Boolean(_) => ComparisonOperand::Boolean,
+                    FormalSymbol::Integer(id) => ComparisonOperand::Integer(IntExpr::Variable(id)),
+                });
+            }
+            None => {}
+        }
+        let head = self
+            .doc
+            .children(node)
+            .and_then(|mut children| children.next())
+            .and_then(|head| self.atom(head));
+        match head {
+            Some("+" | "-") => self.integer(node, depth).map(ComparisonOperand::Integer),
+            _ => {
+                self.boolean(node, depth)?;
+                Ok(ComparisonOperand::Boolean)
+            }
+        }
+    }
+
     pub(super) fn integer(&mut self, node: NodeId, depth: usize) -> Result<IntExpr, FormalError> {
         self.visit(node, depth)?;
         if let Some(atom) = self.atom(node) {
@@ -93,6 +147,9 @@ impl Builder<'_, '_> {
                     .parse::<i64>()
                     .map_err(|_| self.error(node, FormalErrorKind::NumericOutOfRange))?;
                 return Ok(IntExpr::Constant(value));
+            }
+            if matches!(atom, "true" | "false") {
+                return Err(self.error(node, FormalErrorKind::SortMismatch));
             }
             return match self.symbol(node)? {
                 FormalSymbol::Integer(id) => Ok(IntExpr::Variable(id)),

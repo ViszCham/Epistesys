@@ -7,8 +7,6 @@ use lc631_receipt_kernel::{
     ReceiptClass, ReceiptIssuer, ReceiptPolicy, ReceiptVerifier, ReplayGuard,
 };
 use serde::{Deserialize, Serialize};
-use std::fs::{self, OpenOptions};
-use std::io::Write;
 use std::path::{Path, PathBuf};
 
 pub const CODEX_STOP_HOOK_SCHEMA: &str = "lc631-codex-stop-hook.v1";
@@ -195,35 +193,79 @@ pub fn persist_stop_hook_observation_with_resources(
     persist_stop_hook_observation_read(owned_root, observation, Some(resources))
 }
 
+fn validate_stop_hook_observation(observation: &StopHookObservation) -> Result<(), HostError> {
+    let valid_digest = |value: &str| {
+        value.strip_prefix("sha256:").is_some_and(|hex| {
+            hex.len() == 64
+                && hex
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        })
+    };
+    // Public report fields cannot authenticate host origin or supervision.
+    if observation.automatic_host_callback_observed
+        || observation.persistent_supervision_observed
+        || !matches!(
+            (observation.schema_version, observation.host),
+            (CODEX_STOP_HOOK_SCHEMA, "codex") | (CLAUDE_STOP_HOOK_SCHEMA, "claude")
+        )
+        || ![
+            &observation.session_digest,
+            &observation.host_turn_digest,
+            &observation.output_digest,
+            &observation.callback_payload_digest,
+        ]
+        .into_iter()
+        .all(|value| valid_digest(value))
+        || observation.model.len() > 4096
+        || observation.permission_mode.len() > 4096
+        || observation.host.len() > 128
+        || observation.claim_boundary.len() > 4096
+        || observation
+            .observation_path
+            .as_ref()
+            .is_some_and(|path| path.as_os_str().len() > 128 * 1024)
+    {
+        return Err(HostError::InvalidStopHookEvent);
+    }
+    Ok(())
+}
+
 fn persist_stop_hook_observation_read(
     owned_root: &Path,
     observation: &StopHookObservation,
     resources: Option<&lc631_process_supervisor::ResourceReservationView<'_>>,
 ) -> Result<PathBuf, HostError> {
-    // Public report fields cannot authenticate host origin or supervision.
-    if observation.automatic_host_callback_observed || observation.persistent_supervision_observed {
-        return Err(HostError::InvalidStopHookEvent);
-    }
+    validate_stop_hook_observation(observation)?;
+    let root = crate::bounded_reader::checked_absolute(owned_root)
+        .map_err(|error| HostError::Io(error.to_string()))?;
     crate::bounded_reader::require_capacity(resources, 1_048_576)?;
     if let Some(view) = resources {
-        return persist_owned(owned_root, observation, view);
+        return persist_owned(&root, observation, view);
     }
-    if let Some(view) = resources {
-        view.check()
-            .map_err(|error| HostError::Io(format!("host_resource:{error:?}")))?;
-    }
-    fs::create_dir_all(owned_root).map_err(|error| HostError::Io(error.to_string()))?;
-    let canonical_root = owned_root
-        .canonicalize()
+    let anchor = crate::bounded_reader::open_or_create_root(&root)
         .map_err(|error| HostError::Io(error.to_string()))?;
-    let observations = canonical_root.join("observations");
-    fs::create_dir_all(&observations).map_err(|error| HostError::Io(error.to_string()))?;
+    let observations = anchor
+        .directory(Path::new("observations"), true)
+        .map_err(|error| HostError::Io(error.to_string()))?;
     let file_name = format!(
         "{}-{}.json",
         digest_suffix(&observation.session_digest)?,
         digest_suffix(&observation.host_turn_digest)?
     );
-    let path = observations.join(file_name);
+    // Canonical spelling is a report value only. All I/O uses held anchors.
+    let path = anchor
+        .path()
+        .canonicalize()
+        .map_err(|error| HostError::Io(error.to_string()))?
+        .join("observations")
+        .join(&file_name);
+    anchor
+        .validate_current()
+        .map_err(|error| HostError::Io(error.to_string()))?;
+    observations
+        .validate_current()
+        .map_err(|error| HostError::Io(error.to_string()))?;
     let mut stored = observation.clone();
     stored.observation_path = Some(path.clone());
     let mut bytes =
@@ -234,20 +276,37 @@ fn persist_stop_hook_observation_read(
             "stop_hook_observation_budget_exceeded".into(),
         ));
     }
-    match OpenOptions::new().write(true).create_new(true).open(&path) {
+    match observations.create_private_file(Path::new(&file_name)) {
         Ok(mut file) => {
-            file.write_all(&bytes)
+            file.validate_current()
                 .map_err(|error| HostError::Io(error.to_string()))?;
-            file.sync_all()
+            file.write_and_sync(&bytes)
+                .map_err(|error| HostError::Io(error.to_string()))?;
+            file.validate_current()
                 .map_err(|error| HostError::Io(error.to_string()))?;
         }
         Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-            if !crate::bounded_reader::path_matches(&path, &bytes, 1_048_576, resources)? {
+            let mut file = observations
+                .open_read_only(Path::new(&file_name))
+                .map_err(|error| HostError::Io(error.to_string()))?;
+            let matches = file
+                .read_bounded(1_048_576)
+                .map_err(|error| HostError::Io(error.to_string()))?
+                == bytes;
+            file.validate_current()
+                .map_err(|error| HostError::Io(error.to_string()))?;
+            if !matches {
                 return Err(HostError::StopHookObservationConflict);
             }
         }
         Err(error) => return Err(HostError::Io(error.to_string())),
     }
+    observations
+        .validate_current()
+        .map_err(|error| HostError::Io(error.to_string()))?;
+    anchor
+        .validate_current()
+        .map_err(|error| HostError::Io(error.to_string()))?;
     Ok(path)
 }
 
@@ -265,35 +324,6 @@ fn persist_owned<'a>(
     observation: &StopHookObservation,
     view: &'a lc631_process_supervisor::ResourceReservationView<'a>,
 ) -> Result<PathBuf, HostError> {
-    let valid_digest = |value: &str| {
-        value.len() == 71
-            && value.starts_with("sha256:")
-            && value[7..]
-                .bytes()
-                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-    };
-    if !matches!(
-        (observation.schema_version, observation.host),
-        (CODEX_STOP_HOOK_SCHEMA, "codex") | (CLAUDE_STOP_HOOK_SCHEMA, "claude")
-    ) || ![
-        &observation.session_digest,
-        &observation.host_turn_digest,
-        &observation.output_digest,
-        &observation.callback_payload_digest,
-    ]
-    .into_iter()
-    .all(|value| valid_digest(value))
-        || observation.model.len() > 4096
-        || observation.permission_mode.len() > 4096
-        || observation.host.len() > 128
-        || observation.claim_boundary.len() > 4096
-        || observation
-            .observation_path
-            .as_ref()
-            .is_some_and(|path| path.as_os_str().len() > 128 * 1024)
-    {
-        return Err(HostError::InvalidStopHookEvent);
-    }
     let file_name = format!(
         "{}-{}.json",
         digest_suffix(&observation.session_digest)?,

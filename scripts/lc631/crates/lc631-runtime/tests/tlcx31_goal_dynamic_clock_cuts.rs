@@ -1,5 +1,6 @@
 //! Actual-owner dynamic-clock TEST-FIRST; all cases unrun by this author.
 mod tlcx31_goal_dynamic_clock_support;
+mod tlcx31_registered_clock_support;
 use tlcx31_goal_dynamic_clock_support::{fixture,clocks::{self,Lane,Event},BASE,HAND};
 use Lane::{DirectBase as DB,HiddenBase as HB,DirectNext as DN,HiddenNext as HN,CaptureBase as CB,CaptureNext as CN};
 use lc631_runtime::{goal_suite_measurement as g,contextual_repair::measurement::ProbeError};
@@ -103,17 +104,23 @@ fn d06_capture_provider_real_pre200_post150_preserves_its_original_cause(){
 
 #[test]
 fn d07_same_local_test_domain_capture100_cannot_pass_after_execution200(){
-    fixture(|h,current,view|{
-        // Required cross-provider cut: all lanes in this configured test use the
-        // SAME epoch unit/origin. Existing ArtifactCurrent has no typed domain/
-        // floor capability. This is expected to expose that source gap, not to
-        // certify independent host clocks or silently relabel another domain.
-        clocks::all(200);clocks::constant(CB,100);clocks::constant(CN,100);
-        let root=g::ArtifactPairRoot::given(h.root_input(),view).unwrap();
-        let rejected=g::measure_artifact_pair(&root,h.pair(),current,view).err();
-        let observed=clocks::trace();
-        assert!(matches!(rejected,Some(g::Error::ClockRollback)),
-            "Missing same-domain/floor capability: refusing must be explicit, not a current row. Actual trace: {observed:?}");
+    use lc631_runtime::goal_clock_domain as registered;
+    // The two actual actors are registered into the same domain before capture
+    // and native birth. Preserve D07's 200→100 rejection and the four real outputs.
+    tlcx31_registered_clock_support::full(|_, root, pair, ports, clocks, _, _, _, view| {
+        clocks.all(200);
+        clocks.bc.set(100);
+        clocks.cc.set(100);
+        let before = (clocks.be.calls(), clocks.bc.calls(), clocks.cc.calls());
+        let rejected = registered::measure_clock_bound(root, pair, ports, view).err();
+        assert!(matches!(rejected, Some(registered::Error::Clock(registered::ClockFault::ClockRollback))),
+            "registered capture100 must refuse after actual execution200: {rejected:?}");
+        assert!(clocks.be.calls() > before.0);
+        assert_eq!(clocks.bc.calls(), before.1 + 1);
+        assert_eq!(clocks.cc.calls(), before.2);
+        assert_eq!(pair.baseline.actual_outputs(), &BASE);
+        assert_eq!(pair.candidate.actual_outputs(), &HAND);
+        assert_eq!(pair.baseline.checked_epoch(), 100);
     });
 }
 

@@ -101,6 +101,15 @@ impl<'a> ClosedGraph<'a> {
     pub const fn context(&self) -> ContextRevision {
         self.context
     }
+    pub fn source_store(&self) -> &SourceStore {
+        self.source
+    }
+    pub const fn node_count(&self) -> u16 {
+        self.nodes
+    }
+    pub fn edges(&self) -> &[Edge] {
+        self.edges
+    }
     fn contains(&self, edge: Edge) -> bool {
         self.edges.binary_search(&edge).is_ok()
     }

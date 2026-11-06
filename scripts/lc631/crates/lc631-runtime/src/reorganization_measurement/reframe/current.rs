@@ -40,6 +40,11 @@ impl<'cur, 'o, 'p, 'i, 's, 'v> CurrentReframe<'cur, 'o, 'p, 'i, 's, 'v> {
     pub fn semantic_frame_changed(&self) -> bool {
         self.owner.changed
     }
+    /// Structural owner correspondence only; not independent semantic evidence.
+    pub fn same_oracle_and_budget(&self) -> bool {
+        std::ptr::eq(self.owner.plan, self.owner.baseline.data.plan)
+            && std::ptr::eq(self.owner.plan, self.owner.candidate.data.plan)
+    }
     pub fn root_reachability_before(&self) -> bool {
         self.owner.plan.root_before
     }

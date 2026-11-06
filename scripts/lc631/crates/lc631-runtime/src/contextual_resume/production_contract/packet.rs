@@ -249,7 +249,7 @@ fn crossbind(
         parse(&a.after_snapshot.snapshot_digest)?,
         parse(&dgcl_repair_application_payload_digest(a))?,
         parse(
-            a.attestation
+            &a.attestation
                 .as_ref()
                 .ok_or(CodingResumePacketError::NeedsEvidence)?
                 .receipt_digest(),

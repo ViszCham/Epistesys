@@ -1,15 +1,16 @@
 //! One runtime process-root owner for work reservations across all its runs.
 //! Limits are operational payload quotas, not OS-global or total-RSS guarantees.
 use lc631_substrate::resource::{
-    checked_requests, ResourceLease, ResourceLeaseIssuer, RESOURCE_KINDS,
+    checked_requests, LiveDeadline, ResourceLease, ResourceLeaseIssuer, RESOURCE_KINDS,
 };
 pub use lc631_substrate::resource::{
-    Cancellation, Deadline, ReportedResourceLease, ResourceAmount, ResourceClaim, ResourceError,
-    ResourceKind, ResourceRequest, ResourceReservationView,
+    Cancellation, Deadline, DeadlineNarrowing, ReportedResourceLease, ResourceAmount, ResourceClaim,
+    ResourceError, ResourceKind, ResourceRequest, ResourceReservationView,
 };
 pub use lc631_substrate::Digest32;
 use std::sync::{Arc, Mutex};
 
+mod deadline;
 const MAX_RUNS: usize = 1024;
 const MAX_RESERVATIONS: usize = 4096;
 const MAX_METADATA_BACKING: usize = 1024 * 1024;
@@ -39,7 +40,7 @@ struct RunRecord {
     source: Digest32,
     limits: ResourceLimits,
     used: [u64; RESOURCE_KINDS],
-    deadline: Deadline,
+    deadline: Arc<LiveDeadline>,
     cancellation: Cancellation,
 }
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -81,7 +82,8 @@ impl ResourceBroker {
         let mut runs = Vec::new();
         let mut reservations = Vec::new();
         let requested = std::mem::size_of::<RunRecord>()
-            .checked_mul(MAX_RUNS)
+            .checked_add(std::mem::size_of::<LiveDeadline>())
+            .and_then(|per_run| per_run.checked_mul(MAX_RUNS))
             .and_then(|runs| {
                 std::mem::size_of::<ReservationRecord>()
                     .checked_mul(MAX_RESERVATIONS)
@@ -98,7 +100,7 @@ impl ResourceBroker {
             .map_err(|_| ResourceError::AllocationFailed)?;
         let backing = runs
             .capacity()
-            .checked_mul(std::mem::size_of::<RunRecord>())
+            .checked_mul(std::mem::size_of::<RunRecord>() + std::mem::size_of::<LiveDeadline>())
             .and_then(|runs| {
                 reservations
                     .capacity()
@@ -164,7 +166,7 @@ impl ResourceBroker {
             source,
             limits,
             used: [0; RESOURCE_KINDS],
-            deadline,
+            deadline: Arc::new(LiveDeadline::new(deadline)),
             cancellation,
         });
         ledger.highest_run_id = run_id;
@@ -182,6 +184,37 @@ impl ResourceBroker {
             .lock()
             .map_err(|_| ResourceError::Poisoned)?
             .used[kind.index()])
+    }
+
+    /// Check the actual run owner before scheduling consumes a ticket or quota.
+    /// Equal public run/source labels do not identify a shared accounting root.
+    pub(crate) fn validate_run(
+        &self,
+        run: &RunResources,
+        expected_run: u64,
+        expected_source: Digest32,
+    ) -> Result<(), ResourceError> {
+        if !Arc::ptr_eq(&self.root, &run.root) {
+            return Err(ResourceError::ForeignOwner);
+        }
+        if run.closed || run.run_id != expected_run {
+            return Err(ResourceError::UnknownRun);
+        }
+        let ledger = self
+            .root
+            .ledger
+            .lock()
+            .map_err(|_| ResourceError::Poisoned)?;
+        let actual = ledger
+            .runs
+            .iter()
+            .find(|record| record.id == run.run_id)
+            .ok_or(ResourceError::UnknownRun)?;
+        if actual.source != expected_source {
+            return Err(ResourceError::SourceMismatch);
+        }
+        actual.cancellation.check()?;
+        actual.deadline.check()
     }
 
     pub fn validate_lease(
@@ -313,12 +346,14 @@ impl RunResources {
             run.id,
             payload_source,
             requests,
-            run.deadline,
+            run.deadline.snapshot()?,
             run.cancellation.clone(),
         )?;
         // The mutex is the transaction boundary: no reader sees provisional
         // charges or a live lease until all components are ready to publish.
-        let lease = self.root.issuer.issue_admitted(id, report)?;
+        let lease = self.root.issuer.issue_admitted_with_deadline(
+            id, report, Arc::clone(&run.deadline),
+        )?;
         ledger.used = process_after;
         ledger.runs[index].used = run_after;
         ledger.next_id = next_id;
@@ -483,8 +518,10 @@ mod tlcx05_authoritative_run_tests {
     #[test]
     fn tlcx05_validation_uses_authoritative_run_deadline_not_only_view_metadata() {
         let (owner, reservation) = fixture();
-        owner.root.ledger.lock().unwrap().runs[0].deadline =
-            Deadline::at(Instant::now() - Duration::from_millis(1));
+        owner.root.ledger.lock().unwrap().runs[0]
+            .deadline
+            .narrow(Deadline::at(Instant::now() - Duration::from_millis(1)))
+            .unwrap();
         assert_eq!(
             owner
                 .validate_lease(

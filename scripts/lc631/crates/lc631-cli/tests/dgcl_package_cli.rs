@@ -472,6 +472,15 @@ fn package_cli_case(case: PackageCase) {
     let package = base.join("package");
     std::fs::create_dir_all(package.join("src")).unwrap();
     std::fs::create_dir_all(package.join("tests")).unwrap();
+    // Configure the fresh Cargo working directory before snapshots or receipts.
+    std::fs::create_dir(base.join(".cargo")).unwrap();
+    let mut cargo_config = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(base.join(".cargo/config.toml"))
+        .unwrap();
+    std::io::Write::write_all(&mut cargo_config, b"[build]\njobs = 1\n").unwrap();
+    drop(cargo_config);
     let fixture =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../fixtures/dgcl/producer-package");
     for path in [

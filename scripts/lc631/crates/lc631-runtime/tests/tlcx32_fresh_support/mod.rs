@@ -30,12 +30,16 @@ fn q(kind: ResourceKind, amount: u64) -> ResourceRequest {
     ResourceRequest::new(kind, ResourceAmount::checked(amount).unwrap())
 }
 fn resources() -> (ResourceBroker, RunResources, Reservation) {
+    // Two bundle scratches, replay work/inventory, capped segment/index/head
+    // reads and budget work conservatively total 31_277_261 Output bytes.
+    // Keep this fixture reservation within the existing 128 MiB broker cap.
+    const OUTPUT_BYTES: u64 = 32 * 1024 * 1024;
     let limits = ResourceLimits::uniform(128 * 1024 * 1024).unwrap();
     let broker = ResourceBroker::new(limits).unwrap();
     let run = broker.begin_run(32, context::SourceRevision::of(coding::SOURCE).digest(), limits,
         Deadline::after(Duration::from_secs(90)).unwrap(), Cancellation::default()).unwrap();
     let reservation = run.reserve(&[
-        q(ResourceKind::Ram, 64 * 1024 * 1024), q(ResourceKind::Output, 1024 * 1024),
+        q(ResourceKind::Ram, 64 * 1024 * 1024), q(ResourceKind::Output, OUTPUT_BYTES),
         q(ResourceKind::Disk, 64 * 1024 * 1024), q(ResourceKind::Child, 2), q(ResourceKind::Cleanup, 2),
     ]).unwrap();
     (broker, run, reservation)
@@ -119,7 +123,7 @@ pub fn create_checkpoint(root: &Path) {
                 comparison_scope: binding.scope, probe_plan: plan.digest(), goal: plan.goal(), policy: plan.policy() };
             let checkpoint = UntrustedTransitionCheckpoint::capture_with_baseline(token, pins, &baseline, &plan, &view)
                 .map_err(|_| ProbeError::BindingMismatch)?;
-            captured = Some((checkpoint, token.request().clone(), token.application().clone()));
+            captured = Some((checkpoint, token.request().clone(), token.application().clone(), token.checked_epoch()));
             Ok(())
         };
         let mut accepted_validation = |token: &DgclVerifiedRepairValidation<'_>| {
@@ -150,12 +154,12 @@ pub fn create_checkpoint(root: &Path) {
         assert_eq!(driver.budget_summary().unwrap().charged_attempts, 1);
     }
     assert_eq!(effects.calls, 1);
-    let (checkpoint, request, application) = captured.unwrap();
+    let (checkpoint, request, application, checked_epoch) = captured.unwrap();
     assert_eq!(checkpoint.as_bytes().len(), BOUND_TRANSITION_BYTES);
     let attestation = issuer.issue(ReceiptClass::ToolExecution,
         SubjectRevision::checked(&request.source_revision).unwrap(),
         ReceiptScope::checked(checkpoint.receipt_scope()).unwrap(), lc631_runtime::contextual_resume::transition::digest_text(checkpoint.payload_digest()),
-        100, Some(400), Some(application.attestation.as_ref().unwrap().receipt_digest())).unwrap();
+        checked_epoch, Some(400), Some(application.attestation.as_ref().unwrap().receipt_digest())).unwrap();
     let mut builder = JournalSegmentBuilder::genesis();
     builder.append_at(1, JournalRecordKind::Evidence, checkpoint.payload_digest(), checkpoint.as_bytes()).unwrap();
     write_new(&root.join("transition.bin"), &builder.finish().unwrap(), 4096);

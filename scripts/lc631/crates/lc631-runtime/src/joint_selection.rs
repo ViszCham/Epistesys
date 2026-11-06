@@ -12,4 +12,5 @@ pub use components::{
     project_assessment_reported, project_component_reported, ReportedComponentAxis,
 };
 pub use frontier::{compare_rows, select_joint_reported};
+pub(crate) use frontier::{validate_policy, validate_rows};
 pub use types::*;

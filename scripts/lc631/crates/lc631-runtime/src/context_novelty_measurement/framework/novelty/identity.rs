@@ -93,8 +93,13 @@ fn case(root: &Root<'_, '_>, c: CaseRef<'_, '_, '_>, w: &mut Work<'_>) -> Result
         w,
         budget::native_limits(&root.framework, root.registration.limits),
     );
-    h.bytes(b"actual-framework-case.v1").map_err(native)?;
+    h.bytes(b"actual-framework-case.v2").map_err(native)?;
     h.n(c.expected.kernel as u64).map_err(native)?;
+    h.n(match plan::case_key(c).subject {
+        f::SubjectKind::Original => 0,
+        f::SubjectKind::Generated => 1,
+    })
+    .map_err(native)?;
     let context = match c.expected.subject {
         f::Subject::Original => root.framework.native.state.context,
         f::Subject::Generated(c) => c.prepared().target(),
@@ -102,6 +107,26 @@ fn case(root: &Root<'_, '_>, c: CaseRef<'_, '_, '_>, w: &mut Work<'_>) -> Result
     h.bytes(context.interpretation_digest().as_bytes())
         .map_err(native)?;
     h.query(c.expected.subject_query).map_err(native)?;
+    Ok(h.finish())
+}
+fn comparison_baseline(
+    root: &Root<'_, '_>,
+    reference: Digest32,
+    role: plan::ComparisonRole,
+    w: &mut Work<'_>,
+) -> Result<Digest32, Error> {
+    let mut h = n::native_hash::new(
+        w,
+        budget::native_limits(&root.framework, root.registration.limits),
+    );
+    h.bytes(b"tlcx.framework.p2.reference-role.v1").map_err(native)?;
+    h.bytes(root.digest.as_bytes()).map_err(native)?;
+    h.bytes(reference.as_bytes()).map_err(native)?;
+    h.n(match role {
+        plan::ComparisonRole::Primary => 0,
+        plan::ComparisonRole::DiagnosticControl => 1,
+    })
+    .map_err(native)?;
     Ok(h.finish())
 }
 pub(super) fn reports(
@@ -114,6 +139,7 @@ pub(super) fn reports(
 ) -> Result<[ComponentReport; 2], Error> {
     let target = case(root, e.target, w)?;
     let reference = case(root, e.source, w)?;
+    let baseline = comparison_baseline(root, reference, root.comparison_role(e)?, w)?;
     let context = match e.target.expected.subject {
         f::Subject::Original => root.framework.native.state.context,
         f::Subject::Generated(c) => c.prepared().target(),
@@ -122,7 +148,7 @@ pub(super) fn reports(
         w,
         budget::native_limits(&root.framework, root.registration.limits),
     );
-    for d in [root.digest, root.producer, target, reference] {
+    for d in [root.digest, root.producer, target, reference, baseline] {
         result.bytes(d.as_bytes()).map_err(native)?;
     }
     let c = archive.counts;
@@ -164,6 +190,7 @@ pub(super) fn reports(
             h.update((metric as u16).to_le_bytes());
             h.update(reference.as_bytes());
             h.update(target.as_bytes());
+            h.update(baseline.as_bytes());
             let producer = Digest32::from_bytes(h.finalize().into());
             Ok(ComponentReport {
                 metric,
@@ -174,7 +201,7 @@ pub(super) fn reports(
                     source: root.framework.native.state.source.id().digest(),
                     target,
                     context: context.interpretation_digest(),
-                    baseline: root.framework.digest,
+                    baseline,
                     producer,
                     transform: root.registration.policy_revision,
                     result,

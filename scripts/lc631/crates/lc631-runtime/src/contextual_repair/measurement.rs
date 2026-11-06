@@ -17,13 +17,13 @@ use std::sync::{
 /// Owner-local epoch history, shared only with gains derived from that owner.
 /// Relaxed ordering suffices: this atomic orders a single monotone number, not
 /// publication of artifact payloads or authority. It does not certify a clock.
-pub(super) struct ObservedEpoch(AtomicU64);
+pub(crate) struct ObservedEpoch(AtomicU64);
 impl ObservedEpoch {
-    pub(super) fn shared(birth: u64) -> Arc<Self> {
+    pub(crate) fn shared(birth: u64) -> Arc<Self> {
         Arc::new(Self(AtomicU64::new(birth)))
     }
 
-    pub(super) fn observe(&self, now: u64, expires: u64) -> Result<(), ProbeError> {
+    pub(crate) fn observe(&self, now: u64, expires: u64) -> Result<(), ProbeError> {
         let previous = self.0.fetch_max(now, Ordering::Relaxed);
         if now < previous {
             return Err(ProbeError::ClockRollback);
@@ -50,6 +50,7 @@ pub enum ProbeError {
     UnregisteredTool,
     Stale,
     ClockRollback,
+    ClockDomain(crate::goal_clock_domain::ClockFault),
     InvalidOutput,
     ProcessFailed,
     Io(std::io::ErrorKind),
@@ -117,7 +118,7 @@ pub struct OwnedCodingProbeObservation<'v> {
     pub(super) correct: u8,
     pub(super) checked_epoch: u64,
     pub(super) expires_epoch: u64,
-    pub(super) clock: fn() -> u64,
+    pub(super) clock: super::execution::ObservationClock<'v>,
     pub(super) observed_epoch: Arc<ObservedEpoch>,
     pub(super) artifact: super::execution::ProbeArtifactWitness,
     // Caller-allocated provider owns configuration, not additional authority.
@@ -175,8 +176,7 @@ impl OwnedCodingProbeObservation<'_> {
         {
             return Err(ProbeError::BindingMismatch);
         }
-        let now = (self.clock)();
-        self.observed_epoch.observe(now, self.expires_epoch)?;
+        let now = self.clock.sample(&self.observed_epoch, self.expires_epoch, resources)?;
         if now < self.checked_epoch {
             return Err(ProbeError::ClockRollback);
         }
@@ -218,9 +218,9 @@ pub struct OwnedCodingProbeGain<'v> {
     current: Digest32,
     gain_quarters: i8,
     correct: u8,
-    checked_epoch: u64,
-    expires_epoch: u64,
-    clocks: [fn() -> u64; 2],
+    checked_epochs: [u64; 2],
+    expires_epochs: [u64; 2],
+    clocks: [super::execution::ObservationClock<'v>; 2],
     observed_epochs: [Arc<ObservedEpoch>; 2],
     retained: ResourceClaim<'v>,
 }
@@ -251,12 +251,11 @@ impl OwnedCodingProbeGain<'_> {
             return Err(ProbeError::BindingMismatch);
         }
         for (role, clock) in self.clocks.iter().enumerate() {
-            let now = clock();
-            self.observed_epochs[role].observe(now, self.expires_epoch)?;
-            if now < self.checked_epoch {
+            let now = clock.sample(&self.observed_epochs[role], self.expires_epochs[role], resources)?;
+            if now < self.checked_epochs[role] {
                 return Err(ProbeError::ClockRollback);
             }
-            if now >= self.expires_epoch {
+            if now >= self.expires_epochs[role] {
                 return Err(ProbeError::Stale);
             }
         }
@@ -265,10 +264,11 @@ impl OwnedCodingProbeGain<'_> {
 }
 pub fn paired_gain<'v>(
     plan: &CodingProbePlan,
-    baseline: &OwnedCodingProbeObservation<'_>,
-    current: &OwnedCodingProbeObservation<'_>,
+    baseline: &OwnedCodingProbeObservation<'v>,
+    current: &OwnedCodingProbeObservation<'v>,
     resources: &'v ResourceReservationView<'_>,
 ) -> Result<OwnedCodingProbeGain<'v>, ProbeError> {
+    baseline.clock.check_pair(&current.clock)?;
     baseline.check_current(plan, resources)?;
     current.check_current(plan, resources)?;
     if baseline.source != current.source {
@@ -282,9 +282,17 @@ pub fn paired_gain<'v>(
         current: current.observation,
         gain_quarters: current.correct as i8 - baseline.correct as i8,
         correct: current.correct,
-        checked_epoch: baseline.checked_epoch.max(current.checked_epoch),
-        expires_epoch: baseline.expires_epoch.min(current.expires_epoch),
-        clocks: [baseline.clock, current.clock],
+        checked_epochs: if baseline.clock.is_legacy() {
+            [baseline.checked_epoch.max(current.checked_epoch); 2]
+        } else {
+            [baseline.checked_epoch, current.checked_epoch]
+        },
+        expires_epochs: if baseline.clock.is_legacy() {
+            [baseline.expires_epoch.min(current.expires_epoch); 2]
+        } else {
+            [baseline.expires_epoch, current.expires_epoch]
+        },
+        clocks: [baseline.clock.clone(), current.clock.clone()],
         observed_epochs: [
             Arc::clone(&baseline.observed_epoch),
             Arc::clone(&current.observed_epoch),

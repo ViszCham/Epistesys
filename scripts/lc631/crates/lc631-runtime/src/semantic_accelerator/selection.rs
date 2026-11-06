@@ -195,6 +195,7 @@ pub fn prepare_numeric_batch_with_profile<'a, 'p, 'v, 'r>(
     {
         return Err(ConsumerError::WorkLimit);
     }
+    crate::joint_selection::validate_policy(policy, rows.len()).map_err(ConsumerError::Selection)?;
     let scratch = resources
         .claim_resources(&[request(ResourceKind::Ram, SCRATCH_RAM)?])
         .map_err(ConsumerError::Resource)?;
@@ -202,6 +203,7 @@ pub fn prepare_numeric_batch_with_profile<'a, 'p, 'v, 'r>(
         .claim_resources(&[request(ResourceKind::Ram, profile.retained_ram())?])
         .map_err(ConsumerError::Resource)?;
     admit_rows(policy, rows, profile.payload_limit())?;
+    crate::joint_selection::validate_rows(policy, rows).map_err(ConsumerError::Selection)?;
     let base_token = payload_token(policy, rows, coverage, stamp)?;
     let token = match profile {
         NumericPayloadProfile::LegacyV1 => base_token,
@@ -245,11 +247,6 @@ fn admit_rows(
         }
         if row.axes.len() != policy.axes.len() {
             return Err(ConsumerError::Selection(SelectionError::AxisCountMismatch));
-        }
-        if rows[..index].iter().any(|other| other.id == row.id) {
-            return Err(ConsumerError::Selection(
-                SelectionError::DuplicateCandidateId,
-            ));
         }
         bytes = bytes
             .checked_add(row.canonical_key.len() as u64)

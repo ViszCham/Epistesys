@@ -57,6 +57,7 @@ pub struct Observation {
     pub candidate_path: Option<Vec<u16>>,
     pub candidate_map_work: u64,
     pub semantic_frame_changed: bool,
+    pub same_oracle_and_budget: bool,
     pub root_before: bool,
     pub root_after: bool,
     pub denominator: u64,

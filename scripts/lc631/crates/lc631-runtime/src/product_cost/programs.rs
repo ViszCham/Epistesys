@@ -72,6 +72,71 @@ pub fn stage_b_copy_pack_package_v1(dictionary: &[u8]) -> Result<OwnedInlinePack
         dictionary: term::copy(dictionary)?,
     })
 }
+
+pub(super) fn require_native_adapter_closure(
+    package: super::InlinePackage<'_>,
+    limits: CostLimits,
+    view: &lc631_substrate::resource::ResourceReservationView<'_>,
+) -> Result<u64, CostError> {
+    // Reuse the declared workspace only after executable evaluation released it.
+    let _workspace = super::execution::reserve(view, limits)?;
+    let mut meter = super::machine::Meter::new(view, limits.fuel_per_direction);
+    // Bound the fixed producer before rebuilding its code; never enlarge caller caps.
+    let registration_limits = CostLimits::default();
+    meter.chunks(
+        registration_limits
+            .bundle_bytes
+            .checked_add(registration_limits.total_nodes)
+            .ok_or(CostError::ResourceExhausted)?,
+    )?;
+    let gap = || CostError::NeedsEvidence(super::CostGap::NativeCanonicalizationCostClosurePending);
+    let registered = match stage_b_copy_pack_package_v1(package.dictionary) {
+        Ok(registered) => registered,
+        Err(CostError::UnsupportedProfile) => return Err(gap()),
+        Err(error) => return Err(error),
+    };
+    let reference = registered.as_inline();
+    meter.chunks(
+        (package.adapter.len() as u64)
+            .checked_add(reference.adapter.len() as u64)
+            .ok_or(CostError::ResourceExhausted)?,
+    )?;
+    if package.adapter != reference.adapter {
+        return Err(gap());
+    }
+    let encoded = [
+        reference.adapter,
+        reference.projection,
+        reference.inverse,
+        reference.helpers,
+        reference.runtime,
+        reference.dictionary,
+    ]
+    .iter()
+    .try_fold(0u64, |sum, bytes| {
+        sum.checked_add(bytes.len() as u64)
+            .ok_or(CostError::ResourceExhausted)
+    })?;
+    let host_budget = limits
+        .additional_ram_bytes
+        .checked_sub(encoded)
+        .ok_or(CostError::ResourceExhausted)?
+        / 2;
+    // Original P/I were already executed and checked. This gate concerns A -> H/R.
+    let actual_input = super::InlinePackage {
+        projection: reference.projection,
+        inverse: reference.inverse,
+        ..package
+    };
+    let actual = super::codec::Package::parse(actual_input, limits, &mut meter, host_budget, 0)?;
+    let expected = super::codec::Package::parse(reference, limits, &mut meter, host_budget, 0)?;
+    if !super::machine::matches_registered_closure(&actual, &expected, limits, &mut meter)? {
+        return Err(gap());
+    }
+    view.check()?;
+    Ok(meter.used)
+}
+
 fn helper_name(t: &Term) -> &str {
     match t {
         Term::Apply(_, v) => match &v[0] {

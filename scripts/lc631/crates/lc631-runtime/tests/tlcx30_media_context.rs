@@ -48,7 +48,8 @@ fn tlcx30_empty_actual_output_and_configuration_swap_never_publish_context() {
         assert!(result.is_err());
         });
         assert_eq!(contexts.states().len(), 1);
-        assert!(fixture.root.join("backend.ran").exists());
+        assert_eq!(fixture.root.join("backend.ran").exists(), empty,
+            "only an actually executed empty-output backend may leave a marker; registration mismatch is pre-spawn");
     }
 }
 

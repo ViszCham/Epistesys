@@ -166,8 +166,8 @@ fn input<'a>(invocation: ProbeInvocation<'a>, principal: &'a PrincipalBinding,
 }
 
 pub fn configured<R>(fixture: &PacketFixture, run: &RunResources, view: &ResourceReservationView<'_>,
-    consume: impl for<'a> FnOnce(CodingResumeAttemptInput<'a>, ProbeAttemptInput<'a>, CodingBuildPort<'a,'a>,
-        ProbeAuthority, coding::FixtureSnapshotAuthority, &'a lc631_analysis::DgclPipelineReport) -> R) -> R {
+    consume: impl for<'a, 'ctx, 'runner> FnOnce(CodingResumeAttemptInput<'a>, ProbeAttemptInput<'a>, CodingBuildPort<'ctx,'runner>,
+        ProbeAuthority, coding::FixtureSnapshotAuthority, &'ctx lc631_analysis::DgclPipelineReport) -> R) -> R {
     let bytes = fixture.bytes(); let origin = fixture.origin(&bytes);
     let checked = decode_coding_resume_packet(UntrustedCodingResumePacket::borrowed(&bytes),
         &origin, CodingResumePacketLimits::finite_v1(), view).unwrap();

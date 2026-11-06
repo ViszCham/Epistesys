@@ -26,6 +26,7 @@ mod model;
 mod plan;
 mod program;
 mod queries;
+pub mod reframe;
 mod selection;
 
 pub use current::{CurrentRebind, RebindRow};

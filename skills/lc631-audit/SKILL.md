@@ -1,13 +1,13 @@
 ---
 name: lc631-audit
-description: Audit Epistesys 6.9.0-beta.1 inherited closure levels, accelerator receipts, media authority, and promotion blockers.
+description: Inspect Epistesys 7.0.0-beta.1 evidence boundaries, accelerator receipts, media authority and remaining gates when an audit is requested.
 ---
 
 # Epistesys Audit
 
 ## 日本語
 
-Beta 6.9は未完成のsource保存版です。このfacadeはこの版を選択した場合の手順であり、既存hostのplugin更新・配布準備・全接続完了を意味しません。
+このfacadeは監査を依頼された場合に使います。通常turnではcoding／conversation facadeを使い、監査を重複実行しません。Beta名称と、全OS・外部backend・実host配信の検証完了を区別します。
 
 最小の該当commandだけを実行します。
 
@@ -28,7 +28,7 @@ Declared、Typed、Reachable、Executed、Consumed、Contained、HostBoundを分
 
 ## English
 
-Beta 6.9 is an unfinished source checkpoint. This facade describes use of this selected version; it does not establish plugin updates in an existing host, distribution readiness, or end-to-end completion.
+Use this facade when an audit is requested, not in addition to routine coding/conversation routing. Distinguish the Beta identity from validation of all OS profiles, external backends and real-host delivery.
 
 Run the narrowest applicable command:
 
