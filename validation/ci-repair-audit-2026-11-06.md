@@ -21,6 +21,8 @@
 
 ローカルでは全workspace／全targetのstrict clippyと、公開入口・動的時計の対象試験を確認しました。最終のOS別結果は[PR #11](https://github.com/ViszCham/Epistesys/pull/11)のCIに記録します。実host callback・外部backend・独立gold・一般性能は本監査の範囲外です。既存の作業差分、鍵、model、再開状態と証跡は保持します。
 
+7.1 identityのLinux CIでportable試験通過後、既定feature構成のlink中に`No space left on device`とlinkerのBus errorを観測しました。CIのdev／test debug情報とincremental保存を抑え、同時buildを2に制限します。debug assertion・overflow check・最適化level・試験対象・期限・production資源上限は変更せず、runnerのdisk予算も終了時に記録します。disk不足をコードの試験合格やskipへ変換しません。
+
 ## English
 
 Scope is Beta-7.0 CI disconnections and failures actually surfaced during verification. Repairs use only the central session, without another complete-code reading or a general safety proof.
@@ -41,3 +43,5 @@ Strict clippy retains `-D warnings`. Original failure owners, native history and
 The audit also checked Clippy's mechanical suggestions: mutable chunk iteration retains `iter_mut`. Original rejection conditions, expiry, resource limits, positives and negatives remain. Test parallelism is not disabled to hide fixture collisions. Strict clippy now precedes runtime tests, and `--no-fail-fast` collects independent failures while retaining nonzero failure exits.
 
 Local checks cover strict clippy over the full workspace/all targets and affected public-entry/dynamic-clock tests. Final OS-specific outcomes are recorded by CI on [PR #11](https://github.com/ViszCham/Epistesys/pull/11). Real-host callbacks, external backends, independent gold and general performance are outside this audit. Existing differences, keys, models, resume state and evidence are preserved.
+
+Under the7.1 identity, Linux portable tests passed before default-feature linking hit `No space left on device` and linker Bus errors. Reduce CI dev/test debug information and incremental retention, limit concurrent builds to2, and report runner disk budgets. Debug assertions, overflow checks, optimization levels, test selection, deadlines and production resource limits remain unchanged. Disk exhaustion is not relabeled as a test pass or skip.

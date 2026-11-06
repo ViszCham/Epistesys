@@ -47,6 +47,13 @@ jobs:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
+    env:
+      # Keep assertions/overflow checks and optimization levels unchanged.
+      # Avoid retaining two profiles of hundreds of debug-heavy test binaries.
+      CARGO_PROFILE_DEV_DEBUG: '0'
+      CARGO_PROFILE_TEST_DEBUG: '0'
+      CARGO_INCREMENTAL: '0'
+      CARGO_BUILD_JOBS: '2'
     defaults:
       run:
         working-directory: scripts/lc631
@@ -98,3 +105,7 @@ jobs:
         run: python -B workers/test_media_backend.py
       - name: Pinned byte regression
         run: python -B workers/test_pinned_bytes.py
+      - name: Report runner disk budget
+        if: always()
+        shell: pwsh
+        run: Get-PSDrive -PSProvider FileSystem | Select-Object Name, Used, Free
