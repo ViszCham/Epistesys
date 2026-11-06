@@ -1,5 +1,7 @@
 //! Complete bounded native fixture and hand-declared product schema expectation.
 //! Context/meaning declarations are Given; no actual-owner correspondence here.
+// Shared fixture surface: individual integration targets use different subsets.
+#![allow(dead_code)]
 use super::wire::{app, encoded, sym, Node};
 use lc631_core::{
     context::{ContextRevision, ContextScope, SourceRevision},

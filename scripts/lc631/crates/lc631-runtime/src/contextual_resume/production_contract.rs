@@ -175,6 +175,10 @@ impl<'res> ResumeAttempt<'res> {
             .map_err(CodingResumeError::Build)?;
         self.selected.ok_or(CodingResumeError::UnexpectedSelection)
     }
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "preserve the public API and separate probe, build and resource authorities"
+    )]
     pub fn publish_current(
         &mut self,
         plan: &CodingProbePlan,

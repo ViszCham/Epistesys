@@ -38,6 +38,11 @@ pub struct BuildPlan<'s, 'v> {
     pub(super) retained: ResourceClaim<'v>,
 }
 impl<'s, 'v> BuildPlan<'s, 'v> {
+    /// Planned compiler input, not evidence that a compiler executed it.
+    pub fn frame_source(&self) -> &str {
+        &self.frame_source
+    }
+
     pub fn given(
         input: BuildPlanInput<'s>,
         view: &'v ResourceReservationView<'_>,

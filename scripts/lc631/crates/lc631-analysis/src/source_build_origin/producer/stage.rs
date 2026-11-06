@@ -33,6 +33,10 @@ impl StageFailure<'_> {
     }
 }
 
+#[expect(
+    clippy::result_large_err,
+    reason = "failure must retain its original partial native/IO owners"
+)]
 pub(super) fn dispatch<'v>(
     plan: &BuildPlan<'_, 'v>,
     services: &mut BuildServices<'_, '_>,
@@ -51,33 +55,34 @@ pub(super) fn dispatch<'v>(
     } = prepared;
     let timeout = remaining(plan, deadline, view).map_err(StageFailure::before)?;
     let mut stamp = None;
-    let mut admit = || -> Result<(), BuildError> {
-        ensure_time(deadline, view)?;
-        images.check_inputs(plan, view)?;
-        if stage == BuildStage::Link {
-            images.check_output_absent(plan, view)?;
-        }
-        ensure_time(deadline, view)?;
-        let observed = check_authority(plan, services, stage, view)?;
-        ensure_time(deadline, view)?;
-        stamp = Some(observed);
-        Ok(())
+    let attempt = {
+        let mut admit = || -> Result<(), BuildError> {
+            ensure_time(deadline, view)?;
+            images.check_inputs(plan, view)?;
+            if stage == BuildStage::Link {
+                images.check_output_absent(plan, view)?;
+            }
+            ensure_time(deadline, view)?;
+            let observed = check_authority(plan, services, stage, view)?;
+            ensure_time(deadline, view)?;
+            stamp = Some(observed);
+            Ok(())
+        };
+        run_bounded_with_resources_attempt(
+            RunRequest {
+                executable: plan.input.compiler.executable.as_os_str(),
+                arguments: &arguments,
+                current_dir: plan.input.frame.cwd,
+                environment: &environment,
+                stdin: None,
+                timeout,
+                stdout_limit: plan.input.limits.max_metadata_bytes,
+                stderr_limit: plan.input.limits.max_metadata_bytes,
+            },
+            view,
+            &mut admit,
+        )
     };
-    let attempt = run_bounded_with_resources_attempt(
-        RunRequest {
-            executable: plan.input.compiler.executable.as_os_str(),
-            arguments: &arguments,
-            current_dir: plan.input.frame.cwd,
-            environment: &environment,
-            stdin: None,
-            timeout,
-            stdout_limit: plan.input.limits.max_metadata_bytes,
-            stderr_limit: plan.input.limits.max_metadata_bytes,
-        },
-        view,
-        &mut admit,
-    );
-    drop(admit);
     // This count comes from the lower actual native boundary, not Option absence.
     let observed = match attempt.effect() {
         NativeProcessEffect::NotAttempted => 0,

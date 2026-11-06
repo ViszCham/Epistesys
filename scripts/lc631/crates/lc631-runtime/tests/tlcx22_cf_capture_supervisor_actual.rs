@@ -40,7 +40,7 @@ fn r01_binary_fixture_stdout_keeps_harness_prelude_separate() {
     assert_eq!(fixture_payload, expected.as_slice());
     assert!(fixture_payload.contains(&0)); // binary fixture data, not rustc metadata
     drop(owner);
-    drop(view);
+    let _ = view;
     finish(budget);
 }
 #[test]
@@ -55,7 +55,7 @@ fn r02_actual_stdin_delivery_and_eof_are_observed_by_echo() {
     let (_, payload) = complete_fixture_payload(&out.stdout);
     assert_eq!(payload, input);
     drop(owner);
-    drop(view);
+    let _ = view;
     finish(budget);
 }
 #[test]
@@ -80,7 +80,7 @@ fn r03_stderr_flood_is_capped_even_when_prefix_contains_expected_marker() {
     assert_finished(out);
     // Captured marker bytes are partial data, never ownership evidence.
     drop(owner);
-    drop(view);
+    let _ = view;
     finish(budget);
 }
 #[test]
@@ -96,7 +96,7 @@ fn r04_stdout_flood_uses_a_cap_larger_than_the_harness_prelude() {
     assert_eq!(out.diagnostic, Some("supervisor_output_budget_exceeded"));
     assert_finished(out);
     drop(owner);
-    drop(view);
+    let _ = view;
     finish(budget);
 }
 #[test]
@@ -111,7 +111,7 @@ fn r05_clean_process_eof_can_still_contain_only_partial_diagnostic_bytes() {
     assert!(!out.stderr.ends_with(b"\n"));
     // Supervisor transport completion alone cannot authorize CF matching.
     drop(owner);
-    drop(view);
+    let _ = view;
     finish(budget);
 }
 #[test]
@@ -125,7 +125,7 @@ fn r06_ice_shaped_fixture_bytes_with_exit_one_are_not_compiler_success() {
     assert_eq!(out.stderr, fixture::ICE);
     assert!(has_fixture_entry(&out.stdout));
     drop(owner);
-    drop(view);
+    let _ = view;
     finish(budget);
 }
 #[test]
@@ -138,7 +138,7 @@ fn r07_unknown_exit_preserves_real_code_and_bytes_without_negative_success() {
     clean(out, 42);
     assert!(out.stderr.windows(b"borrow".len()).any(|x| x == b"borrow"));
     drop(owner);
-    drop(view);
+    let _ = view;
     finish(budget);
 }
 #[test]
@@ -154,7 +154,7 @@ fn r08_timeout_requires_actual_entry_tree_exit_and_io_cleanup() {
     assert_finished(out);
     assert_eq!(out.diagnostic, Some("supervisor_deadline_exceeded"));
     drop(owner);
-    drop(view);
+    let _ = view;
     finish(budget);
 }
 #[test]
@@ -172,7 +172,7 @@ fn r09_repeated_blocked_stdin_cleans_actual_writers_without_new_slots() {
         assert_finished(out);
         drop(owner);
     }
-    drop(view);
+    let _ = view;
     finish(budget);
 }
 #[test]
@@ -194,7 +194,7 @@ fn r10_real_small_rustc_source_produces_nonempty_bounded_metadata_stdout() {
         "rustc output is separate from libtest fixture frames"
     );
     drop(owner);
-    drop(view);
+    let _ = view;
     finish(budget);
 }
 #[test]
@@ -215,6 +215,6 @@ fn r11_kernel_oversized_stdin_is_rejected_before_actual_native_dispatch() {
             std::io::ErrorKind::InvalidInput
         )))
     ));
-    drop(view);
+    let _ = view;
     finish(budget);
 }

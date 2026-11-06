@@ -47,7 +47,7 @@ fn tlcx22_explain_negative_every_step_and_final_goal_are_checked() {
     let view = res.lease();
     let root = e::capture_explain(ri, &view).unwrap();
     // Last goal p is valid but step1's unused q claim chooses child0=p.
-    let unused_wrong = vec![
+    let unused_wrong = [
         base[0],
         e::Step {
             conclusion: &f.q,

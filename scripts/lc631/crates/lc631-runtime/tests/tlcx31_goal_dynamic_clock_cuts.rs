@@ -20,7 +20,25 @@ fn no_capture() {
 }
 
 #[test]
-fn d01_actual_hidden150_after_observed200_rejects_H2_and_same_owner() {
+fn fixture_name_collision_keeps_existing_owner_untouched() {
+    use tlcx31_goal_dynamic_clock_support::fresh_dir;
+    let parent = fresh_dir(
+        &std::env::temp_dir(),
+        &format!("tlcx-ci-dir-{}", std::process::id()),
+    );
+    let first = fresh_dir(&parent, "same-clock");
+    std::fs::write(first.join("owned-marker"), b"keep original").unwrap();
+    let second = fresh_dir(&parent, "same-clock");
+    assert_ne!(first, second);
+    assert_eq!(
+        std::fs::read(first.join("owned-marker")).unwrap(),
+        b"keep original"
+    );
+    assert!(!second.join("owned-marker").exists());
+}
+
+#[test]
+fn d01_actual_hidden150_after_observed200_rejects_h2_and_same_owner() {
     fixture(|h, current, view| {
         clocks::all(200);
         clocks::script(HB, &[200, 150], 150);

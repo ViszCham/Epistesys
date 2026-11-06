@@ -1,4 +1,6 @@
 //! Complete independently authored fixture product/declaration gold, not runtime projection.
+// Shared fixture surface: individual integration targets use different subsets.
+#![allow(dead_code)]
 use super::{
     atoms::CaseInput,
     wire::{app, encode, integer, symbol},

@@ -235,6 +235,10 @@ impl NativeDiagnostics {
             calls_before: Self::calls(clocks, registry),
         }
     }
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "failure diagnostic includes independent clock, registry and native marker observations"
+    )]
     fn report(
         self,
         stage: &'static str,

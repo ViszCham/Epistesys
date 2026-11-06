@@ -126,12 +126,12 @@ pub fn assert_measured(state: &RedundancyState, numerator: i64, denominator: i64
 /// Thin orchestration of actual future APIs, used only to compare budget/error
 /// outcomes without prescribing which admission stage detects exhaustion.
 /// It constructs no reports, classes, truth vectors or success statuses.
-pub fn actual_state<'i, 'v>(
+pub fn actual_state<'i>(
     input: &'i RootInput<'i>,
     limits: Limits,
     candidate: Option<&'i SemanticArtifactInput<'i>>,
     changes: &'i [MutableChangeInput<'i>],
-    view: &'v ResourceReservationView<'_>,
+    view: &ResourceReservationView<'_>,
 ) -> Result<RedundancyState, Error> {
     let root = RootRedundancyPlan::capture_closed(input, limits, view)?;
     let bound = BoundCandidateUnits::checked(&root, CandidateId(1), candidate, changes, view)?;

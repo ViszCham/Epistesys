@@ -45,7 +45,7 @@ pub fn pin(name: &str) -> Digest32 {
     let hex = raw.strip_prefix("sha256:").unwrap_or(&raw);
     assert_eq!(hex.len(), 64);
     let mut bytes = [0u8; 32];
-    for (i, part) in hex.as_bytes().chunks_exact(2).enumerate() {
+    for (i, part) in hex.as_bytes().as_chunks::<2>().0.iter().enumerate() {
         bytes[i] = u8::from_str_radix(std::str::from_utf8(part).unwrap(), 16).unwrap();
     }
     assert_ne!(bytes, [0; 32]);

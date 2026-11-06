@@ -1,5 +1,7 @@
 //! 日本語: 現testのcompiled artifact選択だけ。source意味/権限/完全build証明ではない。
 //! English: Select this test's compiled artifacts only, not semantics, authority or full-build proof.
+// Shared fixture surface: individual integration targets use different subsets.
+#![allow(dead_code)]
 #![forbid(unsafe_code)]
 pub mod diagnostics;
 pub mod fingerprint;

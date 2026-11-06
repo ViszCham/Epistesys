@@ -50,6 +50,8 @@ def batches(roots: list[tuple[str, str]], limit: int = 6000):
 
 
 def format_roots(roots, toolchain: str, check: bool, run=subprocess.run) -> int:
+    if not roots:
+        raise ValueError("refuse empty formatting execution")
     failed = False
     for edition, paths in batches(roots):
         command = ["rustup", "run", toolchain, "rustfmt", "--edition", edition]

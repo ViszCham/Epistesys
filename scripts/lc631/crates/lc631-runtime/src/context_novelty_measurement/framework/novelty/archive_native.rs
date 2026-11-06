@@ -86,6 +86,10 @@ pub(super) struct Point<'a> {
     map: &'a [f::AtomCorrespondence],
     values: Vec<Vec<bool>>,
 }
+#[expect(
+    clippy::large_enum_variant,
+    reason = "retain funded native history inline rather than allocate an unbudgeted box"
+)]
 pub(super) enum Backend<'a, 'v> {
     Point(Point<'a>),
     Chain(f::native::NativeHistory<'v>),

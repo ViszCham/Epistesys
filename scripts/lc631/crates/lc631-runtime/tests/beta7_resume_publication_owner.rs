@@ -7,16 +7,8 @@
 #![forbid(unsafe_code)]
 
 #[path = "tlcx31_coding_support/mod.rs"]
-#[allow(
-    dead_code,
-    reason = "Reuse actual native registration and fixture compilation only."
-)]
 mod coding_support;
 #[path = "tlcx32_verified_support/mod.rs"]
-#[allow(
-    dead_code,
-    reason = "Shared actual repair setup has other independent consumers."
-)]
 mod file_fixture;
 #[path = "tlcx32_fresh_support/mod.rs"]
 #[allow(

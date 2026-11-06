@@ -3,13 +3,8 @@
 #![forbid(unsafe_code)]
 
 #[path = "tlcx31_coding_support/mod.rs"]
-#[allow(dead_code, reason = "Actual native registration setup is reused.")]
 mod coding_support;
 #[path = "tlcx32_verified_support/mod.rs"]
-#[allow(
-    dead_code,
-    reason = "Actual repair setup is shared with separate targets."
-)]
 mod file_fixture;
 #[path = "tlcx32_fresh_support/mod.rs"]
 #[allow(

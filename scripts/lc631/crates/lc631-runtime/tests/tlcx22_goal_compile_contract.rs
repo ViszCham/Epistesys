@@ -1,5 +1,9 @@
 //! Central-only metadata probes with a positive API control, never E0432-as-safety.
 //! Missing goal_suite_measurement is the planned target-level API RED first.
+#[allow(
+    unused_imports,
+    reason = "compile-path existence control before invoking negative metadata probes"
+)]
 use lc631_runtime::goal_suite_measurement as _;
 use std::{
     io::Write,

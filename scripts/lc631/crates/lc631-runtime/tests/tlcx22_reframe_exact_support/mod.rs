@@ -1,4 +1,6 @@
 //! Given finite fixtures/literal gold and resource scaffolding; no local oracle.
+// Shared fixture surface: individual integration targets use different subsets.
+#![allow(dead_code)]
 pub use lc631_analysis::creativity_measurement::{
     ComponentReport, ComponentState, IndependenceStatus, InputBasis, RationalInterval,
     SemanticValidation,

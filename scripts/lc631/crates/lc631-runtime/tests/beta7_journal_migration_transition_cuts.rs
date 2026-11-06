@@ -115,7 +115,7 @@ fn binary(records: &[&[u8]]) -> Vec<u8> {
                 u64::try_from(index).unwrap() + 1,
                 JournalRecordKind::Checkpoint,
                 Digest32::from_bytes(Sha256::digest(*raw).into()),
-                *raw,
+                raw,
             )
             .unwrap();
     }

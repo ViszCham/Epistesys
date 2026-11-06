@@ -491,6 +491,7 @@ fn run_profile(profile: DiagnosticProfile) {
         profile.label
     );
     eprintln!("BETA7_DIRECT_OBSERVATION {direct:#?}");
+    eprintln!("BETA7_DIRECT_ELAPSED_MILLIS {}", direct.elapsed_millis);
     assert!(
         direct.positive(),
         "BETA7_PROCESS_SETUP: direct positive not established; not a managed behavioral RED"

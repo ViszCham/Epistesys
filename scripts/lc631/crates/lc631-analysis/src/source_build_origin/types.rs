@@ -143,6 +143,9 @@ pub struct BuildEvent<'a> {
     pub(super) children: &'a [CompilerChildWitness],
 }
 impl BuildEvent<'_> {
+    pub fn children(&self) -> &[CompilerChildWitness] {
+        self.children
+    }
     pub fn stage(&self) -> BuildStage {
         self.stage
     }
@@ -178,6 +181,13 @@ pub struct CompilerChildWitness {
     pub(super) stderr: Vec<u8>,
 }
 impl CompilerChildWitness {
+    /// Borrow retained captures; never detach them from the funded owner.
+    pub fn stdout(&self) -> &[u8] {
+        &self.stdout
+    }
+    pub fn stderr(&self) -> &[u8] {
+        &self.stderr
+    }
     pub fn stage(&self) -> BuildStage {
         self.stage
     }
@@ -225,7 +235,8 @@ pub struct OwnedSourceBuildOrigin<'p, 's, 'v> {
     pub(super) retained: ResourceClaim<'v>,
 }
 pub struct OwnedBuildFailure<'p, 's, 'v> {
-    pub(super) plan: &'p BuildPlan<'s, 'v>,
+    // Keep the failed observation tied to its plan lifetime, even without a view.
+    pub(super) _plan: &'p BuildPlan<'s, 'v>,
     pub(super) cause: BuildError,
     pub(super) observed_children: usize,
     pub(super) children: Vec<CompilerChildWitness>,

@@ -1,4 +1,6 @@
 //! Real native producers live through the consumer; no source-side report constructor.
+// Shared fixture surface: individual integration targets use different subsets.
+#![allow(dead_code)]
 use super::{
     atoms::{self, CaseInput},
     expected, models, resources, wire,

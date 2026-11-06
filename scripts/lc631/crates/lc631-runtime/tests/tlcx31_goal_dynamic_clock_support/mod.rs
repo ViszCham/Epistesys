@@ -84,17 +84,28 @@ fn create(path: &std::path::Path, bytes: &[u8]) {
     f.write_all(bytes).unwrap();
     f.sync_all().unwrap();
 }
+/// Create a fresh owned directory even when clock-derived names collide.
+/// Existing files/directories are skipped, never reused or removed.
+pub fn fresh_dir(parent: &std::path::Path, stem: &str) -> PathBuf {
+    for attempt in 0..64 {
+        let path = parent.join(format!("{stem}-{attempt}"));
+        match std::fs::create_dir(&path) {
+            Ok(()) => return path,
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => panic!("fresh fixture directory: {error}"),
+        }
+    }
+    panic!("fresh fixture directory collision budget exhausted");
+}
 fn root(role: &str, source: &str) -> PathBuf {
     let n = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_nanos();
-    let path = std::env::temp_dir().join(format!(
-        "tlcx31-goal-dynamic-{}-{role}-{n:x}",
-        std::process::id()
-    ));
-    assert!(!path.exists());
-    std::fs::create_dir(&path).unwrap();
+    let path = fresh_dir(
+        &std::env::temp_dir(),
+        &format!("tlcx31-goal-dynamic-{}-{role}-{n:x}", std::process::id()),
+    );
     std::fs::create_dir(path.join("src")).unwrap();
     create(
         &path.join("Cargo.toml"),

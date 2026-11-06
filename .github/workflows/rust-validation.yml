@@ -65,12 +65,12 @@ jobs:
         run: pwsh -NoProfile -File ../research/Test-TlcxCachePrevention.ps1
       - name: Check
         run: cargo +1.98.0 check --workspace --locked
-      - name: Portable tests
-        run: cargo +1.98.0 test --workspace --no-default-features --locked
-      - name: Default feature tests
-        run: cargo +1.98.0 test --workspace --locked
       - name: Strict clippy
         run: cargo +1.98.0 clippy --workspace --all-targets --locked -- -D warnings
+      - name: Portable tests
+        run: cargo +1.98.0 test --workspace --no-default-features --locked --no-fail-fast
+      - name: Default feature tests
+        run: cargo +1.98.0 test --workspace --locked --no-fail-fast
       - name: Release build
         run: cargo +1.98.0 build --workspace --release --locked
       - name: Python worker locks

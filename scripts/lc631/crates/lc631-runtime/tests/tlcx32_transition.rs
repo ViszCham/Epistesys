@@ -21,7 +21,12 @@ fn independent_wire() -> Vec<u8> {
     let mut bytes = vec![0; TRANSITION_BYTES];
     bytes[..8].copy_from_slice(b"ETRANS01");
     bytes[8..10].copy_from_slice(&1_u16.to_le_bytes());
-    for (index, pin) in bytes[16..16 + 14 * 32].chunks_exact_mut(32).enumerate() {
+    for (index, pin) in bytes[16..16 + 14 * 32]
+        .as_chunks_mut::<32>()
+        .0
+        .iter_mut()
+        .enumerate()
+    {
         pin.fill(index as u8 + 1);
     }
     bytes[16 + 14 * 32..].copy_from_slice(&100_u64.to_le_bytes());
@@ -190,7 +195,12 @@ fn signing_fixture() -> SigningFixture {
         parsed(&application.attestation.as_ref().unwrap().receipt_digest()),
     ];
     let mut bytes = independent_wire();
-    for (slot, pin) in bytes[16..16 + 14 * 32].chunks_exact_mut(32).zip(values) {
+    for (slot, pin) in bytes[16..16 + 14 * 32]
+        .as_chunks_mut::<32>()
+        .0
+        .iter_mut()
+        .zip(values)
+    {
         slot.copy_from_slice(pin.as_bytes());
     }
     let checkpoint = UntrustedTransitionCheckpoint::decode(&bytes).unwrap();

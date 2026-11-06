@@ -3,7 +3,10 @@ use super::*;
 use lc631_process_supervisor::{ResourceError, ResourceReservationView, ResourceRunOutcome};
 
 mod attempt;
-pub use attempt::{run_bounded_tool_attempt, NativeProcessEffect, ResourceToolAttempt};
+pub use attempt::{
+    run_bounded_tool_attempt, run_prepared_tool_attempt, FrameDispatchBinding,
+    FrameDispatchPurpose, NativeProcessEffect, PreparedToolFrame, ResourceToolAttempt,
+};
 
 /// Captured buffers are never cloned into the legacy DTO. Their digest/flags
 /// are reported unchanged; raw access stays borrowed from the live claim.

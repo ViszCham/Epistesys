@@ -181,10 +181,10 @@ fn tlcx22_sbo_current_read_rechecks_source_artifact_and_live_authority_not_cache
                 2 => f.cancel.cancel(),
                 _ => f.authority_cut.set(Cut::RejectAfterLink),
             }
-            let err = origin
-                .with_current(&plan, services, view, |_| ())
-                .err()
-                .expect("current cut");
+            let err = match origin.with_current(&plan, services, view, |_| ()) {
+                Err(error) => error,
+                Ok(_) => panic!("current cut"),
+            };
             match cut {
                 0 => assert!(matches!(err, b::BuildError::SourceDrift)),
                 1 => assert!(matches!(err, b::BuildError::ArtifactDrift)),

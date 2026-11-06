@@ -2,6 +2,10 @@
 //! This fixture does not validate source-to-binary correspondence or coding completion.
 #![allow(dead_code)]
 #[path = "../tlcx31_coding_support/mod.rs"]
+#[allow(
+    clippy::duplicate_mod,
+    reason = "separate integration fixture namespaces intentionally reuse native setup"
+)]
 pub mod native;
 #[path = "../../../lc631-analysis/tests/tlcx31_file_repair_fixture/mod.rs"]
 mod package;

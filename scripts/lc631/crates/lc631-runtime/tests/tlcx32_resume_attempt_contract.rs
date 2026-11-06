@@ -1,16 +1,8 @@
 //! 負例先行の未来API契約。中央のmissing-API RED待ちで、実行成功ではない。
 //! Future producer-owned attempt contract; central missing-API RED is pending.
 #[path = "tlcx31_coding_support/mod.rs"]
-#[allow(
-    dead_code,
-    reason = "Native registration fixture reused; live helpers have separate targets."
-)]
 mod coding_support;
 #[path = "tlcx32_verified_support/mod.rs"]
-#[allow(
-    dead_code,
-    reason = "Actual repair setup reused; other helpers have separate targets."
-)]
 mod file_fixture;
 #[path = "tlcx32_fresh_support/mod.rs"]
 #[allow(
@@ -338,7 +330,7 @@ fn tlcx32_configured_same_sdk_entry_observes_gain_then_fresh_publication_without
                 // Publication consumes no third child, and a second publication cannot cache the winner.
                 let calls = probe.calls.len();
                 let captures = build.calls;
-                drop(port);
+                let _ = port;
                 // Recreating a port must not recreate command-wide admitted work.
                 let mut reader = file_fixture::Inputs { run };
                 let mut new_port =

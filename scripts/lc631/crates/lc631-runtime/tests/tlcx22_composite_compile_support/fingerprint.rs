@@ -217,7 +217,7 @@ pub fn hex_fingerprint(bytes: &[u8]) -> Result<u64, Error> {
         return Err(Error::UnsupportedFormat);
     }
     let mut value = [0; 8];
-    for (index, pair) in bytes.chunks_exact(2).enumerate() {
+    for (index, pair) in bytes.as_chunks::<2>().0.iter().enumerate() {
         let digit = |c: u8| if c <= b'9' { c - b'0' } else { c - b'a' + 10 };
         value[index] = (digit(pair[0]) << 4) | digit(pair[1]);
     }

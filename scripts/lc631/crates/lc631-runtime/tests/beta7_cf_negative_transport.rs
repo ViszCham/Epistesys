@@ -178,7 +178,7 @@ fn positive_control_keeps_actual_nonzero_binary_metadata() {
     assert_eq!(calls.get(), 1);
     assert_eq!(observed, (raw.stdout.len(), raw.stderr.len()));
     drop(attempt);
-    drop(view);
+    let _ = view;
     finish(budget);
 }
 
@@ -232,8 +232,8 @@ fn complete_real_negative_transport_keeps_e0599_and_exact_span() {
     assert_eq!(rejected_calls.get(), 0);
     assert_eq!(calls.get(), 1);
     drop(attempt);
-    drop(foreign_view);
+    let _ = foreign_view;
     foreign.release_confirmed().unwrap();
-    drop(view);
+    let _ = view;
     finish(budget);
 }

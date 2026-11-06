@@ -384,7 +384,7 @@ fn native_header(header: &[u8], metadata: &Metadata) -> Result<(), BuildError> {
         {
             return Err(BuildError::NotExecutable);
         }
-        return Ok(());
+        Ok(())
     }
     #[cfg(target_os = "linux")]
     {
@@ -417,7 +417,7 @@ fn native_header(header: &[u8], metadata: &Metadata) -> Result<(), BuildError> {
         if !matches!(kind, 2 | 3) || u16::from_le_bytes([header[18], header[19]]) != machine {
             return Err(BuildError::NotExecutable);
         }
-        return Ok(());
+        Ok(())
     }
     #[cfg(not(any(windows, target_os = "linux")))]
     {

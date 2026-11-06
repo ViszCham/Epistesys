@@ -219,6 +219,10 @@ pub fn observe_current_attempt<'res>(
     }
     a
 }
+#[expect(
+    clippy::too_many_arguments,
+    reason = "explicit independent authority, time and resource capabilities at one admission boundary"
+)]
 pub(super) fn sample_authority(
     plan: &CodingProbePlan,
     input: &ProbeAttemptInput<'_>,

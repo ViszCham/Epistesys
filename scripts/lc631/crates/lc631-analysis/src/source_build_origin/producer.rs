@@ -17,13 +17,17 @@ use lc631_substrate::resource::{
 };
 use std::time::{Duration, Instant};
 
+#[expect(
+    clippy::result_large_err,
+    reason = "return retained native/IO/resource owners without unbudgeted allocation"
+)]
 pub fn observe<'p, 's, 'v>(
     plan: &'p BuildPlan<'s, 'v>,
     services: &mut BuildServices<'_, '_>,
     view: &'v ResourceReservationView<'_>,
 ) -> Result<OwnedSourceBuildOrigin<'p, 's, 'v>, OwnedBuildFailure<'p, 's, 'v>> {
     let mut failure = OwnedBuildFailure {
-        plan,
+        _plan: plan,
         cause: BuildError::BuildFailed,
         observed_children: 0,
         children: Vec::new(),

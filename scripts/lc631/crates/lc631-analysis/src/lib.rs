@@ -184,7 +184,8 @@ pub use pipeline::{
 pub(crate) use process::not_started_request;
 pub use process::{
     run_bounded_tool, run_bounded_tool_attempt, run_bounded_tool_with_resources,
-    BoundedToolRequest, BoundedToolResult, NativeProcessEffect, ResourceToolAttempt,
+    run_prepared_tool_attempt, BoundedToolRequest, BoundedToolResult, FrameDispatchBinding,
+    FrameDispatchPurpose, NativeProcessEffect, PreparedToolFrame, ResourceToolAttempt,
     ResourceToolResult, ToolProcessRunner, ToolRunState,
 };
 pub use release::{

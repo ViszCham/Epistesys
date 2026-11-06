@@ -7,6 +7,10 @@ from rust_format import batches, format_roots, target_roots
 
 
 class FormatTests(unittest.TestCase):
+    def test_empty_execution_is_not_success(self):
+        with self.assertRaises(ValueError):
+            format_roots([], "1.98.0", True)
+
     def test_batched_selection_loses_no_targets(self):
         roots = [("2021", "x" * 151 + str(i)) for i in range(600)]
         selected = [path for _, group in batches(roots) for path in group]

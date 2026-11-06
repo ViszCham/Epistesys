@@ -15,10 +15,6 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 #[path = "../tlcx31_coding_support/mod.rs"]
-#[allow(
-    dead_code,
-    reason = "Only real native artifact compilation and file hashing are reused; no legacy observation owner is reconstructed."
-)]
 mod artifacts;
 
 pub const SOURCE: &str = "Please edit the source and test the package.";

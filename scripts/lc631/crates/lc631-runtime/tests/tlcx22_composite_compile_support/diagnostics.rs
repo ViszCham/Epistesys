@@ -12,9 +12,9 @@ pub enum MarkerState {
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Reason {
-    ForeignMarker,
-    MalformedMarker,
-    MissingMarker,
+    Foreign,
+    Malformed,
+    Missing,
 }
 pub fn classify_marker(raw: &[u8], expected: u64) -> Result<MarkerState, Error> {
     match fingerprint::hex_fingerprint(raw) {
@@ -64,9 +64,9 @@ impl Rejections {
         }
         self.total = self.total.checked_add(1).ok_or(Error::Limit)?;
         let count = match reason {
-            Reason::ForeignMarker => &mut self.foreign,
-            Reason::MalformedMarker => &mut self.malformed,
-            Reason::MissingMarker => &mut self.missing,
+            Reason::Foreign => &mut self.foreign,
+            Reason::Malformed => &mut self.malformed,
+            Reason::Missing => &mut self.missing,
         };
         *count = count.checked_add(1).ok_or(Error::Limit)?;
         if self.samples.len() < 16 {

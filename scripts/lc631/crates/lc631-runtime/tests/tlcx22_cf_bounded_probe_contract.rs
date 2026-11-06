@@ -43,7 +43,7 @@ fn c01_zero_metadata_stdout_cap_rejects_before_native_start() {
     ));
     assert!(attempt.raw().is_none());
     drop(attempt);
-    drop(view);
+    let _ = view;
     finish(budget);
 }
 #[test]
@@ -64,7 +64,7 @@ fn c02_cf_source_input_over_64k_rejects_before_native_start() {
         Some(probe::Failure::InputLimit)
     ));
     drop(attempt);
-    drop(view);
+    let _ = view;
     finish(budget);
 }
 #[test]
@@ -92,7 +92,7 @@ fn c03_stderr_flood_partial_marker_never_reaches_complete_consumer() {
         Err(probe::Failure::OutputLimit(probe::Stream::Stderr))
     ));
     drop(attempt);
-    drop(view);
+    let _ = view;
     finish(budget);
 }
 #[test]
@@ -111,7 +111,7 @@ fn c04_eof_without_full_json_line_is_not_complete_diagnostic() {
         Err(probe::Failure::PartialDiagnostic)
     ));
     drop(attempt);
-    drop(view);
+    let _ = view;
     finish(budget);
 }
 #[test]
@@ -129,7 +129,7 @@ fn c05_ice_level_even_with_exit_one_is_not_ownership_diagnostic() {
         Err(probe::Failure::Ice)
     ));
     drop(attempt);
-    drop(view);
+    let _ = view;
     finish(budget);
 }
 #[test]
@@ -144,7 +144,7 @@ fn c06_unknown_exit_does_not_pass_even_if_marker_is_present() {
         Err(probe::Failure::UnexpectedExit(Some(42)))
     ));
     drop(attempt);
-    drop(view);
+    let _ = view;
     finish(budget);
 }
 #[test]
@@ -162,7 +162,7 @@ fn c07_real_timeout_and_cleanup_preserve_failure_not_success() {
         Err(probe::Failure::TimedOut)
     ));
     drop(attempt);
-    drop(view);
+    let _ = view;
     finish(budget);
 }
 #[test]
@@ -182,6 +182,6 @@ fn c08_actual_small_compiler_metadata_positive_keeps_nonzero_stdout() {
         })
         .unwrap();
     drop(attempt);
-    drop(view);
+    let _ = view;
     finish(budget);
 }

@@ -165,7 +165,7 @@ fn tlcx31_actual_native_pair_is_consumed_and_wrong_test_authority_prevents_spawn
     assert_eq!(gb.gain_quarters(), 3);
     assert_eq!(select_current(&plan, &[&ga, &gb], &view).unwrap(), Some(1));
     assert_eq!(select_current(&plan, &[], &view).unwrap(), None);
-    assert!(std::fs::read(&base).unwrap().len() > 0);
+    assert!(!std::fs::read(&base).unwrap().is_empty());
     // No cleanup here: central owns bounded failure retention / known-owned cleanup.
 }
 fn q(kind: ResourceKind, n: u64) -> ResourceRequest {

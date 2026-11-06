@@ -1,16 +1,8 @@
 //! 実SDK fixtureのprocess境界。製品CLI／外部issuer／G08完成ではない。
 //! Actual SDK fixture process boundary; not product CLI/external issuer/full G08.
 #[path = "tlcx31_coding_support/mod.rs"]
-#[allow(
-    dead_code,
-    reason = "Shared native fixture contains entry points for separate live-repair and resume targets."
-)]
 mod coding_support;
 #[path = "tlcx32_verified_support/mod.rs"]
-#[allow(
-    dead_code,
-    reason = "The SDK fixture reuses actual file repair setup; unrelated legacy validation helpers have separate targets."
-)]
 mod file_fixture;
 #[path = "tlcx32_fresh_support/mod.rs"]
 mod fresh_support;

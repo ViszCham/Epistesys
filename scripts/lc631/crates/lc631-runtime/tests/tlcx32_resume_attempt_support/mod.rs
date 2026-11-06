@@ -333,7 +333,7 @@ fn input<'a>(
         lease: invocation.lease,
         tool_receipt: invocation.tool_receipt,
         tool_verifier: invocation.tool_verifier,
-        clock: clock,
+        clock,
         timeout_ms: 5000,
         origin: ProbeExpectedOrigin {
             principal,
