@@ -2,7 +2,7 @@
 
 ## 日本語
 
-開発でEpistesysを使いたい方は、[コーディング支援の概要](../README.md#coding-assistance-ja)から[実行ガイド](execution-guide.md)へお進みください。要求を確認する方法、テスト結果の読み方、修復や再開に必要な条件を順にたどれます。
+開発でEpistesysを使いたい方は、[会話とコーディングの支援](coding-and-conversation-assistance.md)から[実行ガイド](execution-guide.md)へお進みください。相談で条件を整理し、検証結果を読み、必要に応じて修復・再開する流れを確認できます。
 
 現在の版はBeta-7.1（`7.1.0-beta.1`）です。[今回の検証記録](epistesys-7.1.0-beta.1-release-notes-2026-11-06.md)に、検証済みの範囲と未完了点をまとめています。Alpha.3の記録は以前の版の履歴です。設計の評価案や前身のベンチマークは、日常の利用手順とは分けて下に掲載しています。
 
@@ -12,6 +12,7 @@ TLCXの数式・適用条件は[測定契約](tlcx-tl-screative-measurement-cont
 
 | 目的 | 読む順序 | 確認できる内容 |
 | --- | --- | --- |
+| 会話・コーディング支援を知る | [使いどころと仕組み](coding-and-conversation-assistance.md) → [実行ガイド](execution-guide.md) | 条件整理、要件別の確認、候補比較、変更後の再検証 |
 | Coding支援を利用・統合する | [Coding概要](../README.md#coding-assistance-ja) → [実行ガイド](execution-guide.md) → [DGCL実行契約](dgcl-operating-profile-and-closure.md) | 明示選択、要求追跡、検証、候補適用、再開、判定範囲 |
 | sourceを実行・検査する | [実行ガイド](execution-guide.md) → [DGCL実行契約](dgcl-operating-profile-and-closure.md) | 診断、権限・tool条件、修復、再開、適用範囲 |
 | 全体の構造を把握する | [README](../README.md) → [アーキテクチャ](system-architecture.md) | 対象とする失敗、用語、データフロー、信頼境界 |
@@ -83,7 +84,7 @@ Coding支援の説明と実装範囲を照合した今回の所見・修正・�
 
 ## English
 
-To use Epistesys in development, start with [Coding assistance](../README.md#coding-assistance-en), then follow the [execution guide](execution-guide.md). These pages cover how to inspect a requirement, interpret a test result, and determine what is needed for repair or resume.
+To use Epistesys in development, start with [conversation and coding assistance](coding-and-conversation-assistance.md), then follow the [execution guide](execution-guide.md). These pages cover clarifying constraints, reading validation results, and proceeding to repair/resume when needed.
 
 The current version is Beta-7.1 (`7.1.0-beta.1`). Its [verification record](epistesys-7.1.0-beta.1-release-notes-2026-11-06.md) identifies what has been checked and what is still open. Alpha.3 records describe an earlier version. Evaluation proposals and predecessor benchmarks appear below, separately from instructions for everyday use.
 
@@ -93,6 +94,7 @@ The [measurement contract](tlcx-tl-screative-measurement-contract-v1-2026-10-29.
 
 | Purpose | Reading order | Information |
 | --- | --- | --- |
+| Explore conversation/coding assistance | [Use cases and mechanisms](coding-and-conversation-assistance.md) → [Execution guide](execution-guide.md) | Constraints, per-requirement checks, candidate comparison and revalidation |
 | Use/integrate Coding assistance | [Coding overview](../README.md#coding-assistance-en) → [Execution guide](execution-guide.md) → [DGCL contract](dgcl-operating-profile-and-closure.md) | Explicit selection, requirement traceability, validation, candidate application, resume, decision scope |
 | Execute/inspect source | [Execution guide](execution-guide.md) → [DGCL contract](dgcl-operating-profile-and-closure.md) | Diagnostics, authority/tool conditions, repair, resume, scope |
 | Understand the overall architecture | [README](../README.md) → [Architecture](system-architecture.md) | Failure model, terminology, dataflow, trust boundaries |

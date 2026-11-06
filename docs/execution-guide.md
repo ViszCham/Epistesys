@@ -8,6 +8,8 @@
 
 ### 診断
 
+[会話とコーディングの支援](coding-and-conversation-assistance.md)に、相談の進め方と具体例をまとめています。通常のDGCL診断は候補と検証計画を作り、権限付き検証・修復・再開は別の操作として扱います。
+
 repository rootで実行する例です。JSONの解析状態・source roundtrip・未解決事項を確認し、成功flagだけで実行や内容の正しさを判断しません。
 
 ```powershell
@@ -81,6 +83,8 @@ schema不適合、source/config drift、stale/expired evidence、未対応backen
 Start with a diagnostic to inspect the original requirements and outstanding checks. Prepare authority, the target revision, and a validation plan before attempting a repair that changes a real file. Distribution binaries, model weights, receipts, and private keys are not provisioned automatically. See the [Beta-7.1 record](epistesys-7.1.0-beta.1-release-notes-2026-11-06.md) for current scope, the [plugin contract](plugin-host-integration.md) for minimal invocation, and the [DGCL execution contract](dgcl-operating-profile-and-closure.md) for CLI/SDK preconditions.
 
 ### Diagnostics
+
+See [conversation and coding assistance](coding-and-conversation-assistance.md) for discussion patterns and examples. Ordinary DGCL diagnostics produce candidates and a validation plan; authorized validation, repair and resume are separate operations.
 
 Examples run from repository root. Inspect JSON parse states/source roundtrip/residuals rather than inferring execution or correctness from a success flag alone.
 
