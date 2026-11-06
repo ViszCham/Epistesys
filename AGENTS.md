@@ -2,21 +2,22 @@
 
 ## 日本語
 
-Epistesysは、ソフトウェアの要求追跡・検証・修復を支援する開発ツールです。選択したv6.3.1のソースから、当初は非公開の独立したGit履歴として開始しました。現在のsource identityはBeta 6.9（`6.9.0-beta.1`）で、未完成のTLCX実装を保存した中間スナップショットです。`docs/migration-contract.md`の由来・除外契約を保持します。sourceのversion変更を、既存hostのplugin更新や完成判定とは扱わないでください。
+Epistesys Beta-7.0（`7.0.0-beta.1`）は、要求追跡・検証・修復を支援する開発ツールです。[移行契約](docs/migration-contract.md)と[現在の検証範囲](docs/epistesys-7.0.0-beta.1-release-notes-2026-11-06.md)を保持してください。
 
-除外した継承元固有情報、個人状態、credentials、cache、receipt root、replay ledger、host絶対pathを再導入しません。Unavailable/Hold/Clarify/fallback/未観測は証拠境界であり成功ではありません。日本語の説明を前半、同内容の英語を後半に置きます。Rust source/schema/fixture/command IDの互換名は保持できます。この保存版から、後続のBeta-7.0の完成を宣言しないでください。
+- coding・test・reviewにはcoding facade、説明・設計にはconversation facadeを一つだけ使います。利用者の選択とhost設定を優先し、別lineとの二重起動はしません。
+- 元のsource、Program IR、EpiMapLoss、candidate、evidence、authorityを区別し、Unavailable・Hold・Clarify・未観測を成功に変えません。診断は権限を作らず、許可された作業を禁止するものでもありません。
+- 通常起動は同梱binaryだけを使い、暗黙buildやturnごとのbuild cacheを作りません。具体的な起動・再利用条件は[plugin接続契約](docs/plugin-host-integration.md)にまとめています。
+- 個人設定、鍵、model、receipt root、replay、cache、host絶対pathを公開sourceへ持ち込みません。ユーザー差分と唯一の証跡を保持します。
+- 日本語の説明を前半、同内容の英語を後半に置きます。既存のRust・schema・command互換IDは保ちます。
+- source version、Git merge、plugin install、有効化、実hostの読み込みは別の状態です。観測したOS・feature・入力の範囲だけを報告してください。
 
 ## English
 
-Epistesys is a development tool for tracing software requirements, validating changes, and supporting repair. It began with an independent Git history, initially private, based on a selected v6.3.1 source snapshot.
-Use the Epistesys identity and preserve the clone contract in `docs/migration-contract.md`.
+Epistesys Beta-7.0 (`7.0.0-beta.1`) is a development tool for requirement traceability, validation and repair. Preserve the [migration contract](docs/migration-contract.md) and [current verification scope](docs/epistesys-7.0.0-beta.1-release-notes-2026-11-06.md).
 
-Do not reintroduce excluded upstream-specific material, personal state, credentials, caches,
-receipt roots, replay ledgers, or absolute host paths. Treat inherited Unavailable, Hold,
-Clarify, fallback, and unobserved states as evidence boundaries rather than successful claims.
-
-Japanese explanatory prose precedes equivalent English prose. Rust source, schemas, fixtures,
-and command identifiers may retain their compatibility names while the product identity is
-Beta 6.9 (`6.9.0-beta.1`), an intermediate checkpoint of unfinished TLCX work.
-Do not treat the source-version change as an existing-host plugin update or a completion decision,
-and do not claim that the later Beta-7.0 work is complete from this checkpoint.
+- Use exactly one facade: coding for code/tests/review, conversation for explanation/design. Respect user selection and host configuration; do not double-run another line.
+- Separate original source, Program IR, EpiMapLoss, candidates, evidence and authority. Keep Unavailable, Hold, Clarify and unobserved states. Diagnostics neither grant permission nor prohibit authorized work.
+- Normal launches use the packaged binary only, without implicit builds or per-turn build caches. See the [plugin integration contract](docs/plugin-host-integration.md) for invocation and reuse conditions.
+- Exclude personal settings, keys, models, receipt roots, replay state, caches and absolute host paths from public source. Preserve user differences and unique evidence.
+- Put Japanese explanatory prose before equivalent English. Retain existing Rust, schema and command compatibility IDs.
+- Source versions, Git merges, plugin installation, enablement and actual host pickup are separate states. Report only the observed OS, feature and input scope.

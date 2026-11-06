@@ -163,7 +163,7 @@ pub(in crate::contextual_repair) fn produce<'res>(
         correct,
         checked_epoch: epoch,
         expires_epoch: expires,
-        clock: input.clock,
+        clock: ObservationClock::Legacy(input.clock),
         observed_epoch: clock.clone(),
         artifact,
         build_authority: None,

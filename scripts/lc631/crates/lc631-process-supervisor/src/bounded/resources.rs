@@ -1,6 +1,8 @@
 //! Common-root child admission. Resource claims are not execution Authority.
 use super::required_ram_bytes;
+mod attempt;
 use super::{run_controlled, Observers, RunFailure, RunOutcome, RunRequest};
+pub use attempt::{run_bounded_with_resources_attempt, NativeProcessEffect, ResourceRunAttempt};
 use lc631_substrate::resource::{
     ResourceAmount, ResourceClaim, ResourceError, ResourceKind, ResourceRequest,
     ResourceReservationView,

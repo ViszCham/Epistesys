@@ -97,6 +97,9 @@ pub struct ResumeAttempt<'res> {
     baseline_gain: Option<OwnedCodingProbeGain<'res>>,
     gain: Option<OwnedCodingProbeGain<'res>>,
     captures: Vec<SnapshotCaptureAttempt<'res>>,
+    // Snapshot remaining admission at creation. Caller budget/port replacement
+    // cannot replenish this attempt's nonrefundable native or capture slots.
+    allowance: CodingResumeCallBudget,
     expected: Option<ExpectedCurrentBuild>,
     selected: Option<bool>,
     stage: CodingResumeStage,
@@ -183,8 +186,9 @@ impl<'res> ResumeAttempt<'res> {
         view: &'res ResourceReservationView<'_>,
     ) -> Result<bool, CodingResumeError> {
         let result = (|| {
-            // The command-wide object survives port recreation. Charge the
-            // publication slot before ANY provider or IO, even on rejection.
+            // Debit the retained owner before the caller ceiling, any provider
+            // or IO, and any stored failure. Rejected calls keep their debit.
+            self.allowance.capture()?;
             budget.capture()?;
             if let Some(error) = &self.diagnostic {
                 return Err(error.clone());
@@ -219,7 +223,10 @@ impl<'res> ResumeAttempt<'res> {
             Ok(_) => self.stage = CodingResumeStage::Published,
             Err(error) => {
                 self.stage = CodingResumeStage::Hold;
-                self.diagnostic = Some(error.clone());
+                // An exhausted retry must not erase the original late failure.
+                if self.diagnostic.is_none() {
+                    self.diagnostic = Some(error.clone());
+                }
             }
         }
         result
@@ -240,6 +247,12 @@ pub fn resume_coding_attempt<'res>(
         baseline_gain: None,
         gain: None,
         captures: Vec::new(),
+        allowance: CodingResumeCallBudget {
+            native: budget.native - budget.used_native,
+            captures: budget.captures - budget.used_captures,
+            used_native: 0,
+            used_captures: 0,
+        },
         expected: None,
         selected: None,
         stage: CodingResumeStage::Hold,
@@ -281,12 +294,14 @@ fn prepare<'res>(
     }
     let expected = ExpectedCurrentBuild::from_verified_history(&input.history, port)
         .map_err(CodingResumeError::Build)?;
+    a.allowance.capture()?;
     budget.capture()?;
     a.captures.push(port.capture_current(build, view));
     expected
         .check_attempt(&a.captures[0], view)
         .map_err(CodingResumeError::Build)?;
     a.expected = Some(expected);
+    a.allowance.native()?;
     budget.native()?;
     a.baseline = Some(observe_current_attempt(
         input.plan,
@@ -299,6 +314,7 @@ fn prepare<'res>(
         .as_ref()
         .ok_or(CodingResumeError::NeedsEvidence)?
         .current()?;
+    a.allowance.native()?;
     budget.native()?;
     a.current = Some(observe_current_attempt(
         input.plan,

@@ -4,10 +4,12 @@ pub const PROGRAM_ANALYSIS_SCHEMA: &str = "lc631-program-analysis.v1";
 
 pub mod bounded_input;
 pub mod breakcost_measurement;
+pub mod coding_resume_wire;
 pub mod context_lowering;
 pub mod creative_candidates;
 pub mod creativity_measurement;
 pub mod declared_build_capture;
+pub mod source_build_origin;
 pub mod logical_lowering;
 pub mod reconstruction_loss;
 pub mod solver_coding_bridge;
@@ -181,7 +183,8 @@ pub use pipeline::{
 };
 pub(crate) use process::not_started_request;
 pub use process::{
-    run_bounded_tool, run_bounded_tool_with_resources, BoundedToolRequest, BoundedToolResult,
+    run_bounded_tool, run_bounded_tool_attempt, run_bounded_tool_with_resources,
+    BoundedToolRequest, BoundedToolResult, NativeProcessEffect, ResourceToolAttempt,
     ResourceToolResult, ToolProcessRunner, ToolRunState,
 };
 pub use release::{

@@ -1,5 +1,5 @@
-//! 日本語: 実有限framework署名とpositive構築archiveのP2。権限を作らない。
-//! English: Actual closed signature/archive P2,not P3,source truth or authority.
+//! 日本語: P2の有限署名・構築履歴と、P3の方向付き意味比較を扱う。
+//! English: Finite signature and archive measurements with directional semantic comparisons.
 //! Existing root-local work is shared; different roots still lack run-global quota.
 #![forbid(unsafe_code)]
 mod admission;
@@ -11,6 +11,7 @@ mod current;
 mod identity;
 mod measure;
 mod plan;
+pub mod semantic;
 mod signature;
 mod types;
 use super as f;

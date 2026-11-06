@@ -12,7 +12,7 @@ pub enum Case {
     WrongPathEndpoint, HardErase, AuthoritySwap, CancelAfterCallback,
     ExpireBeforeCurrent, DuplicateProbe, ZeroWeight, LeadingZeroDeclaration,
     OmittedPayloadMacro, ReverseProbeArrival, DetachedInterval, CopiedReport,
-    CompareActualRows,
+    CompareActualRows, ContextScopeSwap, UnregisteredFrameRule,
 }
 pub fn scene(case: Case) -> Result<Observation, f::Error> {
     let baseline_is_macro = matches!(case, Case::RenameOnly | Case::SameFrameAnswerRepair);
@@ -41,7 +41,8 @@ pub fn scene(case: Case) -> Result<Observation, f::Error> {
     let reservation = run.reserve(&[resource(ResourceKind::Ram, 8*1024*1024)]).unwrap();
     let view = reservation.lease();
     let profiles = [f::FrameProfile::DirectEdgeV1, f::FrameProfile::CheckedPathMacroV1];
-    let family = f::FrameFamily::register_exact(&base, &profiles,
+    let registered_profiles = if case == Case::UnregisteredFrameRule { &profiles[..1] } else { &profiles[..] };
+    let family = f::FrameFamily::register_exact(&base, registered_profiles,
         f::OracleId::ExpandOneOuterStepToBasePathV1, &view)?;
     // Both states are actual complete basis owners. The second is a foreign
     // owner despite equal payloads; it must not substitute for the expected one.
@@ -106,7 +107,10 @@ pub fn scene(case: Case) -> Result<Observation, f::Error> {
     let delta_statement = if case==Case::WrongDeltaDeclaration {DIRECT_CANDIDATE} else {candidate_declaration};
     let edits = if case==Case::HardErase {vec![PremiseEdit::Retract {id:d(11)}]}
         else {vec![PremiseEdit::Replace {id:d(10),statement:Arc::from(delta_statement),basis:PremiseBasis::Proposed}]};
-    let delta = ContextDelta::proposed(parent.revision(), scope,
+    let candidate_scope = if case == Case::ContextScopeSwap {
+        ContextScope::declared(d(1), d(99), d(3), d(4))
+    } else { scope };
+    let delta = ContextDelta::proposed(parent.revision(), candidate_scope,
         if case==Case::AuthoritySwap {AuthorityRevision(8)} else {AuthorityRevision(7)},
         ContextApplicability::Unconditional, edits);
     let zero_delta = ContextDelta::proposed(parent.revision(), scope, AuthorityRevision(7),
@@ -190,6 +194,7 @@ pub fn scene(case: Case) -> Result<Observation, f::Error> {
             candidate_rules:trace.map(|t|(t.parse_rule(),t.lower_rule(),t.eval_rule())),
             candidate_path:current.used_base_path(f::ProbeId(1)).map(|p|p.to_vec()),
             candidate_map_work:candidate.mapping_work_spent(),semantic_frame_changed:current.semantic_frame_changed(),
+            same_oracle_and_budget:current.same_oracle_and_budget(),
             root_before:current.root_reachability_before(),root_after:current.root_reachability_after(),
             denominator:plan.denominator(),has_gaps:current.has_gaps(),
             causes:current.causes().iter().map(|c|(c.stage(),c.cause())).collect(),

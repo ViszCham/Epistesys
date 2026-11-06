@@ -5,6 +5,8 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+mod live_deadline;
+pub use live_deadline::{DeadlineNarrowing, LiveDeadline};
 pub const RESOURCE_KINDS: usize = 6;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -235,6 +237,7 @@ impl ResourceLeaseIssuer {
         Ok(ResourceLease {
             owner_id: self.owner_id,
             reservation_id,
+            live_deadline: Arc::new(LiveDeadline::new(report.deadline)),
             report,
             usage: Mutex::new(LeaseUsage {
                 active: true,
@@ -256,6 +259,7 @@ pub struct ResourceLease {
     owner_id: NonZeroU64,
     reservation_id: u64,
     report: ReportedResourceLease,
+    live_deadline: Arc<LiveDeadline>,
     usage: Mutex<LeaseUsage>,
 }
 impl ResourceLease {
@@ -306,7 +310,7 @@ impl ResourceReservationView<'_> {
     }
     pub fn check(&self) -> Result<(), ResourceError> {
         self.lease.report.cancellation.check()?;
-        self.lease.report.deadline.check()?;
+        self.lease.live_deadline.check()?;
         let state = self
             .lease
             .usage
@@ -338,7 +342,7 @@ impl ResourceReservationView<'_> {
     }
     pub fn remaining(&self) -> Result<Duration, ResourceError> {
         self.check()?;
-        self.lease.report.deadline.remaining()
+        self.lease.live_deadline.remaining()
     }
 
     pub fn claim_resources(
@@ -383,7 +387,7 @@ impl ResourceReservationView<'_> {
             return Err(ResourceError::CleanupUnverified);
         }
         self.lease.report.cancellation.check()?;
-        self.lease.report.deadline.check()?;
+        self.lease.live_deadline.check()?;
         let mut next = state.live;
         for resource in ResourceKind::ALL {
             let index = resource.index();

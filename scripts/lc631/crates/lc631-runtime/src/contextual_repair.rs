@@ -3,8 +3,10 @@
 #![forbid(unsafe_code)]
 
 /// Actual finite probe execution requires separate fresh Test authority.
+pub mod attempt;
 pub mod execution;
 pub mod measurement;
+mod probe_clock;
 pub mod snapshot_gate;
 
 use lc631_analysis::{repair_request_authorization_scope, DgclRepairRequest};

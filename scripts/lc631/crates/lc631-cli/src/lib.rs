@@ -2,6 +2,7 @@
 
 pub mod binary_checkpoint_resume;
 mod build_profile;
+mod coding_commands;
 pub mod bundle_inspect;
 pub mod io;
 mod tlcx_checked_tl_command;
@@ -87,6 +88,9 @@ pub fn main_entry() {
 }
 
 pub fn main_entry_with_resources(owner: &lc631_runtime::resource::ResourceBroker) {
+    if coding_commands::dispatch_default(owner) {
+        return;
+    }
     let result = io::CommandIo::begin(owner)
         .map_err(CliFailure::not_attempted)
         .and_then(|resources| {

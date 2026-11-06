@@ -3,9 +3,11 @@
 pub mod attestation_v2;
 pub mod attestation_v3;
 mod model_scan;
+mod source_ingress;
 pub mod time_boundary;
 use model_scan::sha256_file_with_resources;
 pub use model_scan::{model_cache_manifest_sha256_bounded, ModelScanLimits};
+use source_ingress::{observe_regular_source, RegularSourceObservation};
 
 use lc631_core::{stable_sha256, ClosureLevel, ObligationId, SourceSpan};
 use lc631_receipt_kernel::{
@@ -64,6 +66,8 @@ pub struct MediaSourceAuthority {
     source_attestation: Option<UntrustedReceipt>,
     #[serde(skip)]
     authenticated_source: Option<AuthenticatedMediaSource>,
+    #[serde(skip)]
+    source_observation: Option<RegularSourceObservation>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -75,6 +79,9 @@ struct AuthenticatedMediaSource {
     source_digest: String,
     payload_digest: String,
     issuer_fingerprint: String,
+    file_identity: lc631_process_supervisor::filesystem::FileIdentity,
+    admitted_at: Instant,
+    admitted_epoch: u64,
 }
 
 impl MediaSourceAuthority {
@@ -89,6 +96,47 @@ impl MediaSourceAuthority {
                     && self.source_digest == binding.source_digest
                     && !self.metadata_only
             })
+    }
+
+    fn elapsed_anchor(&self, supplied: u64) -> Result<(u64, Instant), MediaError> {
+        let binding = self
+            .authenticated_source
+            .as_ref()
+            .ok_or(MediaError::SourceReceiptRejected)?;
+        let elapsed = binding.admitted_at.elapsed().as_secs();
+        // A fresher trusted epoch may raise the origin; retain the same Instant
+        // so fractional preparation time is never discarded at dispatch.
+        let origin = binding.admitted_epoch.max(supplied.saturating_sub(elapsed));
+        origin
+            .checked_add(elapsed)
+            .ok_or(MediaError::SourceReceiptRejected)?;
+        Ok((origin, binding.admitted_at))
+    }
+
+    fn current_epoch(&self, supplied: u64) -> Result<u64, MediaError> {
+        let (origin, started) = self.elapsed_anchor(supplied)?;
+        origin
+            .checked_add(started.elapsed().as_secs())
+            .ok_or(MediaError::SourceReceiptRejected)
+    }
+
+    fn revalidate_source<'a>(
+        &self,
+        resources: Option<&'a lc631_process_supervisor::ResourceReservationView<'a>>,
+    ) -> Result<RegularSourceObservation, MediaError> {
+        let binding = self
+            .authenticated_source
+            .as_ref()
+            .ok_or(MediaError::SourceReceiptRejected)?;
+        let observed = observe_regular_source(
+            &binding.path,
+            Some((&binding.snapshot, binding.bytes)),
+            resources,
+        )?;
+        if observed.identity != binding.file_identity || observed.canonical_path != binding.path {
+            return Err(MediaError::SourceSnapshotChanged);
+        }
+        Ok(observed)
     }
 }
 
@@ -147,9 +195,19 @@ fn authorize_media_source_read<'a>(
             (false, true, None)
         }
     };
-    // A relative locator is resolved once, before attestation. Its meaning cannot
-    // drift merely because a trusted caller later changes the process cwd.
-    let local_path = local_path.and_then(|path| path.canonicalize().ok());
+    // Observe the original locator before canonicalization erases link/occurrence facts.
+    let source_observation = local_path.as_deref().and_then(|path| {
+        match observe_regular_source(path, None, resources) {
+            Ok(observed) => Some(observed),
+            Err(error) => {
+                blockers.push(format!("source_snapshot_unavailable:{error:?}"));
+                None
+            }
+        }
+    });
+    let local_path = source_observation
+        .as_ref()
+        .map(|observed| observed.canonical_path.clone());
     let source_digest = stable_sha256(&format!(
         "media-source-locator.v2\0{:?}\0{}\0{}",
         request.kind,
@@ -159,20 +217,10 @@ fn authorize_media_source_read<'a>(
             .and_then(|path| path.to_str())
             .unwrap_or("metadata-only")
     ));
-    let source_snapshot_sha256 =
-        local_path
-            .as_deref()
-            .and_then(|path| match sha256_file_with_resources(path, resources) {
-                Ok(digest) => Some(digest),
-                Err(error) => {
-                    blockers.push(format!("source_snapshot_unavailable:{error:?}"));
-                    None
-                }
-            });
-    let source_bytes = local_path
-        .as_deref()
-        .and_then(|path| path.metadata().ok())
-        .map(|metadata| metadata.len());
+    let source_snapshot_sha256 = source_observation
+        .as_ref()
+        .map(|observed| observed.sha256.clone());
+    let source_bytes = source_observation.as_ref().map(|observed| observed.bytes);
     let authorized = eligible && metadata_only;
     if eligible && !metadata_only {
         blockers.push("authenticated_media_source_receipt_required".into());
@@ -189,6 +237,7 @@ fn authorize_media_source_read<'a>(
         eligible_for_attestation: eligible,
         source_attestation: None,
         authenticated_source: None,
+        source_observation,
     }
 }
 
@@ -228,6 +277,7 @@ fn authorize_media_source_attested_read<'a>(
     now_epoch: u64,
     resources: Option<&'a lc631_process_supervisor::ResourceReservationView<'a>>,
 ) -> Result<MediaSourceAuthority, MediaError> {
+    let admitted_at = Instant::now();
     if let Some(view) = resources {
         view.check()
             .map_err(|error| MediaError::Io(format!("media_source_resource:{error:?}")))?;
@@ -256,7 +306,9 @@ fn authorize_media_source_attested_read<'a>(
                 subject,
                 scope,
                 media_source_payload_digest(request, &authority)?,
-                now_epoch,
+                now_epoch
+                    .checked_add(admitted_at.elapsed().as_secs())
+                    .ok_or(MediaError::SourceReceiptRejected)?,
             ),
             replay,
         )
@@ -282,6 +334,13 @@ fn authorize_media_source_attested_read<'a>(
         source_digest: authority.source_digest.clone(),
         payload_digest: media_source_payload_digest(request, &authority)?,
         issuer_fingerprint: verified.verifier_key_fingerprint().into(),
+        file_identity: authority
+            .source_observation
+            .as_ref()
+            .ok_or(MediaError::SourceSnapshotUnavailable)?
+            .identity,
+        admitted_at,
+        admitted_epoch: now_epoch,
     });
     authority.source_attestation = Some(verified.into_untrusted());
     Ok(authority)
@@ -305,6 +364,7 @@ pub fn validate_current_media_authority(
     if binding.issuer_fingerprint != verifier.key_fingerprint() {
         return Err(MediaError::SourceReceiptRejected);
     }
+    let now_epoch = authority.current_epoch(now_epoch)?;
     let verified = verifier
         .verify(
             authority
@@ -874,7 +934,7 @@ struct RawBackendReceipt {
     executed_methods: BTreeMap<String, String>,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 struct RawMediaObservation {
     observation_id: String,
     kind: String,
@@ -887,6 +947,82 @@ struct RawMediaObservation {
     label_truncated: bool,
     #[serde(default)]
     original_label_bytes: Option<usize>,
+    #[serde(default)]
+    temporal_overlap: Option<RawTemporalOverlap>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct RawTemporalOverlap {
+    profile: String,
+    clock_digest: String,
+    transcript_id: String,
+    frame_digest: String,
+    frame_index: u64,
+    frame_start_ms: i64,
+    frame_end_ms: i64,
+    pcm_end_ms: i64,
+}
+
+fn bound_source_fragment(
+    observation: &RawMediaObservation,
+    by_id: &BTreeMap<&str, &RawMediaObservation>,
+    source: &str,
+    budget: &MediaResourceBudget,
+) -> Result<String, MediaError> {
+    if observation.kind != "temporal_co_presence_candidate" {
+        return Ok(stable_sha256(&format!(
+            "{}:{}:{}",
+            source, observation.start_ms, observation.end_ms,
+        )));
+    }
+    let invalid = || MediaError::InvalidBackendObservation;
+    let overlap = observation.temporal_overlap.as_ref().ok_or_else(invalid)?;
+    let frame_start = overlap
+        .frame_index
+        .checked_mul(500)
+        .and_then(|value| i64::try_from(value).ok())
+        .ok_or_else(invalid)?;
+    let frame_limit = frame_start.checked_add(500).ok_or_else(invalid)?;
+    if overlap.profile != "ffmpeg-shared-origin-fps2-v1"
+        || !is_sha256(&overlap.clock_digest)
+        || !is_sha256(&overlap.frame_digest)
+        || usize::try_from(overlap.frame_index)
+            .map_or(true, |index| index >= budget.max_decoded_frames)
+        || overlap.frame_start_ms != frame_start
+        || overlap.frame_end_ms <= frame_start
+        || overlap.frame_end_ms > frame_limit
+        || overlap.pcm_end_ms <= 0
+        || overlap.pcm_end_ms as u128 > (budget.max_pcm_samples as u128 * 1000 / 16_000)
+    {
+        return Err(invalid());
+    }
+    let transcript = by_id
+        .get(overlap.transcript_id.as_str())
+        .copied()
+        .ok_or_else(invalid)?;
+    if transcript.kind != "transcript_candidate"
+        || transcript.start_ms < 0
+        || transcript.end_ms < transcript.start_ms
+        || transcript.label.len() > 4096
+    {
+        return Err(invalid());
+    }
+    let start = transcript.start_ms.max(frame_start);
+    let end = transcript
+        .end_ms
+        .min(overlap.frame_end_ms)
+        .min(overlap.pcm_end_ms);
+    if start >= end || observation.start_ms != start || observation.end_ms != end {
+        return Err(invalid());
+    }
+    // Bind the reported frame witness and exact referenced transcript occurrence.
+    // The declared clock/profile is not independent calibration or semantic proof.
+    let binding =
+        serde_json::to_string(&(source, start, end, overlap, transcript)).map_err(|_| invalid())?;
+    Ok(stable_sha256(&format!(
+        "media-temporal-fragment.v1\0{binding}"
+    )))
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -947,6 +1083,7 @@ pub fn execute_local_media_backend_attested(
         now_epoch,
         None,
         MediaAttestationProfile::JsonV2,
+        None,
     )
 }
 
@@ -973,6 +1110,7 @@ pub fn execute_local_media_backend_attested_with_resources<'a>(
         now_epoch,
         Some(resources),
         MediaAttestationProfile::JsonV2,
+        None,
     )
 }
 
@@ -1000,6 +1138,7 @@ pub fn execute_local_media_backend_attested_v3(
         now_epoch,
         None,
         MediaAttestationProfile::BinaryV3,
+        None,
     )
 }
 
@@ -1027,6 +1166,38 @@ pub fn execute_local_media_backend_attested_v3_with_resources<'a>(
         now_epoch,
         Some(resources),
         MediaAttestationProfile::BinaryV3,
+        None,
+    )
+}
+
+/// Funded v3 execution with a declared configuration checked against the same
+/// observed launch plan before any backend child, replay or receipt issuance.
+/// The expectation is caller input, not a source or execution authority token.
+#[allow(clippy::too_many_arguments)]
+pub fn execute_registered_media_backend_v3_with_resources<'a>(
+    authority: &MediaSourceAuthority,
+    descriptor: &BackendDescriptor,
+    config: &MediaBackendConfig,
+    budget: &MediaResourceBudget,
+    issuer: &ReceiptIssuer,
+    verifier: &ReceiptVerifier,
+    replay: &mut ReplayGuard,
+    now_epoch: u64,
+    resources: &'a lc631_process_supervisor::ResourceReservationView<'a>,
+    expected_configuration: &str,
+) -> Result<MediaBackendExecutionReceipt, MediaError> {
+    execute_media_attested_read(
+        authority,
+        descriptor,
+        config,
+        budget,
+        issuer,
+        verifier,
+        replay,
+        now_epoch,
+        Some(resources),
+        MediaAttestationProfile::BinaryV3,
+        Some(expected_configuration),
     )
 }
 
@@ -1048,24 +1219,24 @@ fn execute_media_attested_read<'a>(
     now_epoch: u64,
     resources: Option<&'a lc631_process_supervisor::ResourceReservationView<'a>>,
     attestation_profile: MediaAttestationProfile,
+    expected_configuration: Option<&str>,
 ) -> Result<MediaBackendExecutionReceipt, MediaError> {
     if let Some(view) = resources {
         view.check()
             .map_err(|error| MediaError::Io(format!("media_resource:{error:?}")))?;
     }
-    let execution_started = Instant::now();
     if !authority.authorized || authority.metadata_only {
         return Err(MediaError::SourceAuthorityDenied);
     }
     validate_current_media_authority(authority, verifier, now_epoch)?;
+    let (now_epoch, execution_started) = authority.elapsed_anchor(now_epoch)?;
     let source = authority
         .local_path
         .as_ref()
         .ok_or(MediaError::SourceAuthorityDenied)?;
-    let metadata = source
-        .metadata()
-        .map_err(|error| MediaError::Io(error.to_string()))?;
-    if metadata.len() == 0 || metadata.len() > MAX_MEDIA_BYTES {
+    let observed_source = authority.revalidate_source(resources)?;
+    let source_bytes = observed_source.bytes;
+    if source_bytes == 0 || source_bytes > MAX_MEDIA_BYTES {
         return Err(MediaError::MediaBudgetExceeded);
     }
     for required in [
@@ -1082,12 +1253,7 @@ fn execute_media_attested_read<'a>(
     if config.timeout_seconds == 0 || config.timeout_seconds > 1_800 {
         return Err(MediaError::InvalidTimeout);
     }
-    let source_sha256 = sha256_file_with_resources(source, resources)?;
-    if authority.source_snapshot_sha256.as_deref() != Some(source_sha256.as_str())
-        || authority.source_bytes != Some(metadata.len())
-    {
-        return Err(MediaError::SourceSnapshotChanged);
-    }
+    let source_sha256 = observed_source.sha256;
     if !config.model_cache.is_dir() {
         return Err(MediaError::BackendUnavailable(
             config.model_cache.display().to_string(),
@@ -1109,267 +1275,299 @@ fn execute_media_attested_read<'a>(
         budget.max_temporary_bytes,
         resources,
     )?;
-    let decoder_temporary_bytes = budget
-        .max_temporary_bytes
-        .checked_sub(source_snapshot.bytes())
-        .filter(|remaining| *remaining > 0)
-        .ok_or(MediaError::MediaBudgetExceeded)?;
-    let python_sha256 = sha256_file_with_resources(&config.python_executable, resources)?;
-    let backend_script_sha256 = sha256_file_with_resources(&config.backend_script, resources)?;
-    let ffmpeg_sha256 = sha256_file_with_resources(&config.ffmpeg_executable, resources)?;
-    let model_cache_manifest_sha256 = model_cache_manifest_sha256_bounded(
-        &config.model_cache,
-        ModelScanLimits::default(),
-        resources,
-    )?;
-    if descriptor.state != BackendState::ConfiguredNotExecuted
-        || descriptor.backend_id.trim().is_empty()
-        || descriptor.model_sha256.as_deref() != Some(model_cache_manifest_sha256.as_str())
-        || descriptor
-            .license_receipt
-            .as_deref()
-            .is_none_or(str::is_empty)
-    {
-        return Err(MediaError::BackendDescriptorMismatch);
-    }
-    let configuration_digest = stable_sha256(&format!(
-        "{}\0{}\0{}\0{}\0{}\0{:?}",
-        python_sha256,
-        backend_script_sha256,
-        ffmpeg_sha256,
-        model_cache_manifest_sha256,
-        config.timeout_seconds,
-        budget
-    ));
-    let execution_plan = MediaExecutionPlan {
-        source_snapshot_sha256: source_sha256.clone(),
-        source_bytes: metadata.len(),
-        python_sha256,
-        backend_script_sha256,
-        ffmpeg_sha256,
-        model_cache_manifest_sha256: model_cache_manifest_sha256.clone(),
-        configuration_digest: configuration_digest.clone(),
-        resource_budget: budget.clone(),
-        network_policy: "offline_environment_and_local_model_path; os_network_isolation_unobserved"
-            .into(),
-        network_isolation_os_enforced: false,
-    };
-    let mut command = Command::new(&config.python_executable);
-    command
-        // Per-child prevention, not deletion of shared model/receipt caches.
-        .arg("-B")
-        .arg(&config.backend_script)
-        .arg("--media")
-        .arg(source_snapshot.path())
-        .arg("--ffmpeg")
-        .arg(&config.ffmpeg_executable)
-        .arg("--model-cache")
-        .arg(&config.model_cache)
-        .arg("--mode")
-        .arg("all")
-        .arg("--max-temp-bytes")
-        .arg(decoder_temporary_bytes.to_string())
-        .arg("--max-frames")
-        .arg(budget.max_decoded_frames.to_string())
-        .arg("--max-pcm-samples")
-        .arg(budget.max_pcm_samples.to_string())
-        .arg("--max-observations")
-        .arg(budget.max_observations.to_string())
-        .arg("--max-model-entries")
-        .arg(ModelScanLimits::default().max_entries.to_string())
-        .arg("--max-model-file-bytes")
-        .arg(ModelScanLimits::default().max_file_bytes.to_string())
-        .arg("--max-model-total-bytes")
-        .arg(ModelScanLimits::default().max_total_bytes.to_string())
-        .arg("--max-model-metadata-bytes")
-        .arg(ModelScanLimits::default().max_metadata_bytes.to_string())
-        .env("PYTHONUTF8", "1")
-        .env("HF_HUB_OFFLINE", "1")
-        .env("TRANSFORMERS_OFFLINE", "1")
-        .env("NO_PROXY", "*")
-        .env("no_proxy", "*")
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    let launch_epoch = now_epoch
-        .checked_add(execution_started.elapsed().as_secs())
-        .ok_or(MediaError::SourceReceiptRejected)?;
-    validate_current_media_authority(authority, verifier, launch_epoch)?;
-    let remaining_authority_seconds = authority
-        .source_attestation
-        .as_ref()
-        .and_then(|receipt| receipt.claims().expires_at_epoch())
-        .map_or(config.timeout_seconds, |expiry| {
-            expiry.saturating_sub(launch_epoch)
-        });
-    let output = run_media_process(
-        command,
-        Duration::from_secs(config.timeout_seconds.min(remaining_authority_seconds)),
-        budget.max_stdout_bytes,
-        budget.max_stderr_bytes,
-        resources,
-    )?;
-    let process_output = output.outcome();
-    validate_current_media_authority(
-        authority,
-        verifier,
-        now_epoch
-            .checked_add(execution_started.elapsed().as_secs())
-            .ok_or(MediaError::SourceReceiptRejected)?,
-    )?;
-    if sha256_file_with_resources(source, resources)? != source_sha256 {
-        return Err(MediaError::SourceSnapshotChanged);
-    }
-    if sha256_file_with_resources(&config.python_executable, resources)?
-        != execution_plan.python_sha256
-        || sha256_file_with_resources(&config.backend_script, resources)?
-            != execution_plan.backend_script_sha256
-        || sha256_file_with_resources(&config.ffmpeg_executable, resources)?
-            != execution_plan.ffmpeg_sha256
-    {
-        return Err(MediaError::BackendReceiptBindingMismatch);
-    }
-    if process_output.exit_code != Some(0) {
-        return Err(MediaError::BackendFailed(truncate_diagnostic(
-            &String::from_utf8_lossy(&process_output.stderr),
-        )));
-    }
-    if process_output.stdout_truncated || process_output.stderr_truncated {
-        return Err(MediaError::MediaBudgetExceeded);
-    }
-    let mut raw: RawBackendReceipt = serde_json::from_slice(&process_output.stdout)
-        .map_err(|error| MediaError::InvalidBackendJson(error.to_string()))?;
-    let process_receipt = MediaProcessReceipt {
-        exit_code: process_output.exit_code,
-        stdout_digest: sha256_bytes(&process_output.stdout),
-        stderr_digest: sha256_bytes(&process_output.stderr),
-        stdout_truncated: process_output.stdout_truncated,
-        stderr_truncated: process_output.stderr_truncated,
-        process_tree_kill_attempted: process_output.process_tree_kill_attempted,
-        process_tree_kill_verified: process_output.process_tree_kill_verified,
-        memory_limit_bytes: process_output.memory_limit_bytes,
-        memory_limit_kind: process_output.memory_limit_kind.into(),
-    };
-    drop(output);
-    if raw.backend_id.len() > 256
-        || raw.backend_version.len() > 256
-        || raw.model_revision.len() > 256
-        || raw.model_card_license_hint.len() > 4096
-        || raw.diagnostics.len() > 1024
-        || raw.diagnostics.iter().any(|message| message.len() > 4096)
-    {
-        return Err(MediaError::MediaBudgetExceeded);
-    }
-    if raw.schema_version != MEDIA_BACKEND_SCHEMA || raw.source_sha256 != source_sha256 {
-        return Err(MediaError::BackendReceiptBindingMismatch);
-    }
-    if raw.model_cache_manifest_sha256 != model_cache_manifest_sha256
-        || model_cache_manifest_sha256_bounded(
+    let prepared: Result<MediaBackendExecutionReceipt, MediaError> = (|| {
+        let decoder_temporary_bytes = budget
+            .max_temporary_bytes
+            .checked_sub(source_snapshot.bytes())
+            .filter(|remaining| *remaining > 0)
+            .ok_or(MediaError::MediaBudgetExceeded)?;
+        let python_sha256 = sha256_file_with_resources(&config.python_executable, resources)?;
+        let backend_script_sha256 = sha256_file_with_resources(&config.backend_script, resources)?;
+        let ffmpeg_sha256 = sha256_file_with_resources(&config.ffmpeg_executable, resources)?;
+        let model_cache_manifest_sha256 = model_cache_manifest_sha256_bounded(
             &config.model_cache,
             ModelScanLimits::default(),
             resources,
-        )? != model_cache_manifest_sha256
-        || raw.backend_id != descriptor.backend_id
-    {
-        return Err(MediaError::BackendReceiptBindingMismatch);
-    }
-    if raw.observations.len() > budget.max_observations {
-        return Err(MediaError::MediaBudgetExceeded);
-    }
-    for observation in &raw.observations {
-        if observation.label_truncated {
-            let original = observation
-                .original_label_bytes
-                .filter(|length| *length > observation.label.len())
-                .ok_or(MediaError::InvalidBackendObservation)?;
-            raw.diagnostics.push(format!(
-                "label_truncated:{}:original_utf8_bytes={original}",
-                observation.observation_id
-            ));
-        } else if observation
-            .original_label_bytes
-            .is_some_and(|length| length != observation.label.len())
+        )?;
+        if descriptor.state != BackendState::ConfiguredNotExecuted
+            || descriptor.backend_id.trim().is_empty()
+            || descriptor.model_sha256.as_deref() != Some(model_cache_manifest_sha256.as_str())
+            || descriptor
+                .license_receipt
+                .as_deref()
+                .is_none_or(str::is_empty)
         {
-            return Err(MediaError::InvalidBackendObservation);
+            return Err(MediaError::BackendDescriptorMismatch);
         }
-    }
-    let executed = raw
-        .executed_families
-        .iter()
-        .map(|family| parse_backend_family(family))
-        .collect::<Result<BTreeSet<_>, _>>()?;
-    let mut graph = MultimodalEventGraph::default();
-    for observation in raw.observations {
-        if observation.label.len() > 4_096
-            || observation.start_ms < 0
-            || observation.end_ms < observation.start_ms
-        {
-            return Err(MediaError::InvalidBackendObservation);
+        // Reuse the registered-script equality boundary, without adding an unrelated runtime API.
+        let registered_script = descriptor
+            .executable_or_model
+            .as_deref()
+            .ok_or(MediaError::BackendDescriptorMismatch)?
+            .canonicalize()
+            .map_err(|_| MediaError::BackendDescriptorMismatch)?;
+        let dispatched_script = config
+            .backend_script
+            .canonicalize()
+            .map_err(|_| MediaError::BackendDescriptorMismatch)?;
+        if registered_script != dispatched_script {
+            return Err(MediaError::BackendDescriptorMismatch);
         }
-        let start = RationalTime::checked(observation.start_ms, 1_000)?;
-        let end = RationalTime::checked(observation.end_ms, 1_000)?;
-        let kind = parse_observation_kind(&observation.kind)?;
-        validate_observation_family(&kind, &executed)?;
-        let source_fragment_digest = stable_sha256(&format!(
-            "{}:{}:{}",
-            source_sha256, observation.start_ms, observation.end_ms
-        ));
-        let provenance_digest = stable_sha256(&format!(
-            "{}\0{}\0{:?}\0{}\0{}\0{}\0{}\0{}\0{}\0{}",
-            source_fragment_digest,
-            observation.observation_id,
-            kind,
-            observation.label,
-            raw.backend_id,
-            raw.backend_version,
-            raw.model_revision,
+        let configuration_digest = stable_sha256(&format!(
+            "{}\0{}\0{}\0{}\0{}\0{:?}",
+            python_sha256,
+            backend_script_sha256,
+            ffmpeg_sha256,
             model_cache_manifest_sha256,
-            configuration_digest,
-            observation.evidence_digest,
+            config.timeout_seconds,
+            budget
         ));
-        graph.add(MediaObservation {
-            observation_id: observation.observation_id,
-            kind,
-            span: TimeSpan::checked(start, end)?,
-            track_id: observation.track_id,
-            label: observation.label,
-            backend_id: raw.backend_id.clone(),
-            model_revision: raw.model_revision.clone(),
-            evidence_digest: provenance_digest.clone(),
-            source_fragment_digest,
-            provenance_digest,
+        let execution_plan = MediaExecutionPlan {
+            source_snapshot_sha256: source_sha256.clone(),
+            source_bytes,
+            python_sha256,
+            backend_script_sha256,
+            ffmpeg_sha256,
+            model_cache_manifest_sha256: model_cache_manifest_sha256.clone(),
             configuration_digest: configuration_digest.clone(),
-            candidate_only: true,
-            identity_committed: false,
-            internal_state_committed: false,
-        })?;
-    }
-    for family in &executed {
-        let key = backend_family_wire_name(*family);
-        let actual = raw
-            .executed_methods
-            .get(key)
-            .ok_or(MediaError::BackendMethodMismatch)?;
-        if expected_executed_method(*family) != Some(actual.as_str()) {
-            return Err(MediaError::BackendMethodMismatch);
+            resource_budget: budget.clone(),
+            network_policy:
+                "offline_environment_and_local_model_path; os_network_isolation_unobserved".into(),
+            network_isolation_os_enforced: false,
+        };
+        if expected_configuration
+            .is_some_and(|expected| expected != execution_plan.configuration_digest.as_str())
+        {
+            return Err(MediaError::RegistrationConfigurationMismatch);
         }
-    }
-    let executed_family_states = BackendFamily::all()
-        .into_iter()
-        .map(|family| {
-            (
-                family,
-                if executed.contains(&family) {
-                    BackendState::ExecutedCandidate
-                } else {
-                    BackendState::Unavailable
-                },
-            )
-        })
-        .collect::<BTreeMap<_, _>>();
-    let translation_envelope =
-        build_media_translation_envelope(&source_sha256, &graph, &execution_plan)?;
-    let mut receipt = MediaBackendExecutionReceipt {
+        let mut command = Command::new(&config.python_executable);
+        command
+            // Per-child prevention, not deletion of shared model/receipt caches.
+            .arg("-B")
+            .arg(&config.backend_script)
+            .arg("--media")
+            .arg(source_snapshot.path())
+            .arg("--ffmpeg")
+            .arg(&config.ffmpeg_executable)
+            .arg("--model-cache")
+            .arg(&config.model_cache)
+            .arg("--mode")
+            .arg("all")
+            .arg("--max-temp-bytes")
+            .arg(decoder_temporary_bytes.to_string())
+            .arg("--max-frames")
+            .arg(budget.max_decoded_frames.to_string())
+            .arg("--max-pcm-samples")
+            .arg(budget.max_pcm_samples.to_string())
+            .arg("--max-observations")
+            .arg(budget.max_observations.to_string())
+            .arg("--max-model-entries")
+            .arg(ModelScanLimits::default().max_entries.to_string())
+            .arg("--max-model-file-bytes")
+            .arg(ModelScanLimits::default().max_file_bytes.to_string())
+            .arg("--max-model-total-bytes")
+            .arg(ModelScanLimits::default().max_total_bytes.to_string())
+            .arg("--max-model-metadata-bytes")
+            .arg(ModelScanLimits::default().max_metadata_bytes.to_string())
+            .env("PYTHONUTF8", "1")
+            .env("HF_HUB_OFFLINE", "1")
+            .env("TRANSFORMERS_OFFLINE", "1")
+            .env("NO_PROXY", "*")
+            .env("no_proxy", "*")
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        authority.revalidate_source(resources)?;
+        let launch_epoch = authority.current_epoch(
+            now_epoch
+                .checked_add(execution_started.elapsed().as_secs())
+                .ok_or(MediaError::SourceReceiptRejected)?,
+        )?;
+        validate_current_media_authority(authority, verifier, launch_epoch)?;
+        let remaining_authority_seconds = authority
+            .source_attestation
+            .as_ref()
+            .and_then(|receipt| receipt.claims().expires_at_epoch())
+            .map_or(config.timeout_seconds, |expiry| {
+                expiry.saturating_sub(launch_epoch)
+            });
+        let output = run_media_process(
+            command,
+            Duration::from_secs(config.timeout_seconds.min(remaining_authority_seconds)),
+            budget.max_stdout_bytes,
+            budget.max_stderr_bytes,
+            resources,
+        )?;
+        let process_output = output.outcome();
+        validate_current_media_authority(
+            authority,
+            verifier,
+            now_epoch
+                .checked_add(execution_started.elapsed().as_secs())
+                .ok_or(MediaError::SourceReceiptRejected)?,
+        )?;
+        authority.revalidate_source(resources)?;
+        if sha256_file_with_resources(&config.python_executable, resources)?
+            != execution_plan.python_sha256
+            || sha256_file_with_resources(&config.backend_script, resources)?
+                != execution_plan.backend_script_sha256
+            || sha256_file_with_resources(&config.ffmpeg_executable, resources)?
+                != execution_plan.ffmpeg_sha256
+        {
+            return Err(MediaError::BackendReceiptBindingMismatch);
+        }
+        if process_output.exit_code != Some(0) {
+            return Err(MediaError::BackendFailed(truncate_diagnostic(
+                &String::from_utf8_lossy(&process_output.stderr),
+            )));
+        }
+        if process_output.stdout_truncated || process_output.stderr_truncated {
+            return Err(MediaError::MediaBudgetExceeded);
+        }
+        let mut raw: RawBackendReceipt = serde_json::from_slice(&process_output.stdout)
+            .map_err(|error| MediaError::InvalidBackendJson(error.to_string()))?;
+        let process_receipt = MediaProcessReceipt {
+            exit_code: process_output.exit_code,
+            stdout_digest: sha256_bytes(&process_output.stdout),
+            stderr_digest: sha256_bytes(&process_output.stderr),
+            stdout_truncated: process_output.stdout_truncated,
+            stderr_truncated: process_output.stderr_truncated,
+            process_tree_kill_attempted: process_output.process_tree_kill_attempted,
+            process_tree_kill_verified: process_output.process_tree_kill_verified,
+            memory_limit_bytes: process_output.memory_limit_bytes,
+            memory_limit_kind: process_output.memory_limit_kind.into(),
+        };
+        drop(output);
+        if raw.backend_id.len() > 256
+            || raw.backend_version.len() > 256
+            || raw.model_revision.len() > 256
+            || raw.model_card_license_hint.len() > 4096
+            || raw.diagnostics.len() > 1024
+            || raw.diagnostics.iter().any(|message| message.len() > 4096)
+        {
+            return Err(MediaError::MediaBudgetExceeded);
+        }
+        if raw.schema_version != MEDIA_BACKEND_SCHEMA || raw.source_sha256 != source_sha256 {
+            return Err(MediaError::BackendReceiptBindingMismatch);
+        }
+        if raw.model_cache_manifest_sha256 != model_cache_manifest_sha256
+            || model_cache_manifest_sha256_bounded(
+                &config.model_cache,
+                ModelScanLimits::default(),
+                resources,
+            )? != model_cache_manifest_sha256
+            || raw.backend_id != descriptor.backend_id
+        {
+            return Err(MediaError::BackendReceiptBindingMismatch);
+        }
+        if raw.observations.len() > budget.max_observations {
+            return Err(MediaError::MediaBudgetExceeded);
+        }
+        for observation in &raw.observations {
+            if observation.label_truncated {
+                let original = observation
+                    .original_label_bytes
+                    .filter(|length| *length > observation.label.len())
+                    .ok_or(MediaError::InvalidBackendObservation)?;
+                raw.diagnostics.push(format!(
+                    "label_truncated:{}:original_utf8_bytes={original}",
+                    observation.observation_id
+                ));
+            } else if observation
+                .original_label_bytes
+                .is_some_and(|length| length != observation.label.len())
+            {
+                return Err(MediaError::InvalidBackendObservation);
+            }
+        }
+        let executed = raw
+            .executed_families
+            .iter()
+            .map(|family| parse_backend_family(family))
+            .collect::<Result<BTreeSet<_>, _>>()?;
+        let source_fragments = {
+            let by_id = raw
+                .observations
+                .iter()
+                .map(|observation| (observation.observation_id.as_str(), observation))
+                .collect::<BTreeMap<_, _>>();
+            raw.observations
+                .iter()
+                .map(|observation| {
+                    bound_source_fragment(observation, &by_id, &source_sha256, budget)
+                })
+                .collect::<Result<Vec<_>, _>>()?
+        };
+        let mut graph = MultimodalEventGraph::default();
+        for (observation, source_fragment_digest) in
+            raw.observations.into_iter().zip(source_fragments)
+        {
+            if observation.label.len() > 4_096
+                || observation.start_ms < 0
+                || observation.end_ms < observation.start_ms
+            {
+                return Err(MediaError::InvalidBackendObservation);
+            }
+            let start = RationalTime::checked(observation.start_ms, 1_000)?;
+            let end = RationalTime::checked(observation.end_ms, 1_000)?;
+            let kind = parse_observation_kind(&observation.kind)?;
+            validate_observation_family(&kind, &executed)?;
+            let provenance_digest = stable_sha256(&format!(
+                "{}\0{}\0{:?}\0{}\0{}\0{}\0{}\0{}\0{}\0{}",
+                source_fragment_digest,
+                observation.observation_id,
+                kind,
+                observation.label,
+                raw.backend_id,
+                raw.backend_version,
+                raw.model_revision,
+                model_cache_manifest_sha256,
+                configuration_digest,
+                observation.evidence_digest,
+            ));
+            graph.add(MediaObservation {
+                observation_id: observation.observation_id,
+                kind,
+                span: TimeSpan::checked(start, end)?,
+                track_id: observation.track_id,
+                label: observation.label,
+                backend_id: raw.backend_id.clone(),
+                model_revision: raw.model_revision.clone(),
+                evidence_digest: provenance_digest.clone(),
+                source_fragment_digest,
+                provenance_digest,
+                configuration_digest: configuration_digest.clone(),
+                candidate_only: true,
+                identity_committed: false,
+                internal_state_committed: false,
+            })?;
+        }
+        for family in &executed {
+            let key = backend_family_wire_name(*family);
+            let actual = raw
+                .executed_methods
+                .get(key)
+                .ok_or(MediaError::BackendMethodMismatch)?;
+            if expected_executed_method(*family) != Some(actual.as_str()) {
+                return Err(MediaError::BackendMethodMismatch);
+            }
+        }
+        let executed_family_states = BackendFamily::all()
+            .into_iter()
+            .map(|family| {
+                (
+                    family,
+                    if executed.contains(&family) {
+                        BackendState::ExecutedCandidate
+                    } else {
+                        BackendState::Unavailable
+                    },
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
+        let translation_envelope =
+            build_media_translation_envelope(&source_sha256, &graph, &execution_plan)?;
+        let receipt = MediaBackendExecutionReceipt {
         schema_version: MEDIA_BACKEND_SCHEMA,
         source_sha256: source_sha256.clone(),
         backend_id: raw.backend_id,
@@ -1392,10 +1590,25 @@ fn execute_media_attested_read<'a>(
         translation_envelope,
         claim_boundary: "authenticated backend execution yields provenance-bound candidates only; family semantics remain unvalidated until independent method receipts exist, and identity, emotion, intent, transcript perfection, or diarization accuracy are not established",
     };
-    source_snapshot.close()?;
-    let observed_epoch = now_epoch
-        .checked_add(execution_started.elapsed().as_secs())
-        .ok_or(MediaError::SourceReceiptRejected)?;
+        Ok(receipt)
+    })();
+    // Always close the owned snapshot before publishing or returning an error.
+    let closed = source_snapshot.close();
+    let mut receipt = match (prepared, closed) {
+        (Ok(receipt), Ok(())) => receipt,
+        (Err(error), Ok(())) => return Err(error),
+        (Ok(_), Err(cleanup)) => return Err(cleanup),
+        (Err(error), Err(cleanup)) => {
+            return Err(MediaError::Io(format!(
+                "media_execution:{error:?}; snapshot_cleanup:{cleanup:?}"
+            )))
+        }
+    };
+    let observed_epoch = authority.current_epoch(
+        now_epoch
+            .checked_add(execution_started.elapsed().as_secs())
+            .ok_or(MediaError::SourceReceiptRejected)?,
+    )?;
     validate_current_media_authority(authority, verifier, observed_epoch)?;
     let (payload, scope) = match attestation_profile {
         MediaAttestationProfile::JsonV2 => (
@@ -1418,9 +1631,11 @@ fn execute_media_attested_read<'a>(
     let issued_epoch = match attestation_profile {
         MediaAttestationProfile::JsonV2 => observed_epoch,
         MediaAttestationProfile::BinaryV3 => {
-            let current = now_epoch
-                .checked_add(execution_started.elapsed().as_secs())
-                .ok_or(MediaError::SourceReceiptRejected)?;
+            let current = authority.current_epoch(
+                now_epoch
+                    .checked_add(execution_started.elapsed().as_secs())
+                    .ok_or(MediaError::SourceReceiptRejected)?,
+            )?;
             validate_current_media_authority(authority, verifier, current)?;
             current
         }
@@ -1877,6 +2092,7 @@ fn truncate_diagnostic(value: &str) -> String {
 pub enum MediaError {
     BackendFailed(String),
     BackendDescriptorMismatch,
+    RegistrationConfigurationMismatch,
     BackendMethodMismatch,
     BackendReceiptBindingMismatch,
     BackendTimeout,

@@ -5,7 +5,12 @@ mod native_dispatch;
 pub use native_dispatch::{
     observe_native_dispatches, DispatchObserveError, NativeDispatch, NativeDispatchTrace,
 };
+mod native_attempt;
 mod spawn_failure;
+#[cfg(unix)]
+pub(crate) use unix::spawn_owned;
+#[cfg(windows)]
+pub(crate) use windows::spawn_owned;
 #[cfg(feature = "test-fixtures")]
 pub mod test_fixtures;
 
@@ -32,8 +37,9 @@ mod bounded;
 
 pub use bounded::{
     read_bounded_bytes, required_ram_bytes, run_bounded, run_bounded_with_resources,
-    run_bounded_with_resources_observed, BoundedBytes, ResourceRunError, ResourceRunOutcome,
-    RunOutcome, RunRequest,
+    run_bounded_with_resources_attempt, run_bounded_with_resources_observed, BoundedBytes,
+    NativeProcessEffect, ResourceRunAttempt, ResourceRunError, ResourceRunOutcome, RunOutcome,
+    RunRequest,
 };
 pub use lc631_substrate::resource::{
     ResourceAmount, ResourceClaim, ResourceError, ResourceKind, ResourceRequest,

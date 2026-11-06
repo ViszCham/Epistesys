@@ -7,6 +7,7 @@ pub mod budget;
 pub mod transition;
 /// Fresh execution of the same fixed coding probes after history inspection.
 pub mod fresh_reselection;
+pub mod production_contract;
 
 use crate::journal::{
     inspect_checkpoint_chain_resume, CheckpointChainResumeDecision, CheckpointChainResumeHold,

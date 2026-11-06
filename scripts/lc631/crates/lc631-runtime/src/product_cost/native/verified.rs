@@ -136,6 +136,15 @@ pub(super) fn execute<'v>(
     verification_claim.check()?;
     drop(raw_reference);
     drop(verification_claim);
+    let closure_work = super::super::programs::require_native_adapter_closure(
+        package,
+        profile.limits,
+        view,
+    )?;
+    ledger.work = ledger
+        .work
+        .checked_add(closure_work)
+        .ok_or(CostError::ResourceExhausted)?;
     // Charge the owned report clone BEFORE allocation. Persistent rows have their
     // separate nonzero claim; neither owner keeps the 32MiB execution workspace.
     let retained = claim(view, lower.historical_report().retained_bytes()?)?;

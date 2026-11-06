@@ -1,5 +1,6 @@
 //! Four actual outputs and a wider-integer oracle, not renamed correctness counts.
 use super::*;
+use crate::goal_clock_domain as clock;
 use lc631_analysis::creativity_measurement::{ComponentMetric, ComponentReport, RationalInterval};
 
 pub struct OwnedArtifactPair<'r, 'o, 'origin, 'v> {
@@ -15,6 +16,7 @@ pub struct OwnedArtifactPair<'r, 'o, 'origin, 'v> {
     retained: ResourceClaim<'v>,
 }
 pub struct ArtifactView<'current> {
+    clock_basis: clock::ClockBasis,
     baseline_outputs: &'current [Option<u32>; 4],
     candidate_outputs: &'current [Option<u32>; 4],
     baseline_success: &'current [bool; 4],
@@ -38,12 +40,26 @@ fn successes(owner: &OwnedCodingProbeObservation<'_>) -> Result<[bool; 4], Error
     }
     Ok(flags)
 }
+/// Legacy Given-artifact diagnostic. Its clock inputs do not establish a registered domain.
 pub fn measure_artifact_pair<'r, 'o, 'origin, 'v>(
     root: &'r ArtifactPairRoot<'origin, 'v>,
     pair: CodingPair<'o, 'v>,
     gate: &mut ArtifactCurrent<'_, '_, '_, '_, '_>,
     view: &'v ResourceReservationView<'_>,
 ) -> Result<OwnedArtifactPair<'r, 'o, 'origin, 'v>, Error> {
+    let (retained, scratch) = admit_pair(root, view)?;
+    current::check(root, pair, gate, view)?;
+    let result = evaluate_pair(root, pair, retained, view)?;
+    current::check(root, pair, gate, view)?;
+    scratch.check()?;
+    check_claim(&result.retained, view)?;
+    Ok(result)
+}
+
+fn admit_pair<'v>(
+    root: &ArtifactPairRoot<'_, 'v>,
+    view: &'v ResourceReservationView<'_>,
+) -> Result<(ResourceClaim<'v>, ResourceClaim<'v>), Error> {
     root.check(view)?;
     root.budget.pair_funding()?;
     // These claims precede all validation allocations, hashing and provider calls.
@@ -51,7 +67,14 @@ pub fn measure_artifact_pair<'r, 'o, 'origin, 'v>(
     let scratch = claim(view, VIEW_RAM)?;
     root.budget.pair()?;
     root.budget.read()?;
-    current::check(root, pair, gate, view)?;
+    Ok((retained, scratch))
+}
+
+/// Both admitted routes use the same four real outputs, oracle, identity and reports.
+fn evaluate_pair<'r, 'o, 'origin, 'v>(
+    root: &'r ArtifactPairRoot<'origin, 'v>, pair: CodingPair<'o, 'v>,
+    retained: ResourceClaim<'v>, view: &ResourceReservationView<'_>,
+) -> Result<OwnedArtifactPair<'r, 'o, 'origin, 'v>, Error> {
     let a = successes(pair.baseline)?;
     let b = successes(pair.candidate)?;
     let dependency = hash(&[
@@ -81,9 +104,6 @@ pub fn measure_artifact_pair<'r, 'o, 'origin, 'v>(
     let solve = numeric::gain(input(ComponentMetric::Solve), &a, &b)?;
     let baseline_goal = numeric::score(&a)?;
     let candidate_goal = numeric::score(&b)?;
-    current::check(root, pair, gate, view)?;
-    scratch.check()?;
-    check_claim(&retained, view)?;
     Ok(OwnedArtifactPair {
         root,
         pair,
@@ -97,6 +117,22 @@ pub fn measure_artifact_pair<'r, 'o, 'origin, 'v>(
         retained,
     })
 }
+impl<'o, 'p, 'v> clock::RegisteredArtifactRoot<'o, 'p, 'v> {
+    pub(crate) fn measure_registered<'r>(
+        &'r self, pair: clock::RegisteredPair<'o, 'p, 'v>,
+        ports: &mut clock::CurrentPorts<'_, '_, '_, '_, '_>, view: &'v ResourceReservationView<'_>,
+    ) -> Result<OwnedArtifactPair<'r, 'o, 'o, 'v>, clock::Error> {
+        let (retained, scratch) = admit_pair(&self.artifact, view)?;
+        current::check_registered(self, pair, ports, view)?;
+        let result = evaluate_pair(&self.artifact, pair.actual(), retained, view)?;
+        let after = current::check_registered(self, pair, ports, view)?;
+        scratch.check()?;
+        check_claim(&result.retained, view)?;
+        self.artifact.epochs.set(after);
+        Ok(result)
+    }
+}
+
 impl<'r, 'o, 'origin, 'v> OwnedArtifactPair<'r, 'o, 'origin, 'v> {
     /// Identity-only cross-row precondition, NOT a fresh-capture eligibility
     /// observation. Every adopted row still requires its own with_current gate.
@@ -128,6 +164,19 @@ impl<'r, 'o, 'origin, 'v> OwnedArtifactPair<'r, 'o, 'origin, 'v> {
         view: &ResourceReservationView<'_>,
         consume: impl for<'current> FnOnce(ArtifactView<'current>) -> R,
     ) -> Result<R, Error> {
+        let scratch = self.admit_read(root, pair, view)?;
+        current::check(root, pair, gate, view)?;
+        let result = consume(self.projection(clock::ClockBasis::LegacyClockProvenanceUnassessed));
+        current::check(root, pair, gate, view)?;
+        scratch.check()?;
+        check_claim(&self.retained, view)?;
+        Ok(result)
+    }
+
+    fn admit_read<'s>(
+        &self, root: &ArtifactPairRoot<'origin, 'v>, pair: CodingPair<'o, 'v>,
+        view: &'s ResourceReservationView<'_>,
+    ) -> Result<ResourceClaim<'s>, Error> {
         root.check(view)?;
         if !std::ptr::eq(root, self.root) {
             return Err(Error::BindingMismatch);
@@ -140,8 +189,12 @@ impl<'r, 'o, 'origin, 'v> OwnedArtifactPair<'r, 'o, 'origin, 'v> {
         check_claim(&self.retained, view)?;
         let scratch = claim(view, VIEW_RAM)?;
         root.budget.read()?;
-        current::check(root, pair, gate, view)?;
-        let result = consume(ArtifactView {
+        Ok(scratch)
+    }
+
+    fn projection(&self, clock_basis: clock::ClockBasis) -> ArtifactView<'_> {
+        ArtifactView {
+            clock_basis,
             baseline_outputs: self.pair.baseline.actual_outputs(),
             candidate_outputs: self.pair.candidate.actual_outputs(),
             baseline_success: &self.baseline_success,
@@ -151,14 +204,30 @@ impl<'r, 'o, 'origin, 'v> OwnedArtifactPair<'r, 'o, 'origin, 'v> {
             coverage: &self.coverage,
             solve: &self.solve,
             dependency: self.dependency,
-        });
-        current::check(root, pair, gate, view)?;
+        }
+    }
+}
+
+impl<'r, 'o, 'v> OwnedArtifactPair<'r, 'o, 'o, 'v> {
+    pub(crate) fn with_registered<'p, R>(
+        &self, root: &'r clock::RegisteredArtifactRoot<'o, 'p, 'v>,
+        pair: clock::RegisteredPair<'o, 'p, 'v>,
+        ports: &mut clock::CurrentPorts<'_, '_, '_, '_, '_>, view: &'v ResourceReservationView<'_>,
+        consume: impl for<'current> FnOnce(ArtifactView<'current>) -> R,
+    ) -> Result<R, clock::Error> {
+        let scratch = self.admit_read(&root.artifact, pair.actual(), view)?;
+        current::check_registered(root, pair, ports, view)?;
+        let result = consume(self.projection(clock::ClockBasis::GivenLocalRegistered));
+        let after = current::check_registered(root, pair, ports, view)?;
         scratch.check()?;
         check_claim(&self.retained, view)?;
+        root.artifact.epochs.set(after);
         Ok(result)
     }
 }
+
 impl<'current> ArtifactView<'current> {
+    pub fn clock_basis(&self) -> clock::ClockBasis { self.clock_basis }
     pub fn baseline_outputs(&self) -> &'current [Option<u32>; 4] {
         self.baseline_outputs
     }

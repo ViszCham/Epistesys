@@ -4,7 +4,7 @@
 use super::measurement::*;
 use lc631_analysis::{
     run_bounded_tool_with_resources, validate_dgcl_target_lease, BoundedToolRequest,
-    DgclEvidenceLease, DgclExecutionSnapshot, DgclLifecycleState, ToolRunState,
+    DgclEvidenceLease, DgclExecutionSnapshot, DgclLifecycleState, ResourceToolResult, ToolRunState,
 };
 use lc631_core::{
     stable_sha256, Action, ExecutionPermit, ExecutionPermitContext, PermitValidation,
@@ -20,10 +20,34 @@ use std::{
     io::Read,
     path::{Path, PathBuf},
 };
+pub(super) mod attempt_producer;
+mod clock;
+pub use clock::ProbeInputs;
+pub(crate) use clock::ObservationClock;
+use clock::NativeBirth;
+mod clock_worker;
+use clock_worker::observe_native_run;
+pub(crate) use clock_worker::{observe_registered_run, NativeRun};
 mod driver;
 pub use driver::{CodingBuildProfile, RemeasuringRepairDriver};
 mod goal_current;
 pub(crate) use goal_current::{GoalEpochError, GoalInvocationGate};
+
+pub(crate) fn preflight_registered_inputs(
+    plan: &CodingProbePlan,
+    input: ProbeInputs<'_>,
+    resources: &ResourceReservationView<'_>,
+) -> Result<(), ProbeError> {
+    resources.check()?;
+    goal_current::bounds(input)?;
+    let scratch = super::measurement::claim(resources, 64 * 1024)?;
+    if digest(input.source.as_bytes()) != resources.source_revision() {
+        return Err(ProbeError::BindingMismatch);
+    }
+    check_current_at(plan, input, input.authority.now_epoch)?;
+    scratch.check()?;
+    Ok(())
+}
 
 /// The caller allocates and explicitly supplies a separate current Test
 /// authority provider before native effects. No grant is derived from an Edit
@@ -165,149 +189,15 @@ pub fn observe_current<'v>(
     input: ProbeInvocation<'_>,
     resources: &'v ResourceReservationView<'_>,
 ) -> Result<OwnedCodingProbeObservation<'v>, ProbeError> {
-    resources.check()?;
-    if input.timeout_ms == 0
-        || input.timeout_ms > 30_000
-        || input.registration.program.len() > 4096
-        || input.registration.target_ref.len() > 1024
-        || !Path::new(input.registration.program).is_absolute()
-        || !input.registration.target_path.is_absolute()
-        || digest(input.source.as_bytes()) != resources.source_revision()
-        || stable_sha256(input.source) != input.registration.snapshot.source_revision
-    {
-        return Err(ProbeError::BindingMismatch);
-    }
-    let retained = super::measurement::claim(resources, 32 * 1024)?;
-    let scratch = super::measurement::claim(resources, 32 * 1024)?;
-    let artifact = ProbeArtifactWitness {
-        target_path: owned_path(input.registration.target_path)?,
-        program: owned_path(Path::new(input.registration.program))?,
-        binary: parse_digest(input.registration.executable_digest)?,
-    };
-    let before = (input.clock)();
-    check_current(plan, &input, before)?;
-    // Allocate the small shared cursor under the retained claim BEFORE native
-    // effects. Later gain construction only clones these owner-local Arcs.
-    let expires = input
-        .lease
-        .expires_at_epoch
-        .min(input.permit.expires_at_epoch())
-        .min(
-            input
-                .tool_receipt
-                .claims()
-                .expires_at_epoch()
-                .ok_or(ProbeError::UnregisteredTool)?,
-        );
-    let observed_epoch = ObservedEpoch::shared(before);
-    let target = input
-        .registration
-        .snapshot
-        .targets
-        .iter()
-        .find(|t| t.target_ref == input.registration.target_ref)
-        .ok_or(ProbeError::BindingMismatch)?;
-    let (target_digest, target_handle) =
-        fingerprint(input.registration.target_path, 1024 * 1024, resources)?;
-    if target_digest != target.target_digest {
-        return Err(ProbeError::BindingMismatch);
-    }
-    let (binary_digest, binary_handle) = fingerprint(
-        Path::new(input.registration.program),
-        64 * 1024 * 1024,
-        resources,
-    )?;
-    if binary_digest != input.registration.executable_digest {
-        return Err(ProbeError::BindingMismatch);
-    }
-    let spawn_epoch = (input.clock)();
-    observed_epoch.observe(spawn_epoch, expires)?;
-    if spawn_epoch < before {
-        return Err(ProbeError::ClockRollback);
-    }
-    check_current(plan, &input, spawn_epoch)?;
-    // Validate the full bounded invocation horizon before entering the process
-    // owner, so preparation cannot cross expiry before its spawn. Immediate
-    // host revocation still depends on the caller's current revocation view.
-    let horizon = spawn_epoch
-        .checked_add(input.timeout_ms.div_ceil(1000))
-        .ok_or(ProbeError::Stale)?;
-    check_current(plan, &input, horizon)?;
-    let capture = run_bounded_tool_with_resources(
-        BoundedToolRequest {
-            program: input.registration.program,
-            args: &[],
-            stdin: Some(PROBE_INPUT),
-            timeout_ms: input.timeout_ms,
-            stdout_limit: 256,
-            stderr_limit: 1024,
-        },
-        resources,
-    )?;
-    let now = (input.clock)();
-    observed_epoch.observe(now, expires)?;
-    if now < spawn_epoch {
-        return Err(ProbeError::ClockRollback);
-    }
-    check_current(plan, &input, now)?;
-    let report = capture.reported();
-    if report.state != ToolRunState::Observed
-        || report.exit_code != Some(0)
-        || report.timed_out
-        || report.stdout_truncated
-        || report.stderr_truncated
-        || !report.process_tree_kill_verified
-        || report.executable_sha256.as_deref() != Some(input.registration.executable_digest)
-        || report.args_digest != stable_sha256("")
-        || !capture.stderr().is_empty()
-    {
-        return Err(ProbeError::ProcessFailed);
-    }
-    target_handle.validate_current().map_err(io)?;
-    binary_handle.validate_current().map_err(io)?;
-    if fingerprint(input.registration.target_path, 1024 * 1024, resources)?.0 != target_digest
-        || fingerprint(
-            Path::new(input.registration.program),
-            64 * 1024 * 1024,
-            resources,
-        )?
-        .0 != binary_digest
-    {
-        return Err(ProbeError::BindingMismatch);
-    }
-    let (outputs, correct) = super::measurement::parse_output(capture.stdout())?;
-    let mut h = Sha256::new();
-    h.update(b"Epistesys/TLCX/CodingProbe/ActualObservation/v1\0");
-    h.update(plan.digest().as_bytes());
-    h.update(input.registration.payload_digest(plan).as_bytes());
-    h.update(input.permit.digest().as_bytes());
-    h.update(report.stdout_digest.as_bytes());
-    h.update(report.cwd_digest.as_bytes());
-    h.update(report.environment_digest.as_bytes());
-    let result = OwnedCodingProbeObservation {
-        plan: plan.digest(),
-        source: resources.source_revision(),
-        snapshot: parse_digest(&input.registration.snapshot.snapshot_digest)?,
-        build_input: parse_digest(&input.registration.snapshot.build_input_digest)?,
-        target: parse_digest(&target_digest)?,
-        observation: Digest32::from_bytes(h.finalize().into()),
-        outputs,
-        correct,
-        checked_epoch: now,
-        expires_epoch: expires,
-        clock: input.clock,
-        observed_epoch,
-        artifact,
-        build_authority: None,
-        retained,
-    };
-    scratch.check()?;
-    result.check_current(plan, resources)?;
-    Ok(result)
+    let metadata = ProbeInputs::without_clock(&input);
+    observe_native_run(plan, metadata, resources, NativeBirth::Legacy(input.clock))
+        .into_legacy_result()
 }
-fn check_current(
+
+
+fn check_current_at(
     plan: &CodingProbePlan,
-    input: &ProbeInvocation<'_>,
+    input: ProbeInputs<'_>,
     now: u64,
 ) -> Result<(), ProbeError> {
     if now < input.authority.now_epoch {

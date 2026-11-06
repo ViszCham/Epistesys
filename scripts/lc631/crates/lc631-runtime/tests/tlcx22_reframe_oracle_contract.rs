@@ -30,7 +30,7 @@ fn tlcx22_reframe_baseline_unknown_not_failure() {
     assert_ne!(actual.report.state,ComponentState::Measured(ratio(0,1)));
     assert!(actual.has_gaps);
     assert_eq!(actual.denominator,4);
-    assert!(matches!(scenario(Case::MissingBaselineOwner),Err(f::Error::MissingBaselineOwner)));
+    assert!(matches!(scenario(Case::MissingBaselineOwner),Err(f::Error::MissingPaidMapOwner)));
 }
 
 #[test]
@@ -41,8 +41,8 @@ fn tlcx22_reframe_frame_label_or_unused_macro_not_gain() {
     let identity=scenario(Case::IdentityFrame).unwrap();
     assert_eq!(identity.report.state,ComponentState::Measured(ratio(0,1)));
     assert!(matches!(scenario(Case::LabelOnlyDelta),Err(f::Error::FrameDeltaMismatch)));
-    assert!(matches!(scenario(Case::UnregisteredMacroRule),Err(f::Error::UnregisteredFrameRule)));
-    assert!(matches!(scenario(Case::OracleSwap),Err(f::Error::OracleMismatch)));
+    assert!(matches!(scenario(Case::UnregisteredMacroRule),Err(f::Error::Unsupported(f::Cause::UnsupportedProfile))));
+    assert!(matches!(scenario(Case::OracleSwap),Err(f::Error::NoComparable(f::Cause::ForeignPlan))));
     assert!(matches!(scenario(Case::HardErase),Err(f::Error::Context(ContextError::HardInvariant))));
     assert!(matches!(scenario(Case::AuthoritySwap),Err(f::Error::Context(ContextError::AuthorityMismatch))));
     assert!(matches!(scenario(Case::GoalScopeSwap),Err(f::Error::Context(ContextError::ScopeMismatch))));

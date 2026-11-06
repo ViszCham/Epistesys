@@ -26,16 +26,26 @@ impl Drop for ChildGuard {
     }
 }
 fn run_phase(root: &Path, mode: &str) {
+    let stdout_path = root.with_extension(format!("{mode}.stdout.log"));
+    let stderr_path = root.with_extension(format!("{mode}.stderr.log"));
+    let stdout = std::fs::OpenOptions::new().write(true).create_new(true)
+        .open(&stdout_path).unwrap();
+    let stderr = std::fs::OpenOptions::new().write(true).create_new(true)
+        .open(&stderr_path).unwrap();
     let child = Command::new(std::env::current_exe().unwrap())
         .args(["--exact", ENTRY, "--ignored", "--test-threads=1"])
         .env(ROOT_ENV, root).env(MODE_ENV, mode)
-        .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null())
+        .stdin(Stdio::null()).stdout(Stdio::from(stdout)).stderr(Stdio::from(stderr))
         .spawn().unwrap();
     let mut guard = ChildGuard(child);
     let deadline = Instant::now() + Duration::from_secs(120);
     loop {
+        for path in [&stdout_path, &stderr_path] {
+            assert!(std::fs::metadata(path).unwrap().len() <= 1_048_576,
+                "owned {mode} diagnostic output exceeded cap; retain {}", root.display());
+        }
         if let Some(status) = guard.0.try_wait().unwrap() {
-            assert!(status.success(), "owned {mode} child failed; retain {}", root.display());
+            assert!(status.success(), "owned {mode} child failed: {status}; retain {}; stdout={}; stderr={}", root.display(), stdout_path.display(), stderr_path.display());
             return;
         }
         assert!(Instant::now() < deadline,

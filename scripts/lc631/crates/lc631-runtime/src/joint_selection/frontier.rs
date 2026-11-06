@@ -17,6 +17,8 @@ pub fn compare_rows(
     for ((axis, a), b) in axes.iter().zip(left).zip(right) {
         validate_value(a, gain_axis(*axis))?;
         validate_value(b, gain_axis(*axis))?;
+    }
+    for ((axis, a), b) in axes.iter().zip(left).zip(right) {
         let (Some(a_value), Some(b_value)) = (a.interval(), b.interval()) else {
             return Ok(PairRelation::Unresolved);
         };
@@ -344,6 +346,14 @@ fn validate_input(
     policy: &SelectionPolicy<'_>,
     rows: &[JointCandidate<'_>],
 ) -> Result<(), SelectionError> {
+    validate_policy(policy, rows.len())?;
+    validate_rows(policy, rows)
+}
+
+pub(crate) fn validate_policy(
+    policy: &SelectionPolicy<'_>,
+    row_count: usize,
+) -> Result<(), SelectionError> {
     if policy.max_candidates == 0
         || policy.max_candidates > 2_048
         || policy.max_canonical_bytes == 0
@@ -351,10 +361,10 @@ fn validate_input(
     {
         return Err(SelectionError::InvalidLimits);
     }
-    if rows.is_empty() {
+    if row_count == 0 {
         return Err(SelectionError::EmptyCandidates);
     }
-    if rows.len() > policy.max_candidates {
+    if row_count > policy.max_candidates {
         return Err(SelectionError::ResourceExhausted);
     }
     if policy.axes.is_empty() || policy.axes.len() > 64 {
@@ -384,6 +394,13 @@ fn validate_input(
             return Err(SelectionError::InvalidRepresentativeOrder);
         }
     }
+    Ok(())
+}
+
+pub(crate) fn validate_rows(
+    policy: &SelectionPolicy<'_>,
+    rows: &[JointCandidate<'_>],
+) -> Result<(), SelectionError> {
     let mut bytes = 0usize;
     for (index, row) in rows.iter().enumerate() {
         if rows[..index].iter().any(|other| other.id == row.id) {

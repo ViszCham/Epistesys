@@ -119,6 +119,21 @@ impl LegacyJsonMigration {
             parsed.push(record);
         }
 
+        // Reuse native ordered-history validation before producing binary bytes.
+        let first = parsed.first().ok_or(JournalError::EmptySegment)?;
+        let identity = lc631_analysis::CheckpointReadIdentity {
+            source_revision: first.source_revision,
+            plan_digest: first.plan_digest,
+            authority_revision: first.authority_revision,
+        };
+        match lc631_analysis::inspect_checkpoint_record_bytes(records, identity) {
+            Ok(_) => {}
+            Err(lc631_analysis::ResumeError::BudgetExceeded) => {
+                return Ok(hold(LegacyHoldReason::InputLimitExceeded));
+            }
+            Err(_) => return Ok(hold(LegacyHoldReason::InvalidEventState)),
+        }
+
         let mut builder = JournalSegmentBuilder::genesis();
         for (index, record) in records.iter().enumerate() {
             let sequence = match u64::try_from(index)

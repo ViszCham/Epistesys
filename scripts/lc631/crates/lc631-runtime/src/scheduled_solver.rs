@@ -178,6 +178,20 @@ impl<'view, 'lease> NativeScheduler<'view, 'lease> {
         )
     }
 
+    fn validate_dispatch_run(&self, run: &RunResources) -> Result<(), DispatchError> {
+        self.broker
+            .validate_lease(
+                self.metadata,
+                self.metadata.run_id(),
+                self.metadata.source_revision(),
+                ResourceKind::Ram,
+            )
+            .map_err(DispatchError::Resource)?;
+        self.broker
+            .validate_run(run, self.metadata.run_id(), self.metadata.source_revision())
+            .map_err(DispatchError::Resource)
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn dispatch_inner<'q, T, F>(
         &mut self,
@@ -194,14 +208,7 @@ impl<'view, 'lease> NativeScheduler<'view, 'lease> {
     where
         F: for<'call> FnOnce(NativeResult<'q, 'call>) -> T,
     {
-        self.broker
-            .validate_lease(
-                self.metadata,
-                self.metadata.run_id(),
-                self.metadata.source_revision(),
-                ResourceKind::Ram,
-            )
-            .map_err(DispatchError::Resource)?;
+        self.validate_dispatch_run(run)?;
         if !working_directory.is_absolute() {
             return Err(DispatchError::RelativeWorkingDirectory);
         }

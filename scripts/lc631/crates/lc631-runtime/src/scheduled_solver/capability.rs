@@ -149,6 +149,7 @@ impl<'view, 'lease> NativeScheduler<'view, 'lease> {
         'held: 'view,
         F: for<'call> FnOnce(NativeResult<'q, 'call>) -> T,
     {
+        self.validate_dispatch_run(run)?;
         if works.len() > MAX_GROUPS {
             return Err(DispatchError::GroupLimit);
         }

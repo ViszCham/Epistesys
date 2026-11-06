@@ -1,5 +1,6 @@
 //! Cheap bounded admission precedes hashing, providers and physical artifact I/O.
 use super::*;
+use crate::goal_clock_domain as clock;
 use crate::contextual_repair::execution::{GoalEpochError, GoalInvocationGate};
 use lc631_analysis::declared_build_capture::{declared_capture_digest, SnapshotAuthorityView};
 use lc631_core::ExecutionPermitContext;
@@ -26,6 +27,9 @@ pub(super) fn authority(context: &ExecutionPermitContext<'_>) -> Result<(), Erro
     Ok(())
 }
 pub(super) fn invocation(input: &ProbeInvocation<'_>) -> Result<(), Error> {
+    fields(&clock::ProbeInputs::without_clock(input))
+}
+fn fields(input: &clock::ProbeInputs<'_>) -> Result<(), Error> {
     // Length inspection is constant-time and precedes source hashing/H2.
     text(input.source, SOURCE_CAP)?;
     let r = &input.registration;
@@ -112,7 +116,7 @@ fn parsed(text: &str) -> Result<Digest32, Error> {
 fn binds(
     origin: &OwnedDeclaredBuildCapture<'_>,
     owner: &OwnedCodingProbeObservation<'_>,
-    input: &ProbeInvocation<'_>,
+    input: &clock::ProbeInputs<'_>,
     plan: &CodingProbePlan,
 ) -> Result<(), Error> {
     let p = origin.content_pins();
@@ -149,7 +153,7 @@ fn cheap_current(
     }
     Ok(now)
 }
-fn physical_root(input: &ProbeInvocation<'_>, expected: Digest32) -> Result<(), Error> {
+fn physical_root(input: &clock::ProbeInputs<'_>, expected: Digest32) -> Result<(), Error> {
     let relative = Path::new(input.registration.target_ref);
     let mut count = 0usize;
     for part in relative.components() {
@@ -198,6 +202,13 @@ fn capture(
 ) -> Result<(), Error> {
     let attempt = port.capture_current(&mut BoundedAuthority(authority), view);
     let actual = attempt.current().map_err(Error::BuildCapture)?;
+    match_capture(origin, actual, view)
+}
+fn match_capture(
+    origin: &OwnedDeclaredBuildCapture<'_>,
+    actual: &OwnedDeclaredBuildCapture<'_>,
+    view: &ResourceReservationView<'_>,
+) -> Result<(), Error> {
     actual.check_current(view).map_err(Error::BuildCapture)?;
     if actual.root() != origin.root()
         || actual.program() != origin.program()
@@ -229,13 +240,13 @@ pub(super) fn check(
     binds(
         root.baseline_before,
         pair.baseline,
-        &gate.baseline_invocation,
+        &clock::ProbeInputs::without_clock(&gate.baseline_invocation),
         root.plan,
     )?;
     binds(
         root.candidate_expected,
         pair.candidate,
-        &gate.candidate_invocation,
+        &clock::ProbeInputs::without_clock(&gate.candidate_invocation),
         root.plan,
     )?;
     let baseline =
@@ -254,8 +265,8 @@ pub(super) fn check(
     // target/native hashing in that shared checked helper; no caller Pass flag.
     baseline.check_artifact_current().map_err(epoch_error)?;
     candidate.check_artifact_current().map_err(epoch_error)?;
-    physical_root(&gate.baseline_invocation, root.baseline_before.root())?;
-    physical_root(&gate.candidate_invocation, root.candidate_expected.root())?;
+    physical_root(&clock::ProbeInputs::without_clock(&gate.baseline_invocation), root.baseline_before.root())?;
+    physical_root(&clock::ProbeInputs::without_clock(&gate.candidate_invocation), root.candidate_expected.root())?;
     capture(
         root.baseline_before,
         gate.baseline_build,
@@ -281,3 +292,69 @@ pub(super) fn check(
     root.epochs.set(after);
     Ok(())
 }
+
+/// The registered path uses the same bounded metadata, physical-target and Goal
+/// checks as the Given path. Its execution and capture actors share one floor per
+/// role. Only the outer operation may commit the accepted cursors after its last
+/// successful check; rejected samples stay in the separate observation ledgers.
+pub(super) fn check_registered<'o, 'p, 'v>(
+    root: &clock::RegisteredArtifactRoot<'o, 'p, 'v>,
+    pair: clock::RegisteredPair<'o, 'p, 'v>,
+    ports: &mut clock::CurrentPorts<'_, '_, '_, '_, '_>,
+    view: &'v ResourceReservationView<'_>,
+) -> Result<[u64; 2], clock::Error> {
+    root.artifact.check(view)?;
+    root.check_occurrences(pair, view)?;
+    let owners = pair.actual();
+    if std::ptr::eq(owners.baseline, owners.candidate) {
+        return Err(clock::ClockFault::BindingMismatch.into());
+    }
+    let base = ports.baseline_probe;
+    let next = ports.candidate_probe;
+    fields(&base)?;
+    fields(&next)?;
+    binds(root.before.actual(), owners.baseline, &base, root.plan())?;
+    binds(root.expected.actual(), owners.candidate, &next, root.plan())?;
+    port(root.before.actual(), ports.baseline_build, view)?;
+    port(root.expected.actual(), ports.candidate_build, view)?;
+
+    let before = [
+        pair.baseline.check_invocation_current(root.plan(), base, view)?,
+        pair.candidate.check_invocation_current(root.plan(), next, view)?,
+    ];
+    if before.iter().zip(root.artifact.epochs.get()).any(|(now, floor)| *now < floor) {
+        return Err(clock::ClockFault::ClockRollback.into());
+    }
+    pair.baseline.check_artifact_current(root.plan(), base, view)?;
+    pair.candidate.check_artifact_current(root.plan(), next, view)?;
+    physical_root(&base, root.before.actual().root())?;
+    physical_root(&next, root.expected.actual().root())?;
+    capture_registered(root.baseline, root.before, ports.baseline_build, view)?;
+    capture_registered(root.candidate, root.expected, ports.candidate_build, view)?;
+    root.artifact.check(view)?;
+    let after = [
+        pair.baseline.check_invocation_current(root.plan(), base, view)?,
+        pair.candidate.check_invocation_current(root.plan(), next, view)?,
+    ];
+    if after.iter().zip(before).any(|(end, start)| *end < start) {
+        return Err(clock::ClockFault::ClockRollback.into());
+    }
+    root.check_occurrences(pair, view)?;
+    root.artifact.check(view)?;
+    Ok(after)
+}
+
+fn capture_registered<'o, 'p, 'v>(
+    session: &clock::RoleSession<'o, 'p, 'v>,
+    origin: &clock::RegisteredCapture<'o, 'p, 'v>,
+    port: &mut CodingBuildPort<'_, '_>, view: &'v ResourceReservationView<'_>,
+) -> Result<(), clock::Error> {
+    let attempt = session.capture_current(port, view);
+    let captured = attempt.current()?;
+    if !std::ptr::eq(captured.session(), session) {
+        return Err(clock::ClockFault::BindingMismatch.into());
+    }
+    match_capture(origin.actual(), captured.actual(), view)?;
+    Ok(())
+}
+

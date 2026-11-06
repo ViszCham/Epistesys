@@ -587,6 +587,26 @@ fn observe_cargo_validation_io(
         return Err(Error::StaleInput);
     }
     let manifest_text = manifest.to_str().ok_or(Error::UnsafePath)?;
+    // Keep the checked file identity; only Cargo's Windows argv spelling changes.
+    #[cfg(windows)]
+    let manifest_text = match manifest.components().next() {
+        Some(Component::Prefix(prefix))
+            if matches!(prefix.kind(), std::path::Prefix::VerbatimDisk(_)) =>
+        {
+            let ordinary = manifest_text
+                .strip_prefix(r"\\?\")
+                .ok_or(Error::UnsafePath)?;
+            if Path::new(ordinary)
+                .canonicalize()
+                .map_err(|_| Error::UnsafePath)?
+                != manifest
+            {
+                return Err(Error::UnsafePath);
+            }
+            ordinary
+        }
+        _ => manifest_text,
+    };
     let metadata_observation = if let Some(spec) = &plan.connection {
         let metadata_remaining_ms = timeout_ms
             .checked_sub(start.elapsed().as_millis().min(u128::from(u64::MAX)) as u64)

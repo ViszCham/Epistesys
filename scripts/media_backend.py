@@ -8,17 +8,20 @@ media and never emits identity, emotion, intent, or mental-state claims.
 from __future__ import annotations
 
 import argparse
+import contextlib
+from fractions import Fraction
 import hashlib
 import importlib.metadata
 import json
 import math
 import os
 import re
+import stat
 import time
 import subprocess
 import tempfile
 import wave
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 SCHEMA = "lc631-media-backend.v1"
@@ -288,6 +291,7 @@ def add_observation(
     end_ms: int,
     label: str,
     track_id: int | None = None,
+    *, temporal_overlap: dict[str, Any] | None = None,
 ) -> None:
     if len(observations) >= MAX_OBSERVATIONS:
         raise RuntimeError("observation budget exceeded; coverage incomplete")
@@ -303,6 +307,8 @@ def add_observation(
         "label_truncated": truncated,
         "original_label_bytes": len(label_bytes),
     }
+    if temporal_overlap is not None:
+        basis["temporal_overlap"] = temporal_overlap
     digest = canonical_digest(basis)
     observations.append(
         {
@@ -443,7 +449,7 @@ def extract_media(ffmpeg: Path, media: Path, root: Path, diagnostics: list[str])
               "-i", str(media)]
     try:
         _run_binary_bounded(
-            common + ["-vf", "fps=2,scale=640:640:force_original_aspect_ratio=decrease",
+            common + ["-map", "0:v:0", "-vf", "setpts=PTS-STARTPTS,fps=2:start_time=0,scale=640:640:force_original_aspect_ratio=decrease",
                       "-frames:v", str(MAX_FRAMES), "-pix_fmt", "rgb24",
                       "-vcodec", "ppm", "-f", "image2pipe", "pipe:1"],
             180, MAX_FRAMES * _PpmFrames.MAX_FRAME_BYTES, stdout_sink=frames,
@@ -458,8 +464,8 @@ def extract_media(ffmpeg: Path, media: Path, root: Path, diagnostics: list[str])
     audio = _PcmAudio(arena, MAX_PCM_SAMPLES)
     try:
         _run_binary_bounded(
-            common + ["-vn", "-ac", "1", "-ar", "16000", "-af",
-                      f"atrim=end_sample={MAX_PCM_SAMPLES}", "-t", str(MAX_PCM_SAMPLES / 16000),
+            common + ["-map", "0:a:0", "-vn", "-ac", "1", "-ar", "16000", "-af",
+                      f"asetpts=PTS-STARTPTS,aresample=16000:async=1:first_pts=0,atrim=end_sample={MAX_PCM_SAMPLES}", "-t", str(MAX_PCM_SAMPLES / 16000),
                       "-c:a", "pcm_s16le", "-f", "s16le", "pipe:1"],
             180, MAX_PCM_SAMPLES * 2, stdout_sink=audio,
         )
@@ -552,28 +558,338 @@ def analyze_vision(
         previous_hist = hist
 
 
+
+def _model_identity(info: os.stat_result) -> tuple[int, int]:
+    return info.st_dev, info.st_ino
+
+
+def _reject_model_link(path: Path) -> os.stat_result:
+    info = path.lstat()
+    if stat.S_ISLNK(info.st_mode) or getattr(info, "st_file_attributes", 0) & 0x400:
+        raise ValueError("linked model path is not admitted")
+    return info
+
+
+@contextlib.contextmanager
+def _windows_model_path(path: Path, *, directory: bool):
+    """Pin each directory against rename and open a non-reparse leaf."""
+    import ctypes
+    import msvcrt
+    from ctypes import wintypes
+
+    class FileInfo(ctypes.Structure):
+        _fields_ = [
+            ("attributes", wintypes.DWORD),
+            ("created", wintypes.FILETIME), ("accessed", wintypes.FILETIME),
+            ("written", wintypes.FILETIME), ("volume", wintypes.DWORD),
+            ("size_high", wintypes.DWORD), ("size_low", wintypes.DWORD),
+            ("links", wintypes.DWORD), ("index_high", wintypes.DWORD),
+            ("index_low", wintypes.DWORD),
+        ]
+
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    create = kernel.CreateFileW
+    create.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
+                       ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE]
+    create.restype = wintypes.HANDLE
+    query = kernel.GetFileInformationByHandle
+    query.argtypes = [wintypes.HANDLE, ctypes.POINTER(FileInfo)]
+    query.restype = wintypes.BOOL
+    close = kernel.CloseHandle
+    close.argtypes = [wintypes.HANDLE]
+    close.restype = wintypes.BOOL
+    handles = []
+    try:
+        directories = [*reversed(path.parents), path] if directory else [*reversed(path.parent.parents), path.parent]
+        for parent in directories:
+            handle = create(str(parent), 0x80, 3, None, 3, 0x02200000, None)
+            if handle == ctypes.c_void_p(-1).value:
+                raise ctypes.WinError(ctypes.get_last_error())
+            handles.append(handle)
+            info = FileInfo()
+            if not query(handle, ctypes.byref(info)):
+                raise ctypes.WinError(ctypes.get_last_error())
+            if info.attributes & 0x400 or not info.attributes & 0x10:
+                raise ValueError("model ancestor is not a regular directory")
+        if directory:
+            yield None
+        else:
+            handle = create(str(path), 0x80000000, 1, None, 3, 0x00200000, None)
+            if handle == ctypes.c_void_p(-1).value:
+                raise ctypes.WinError(ctypes.get_last_error())
+            handles.append(handle)
+            info = FileInfo()
+            if not query(handle, ctypes.byref(info)):
+                raise ctypes.WinError(ctypes.get_last_error())
+            if info.attributes & (0x400 | 0x10):
+                raise ValueError("model leaf is not a regular file")
+            fd = msvcrt.open_osfhandle(int(handle), os.O_RDONLY | os.O_BINARY)
+            handles.pop()  # The file object now owns this actual handle.
+            try:
+                stream = os.fdopen(fd, "rb", buffering=0)
+            except BaseException:
+                os.close(fd)
+                raise
+            with stream:
+                yield stream
+    finally:
+        for handle in reversed(handles):
+            close(handle)
+
+
+class _ModelRoot:
+    """Bounded local read capsule; the admitted snapshot is not an OS sandbox."""
+    def __init__(self, root: Path):
+        self.configured_root = Path(os.path.abspath(root))
+        if (len(str(self.configured_root).encode("utf-8")) > 4096
+                or len(self.configured_root.parts) > 64):
+            raise ResourceBudgetExceeded("model root path budget exceeded")
+        self.configured_identity = _model_identity(self.configured_root.lstat())
+        self.root = self.configured_root.resolve(strict=True)
+        if len(str(self.root).encode("utf-8")) > 4096 or len(self.root.parts) > 64:
+            raise ResourceBudgetExceeded("resolved model root path budget exceeded")
+        self.fd: int | None = None
+        self.windows_guard: Any = None
+        self.identity: tuple[int, int] | None = None
+
+    def __enter__(self):
+        initial = _reject_model_link(self.root)
+        if not stat.S_ISDIR(initial.st_mode):
+            raise ValueError("model root is not a directory")
+        if os.name == "nt":
+            self.windows_guard = _windows_model_path(self.root, directory=True)
+            self.windows_guard.__enter__()
+        else:
+            flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_NONBLOCK
+            current = os.open(self.root.anchor, flags)
+            try:
+                for component in self.root.parts[1:]:
+                    child = os.open(component, flags, dir_fd=current)
+                    os.close(current)
+                    current = child
+                self.fd = current
+            except BaseException:
+                os.close(current)
+                raise
+        try:
+            self.identity = _model_identity(initial)
+            self.check()
+            return self
+        except BaseException:
+            self.__exit__(None, None, None)
+            raise
+
+    def check(self) -> None:
+        if (self.configured_identity != _model_identity(self.configured_root.lstat())
+                or self.configured_root.resolve(strict=True) != self.root):
+            raise ValueError("configured model root occurrence changed")
+        named = _reject_model_link(self.root)
+        if self.identity != _model_identity(named):
+            raise ValueError("model root occurrence changed")
+        if self.fd is not None and self.identity != _model_identity(os.fstat(self.fd)):
+            raise ValueError("model root handle changed")
+
+    @contextlib.contextmanager
+    def open_regular(self, relative: Path):
+        if relative.is_absolute() or any(p in ("", ".", "..") for p in relative.parts):
+            raise ValueError("invalid model member path")
+        self.check()
+        if os.name == "nt":
+            with _windows_model_path(self.root / relative, directory=False) as stream:
+                yield stream
+        else:
+            directory = os.dup(self.fd)
+            fd = None
+            try:
+                flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_NONBLOCK
+                for component in relative.parts[:-1]:
+                    child = os.open(component, flags, dir_fd=directory)
+                    os.close(directory)
+                    directory = child
+                fd = os.open(relative.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+                             dir_fd=directory)
+                with os.fdopen(fd, "rb", buffering=0) as stream:
+                    fd = None
+                    yield stream
+            finally:
+                if fd is not None:
+                    os.close(fd)
+                os.close(directory)
+        self.check()
+
+    def __exit__(self, *_args):
+        if self.fd is not None:
+            os.close(self.fd)
+            self.fd = None
+        if self.windows_guard is not None:
+            self.windows_guard.__exit__(None, None, None)
+            self.windows_guard = None
+
+
+def _model_selection() -> tuple[str | None, str | None, str | None]:
+    root_pin = os.environ.get("LC631_MEDIA_MODEL_ROOT_SHA256")
+    relative = os.environ.get("LC631_MEDIA_ASR_DIRECTORY")
+    subtree_pin = os.environ.get("LC631_MEDIA_ASR_SUBTREE_SHA256")
+    for digest in (root_pin, subtree_pin):
+        if digest is not None and re.fullmatch(r"sha256:[0-9a-f]{64}", digest) is None:
+            raise ValueError("malformed registered model digest")
+    if (relative is None) != (subtree_pin is None) or (relative is not None and root_pin is None):
+        raise ValueError("model occurrence registration requires root, directory and subtree")
+    if relative is not None:
+        normalized = PurePosixPath(relative)
+        if (not relative or len(relative.encode("utf-8")) > 4096
+                or any(c in relative for c in ("\\", ":", "\0"))
+                or normalized.is_absolute() or ".." in normalized.parts
+                or normalized.as_posix() != relative):
+            raise ValueError("noncanonical registered model directory")
+    return root_pin, relative, subtree_pin
+
+
+def _manifest_rows_digest(rows: list[list[Any]]) -> str:
+    digest = hashlib.sha256(b"lc631-directory-manifest.v3\0")
+    encoder = json.JSONEncoder(ensure_ascii=False, separators=(",", ":"))
+    for part in encoder.iterencode(rows):
+        digest.update(part.encode("utf-8"))
+    return "sha256:" + digest.hexdigest()
+
+
+@contextlib.contextmanager
+def _admitted_asr_snapshot(
+    model_cache: Path, temporary_root: Path | None, remaining_temp_bytes: int,
+):
+    root_pin, requested, subtree_pin = _model_selection()
+    if type(remaining_temp_bytes) is not int or not 0 < remaining_temp_bytes <= MAX_TEMP_BYTES:
+        raise ResourceBudgetExceeded("invalid model snapshot budget")
+    deadline = time.monotonic() + 1800
+    with _ModelRoot(model_cache) as root:
+        files = _bounded_files(root.root, max_entries=MAX_MODEL_ENTRIES,
+                               max_metadata_bytes=MAX_MODEL_METADATA_BYTES, deadline=deadline)
+        root.check()
+        candidates = {p.parent.relative_to(root.root).as_posix()
+                      for p in files if p.name == "model.bin"
+                      or (os.name == "nt" and p.name.casefold() == "model.bin")}
+        if requested is None:
+            if len(candidates) > 1:
+                raise ValueError("ambiguous local ASR model occurrence")
+            selected = next(iter(candidates), None)
+        else:
+            if requested not in candidates:
+                raise ValueError("registered ASR model occurrence missing")
+            selected = requested
+        if selected is None:
+            yield None
+            return
+        # A lone root model.bin preserves the existing single-file profile.
+        # Additional root payload requires an exact explicit occurrence.
+        if selected == "." and requested is None and len(files) > 1:
+            raise ValueError("cache-root ASR model requires explicit occurrence registration")
+        root_rows: list[list[Any]] = []
+        subtree_rows: list[list[Any]] = []
+        observed_total = copied = 0
+        with tempfile.TemporaryDirectory(prefix="asr-admitted-", dir=temporary_root) as folder:
+            staged = Path(folder)
+            for path in files:
+                if time.monotonic() >= deadline:
+                    raise ResourceBudgetExceeded("model snapshot deadline exceeded")
+                relative = path.relative_to(root.root)
+                try:
+                    member = relative.relative_to(Path(selected))
+                except ValueError:
+                    member = None
+                with root.open_regular(relative) as stream:
+                    before = os.fstat(stream.fileno())
+                    if not stat.S_ISREG(before.st_mode):
+                        raise ValueError("model member is not a regular file")
+                    limit = min(MAX_MODEL_FILE_BYTES, MAX_MODEL_TOTAL_BYTES - observed_total)
+                    if member is not None:
+                        limit = min(limit, remaining_temp_bytes - copied)
+                    if before.st_size > limit:
+                        raise ResourceBudgetExceeded("model snapshot byte budget exceeded before read")
+                    output = None
+                    try:
+                        if member is not None:
+                            destination = staged / member
+                            destination.parent.mkdir(parents=True, exist_ok=True)
+                            output = destination.open("xb", buffering=0)
+                        digest = hashlib.sha256()
+                        length = 0
+                        while True:
+                            if time.monotonic() >= deadline:
+                                raise ResourceBudgetExceeded("model snapshot deadline exceeded")
+                            block = stream.read(min(65536, limit - length + 1))
+                            if not block:
+                                break
+                            length += len(block)
+                            if length > before.st_size or length > limit:
+                                raise ResourceBudgetExceeded("model member grew during snapshot")
+                            if output is not None:
+                                offset = 0
+                                while offset < len(block):
+                                    count = output.write(block[offset:])
+                                    if count is None or count <= 0:
+                                        raise OSError("model snapshot short write")
+                                    offset += count
+                            digest.update(block)
+                        after = os.fstat(stream.fileno())
+                        if (length != before.st_size or _model_identity(before) != _model_identity(after)
+                                or (before.st_size, before.st_mtime_ns, before.st_ctime_ns)
+                                != (after.st_size, after.st_mtime_ns, after.st_ctime_ns)):
+                            raise ValueError("model member changed during snapshot")
+                    finally:
+                        if output is not None:
+                            output.close()
+                value = "sha256:" + digest.hexdigest()
+                observed_total += length
+                root_rows.append([relative.as_posix(), length, value])
+                if member is not None:
+                    copied += length
+                    subtree_rows.append([member.as_posix(), length, value])
+            admitted_root = _manifest_rows_digest(root_rows)
+            admitted_subtree = _manifest_rows_digest(subtree_rows)
+            if root_pin is not None and admitted_root != root_pin:
+                raise ValueError("registered model root digest mismatch")
+            if subtree_pin is not None and admitted_subtree != subtree_pin:
+                raise ValueError("registered model subtree digest mismatch")
+            root.check()
+            yield staged, admitted_root, admitted_subtree, selected
+            root.check()
+
 def analyze_asr(
     audio: Path | None,
     model_cache: Path,
     observations: list[dict[str, Any]],
     executed: set[str],
     diagnostics: list[str],
+    *,
+    temporary_root: Path | None = None,
+    remaining_temp_bytes: int | None = None,
+    admission: dict[str, str] | None = None,
 ) -> str:
     if audio is None:
         return "asr-not-executed"
-    try:
-        from faster_whisper import WhisperModel
-    except Exception as error:  # pragma: no cover - diagnostics boundary
-        diagnostics.append(f"faster_whisper_import_failed:{type(error).__name__}")
-        return "asr-import-failed"
-    model_candidates = sorted(
-        path.parent for path in model_cache.rglob("model.bin") if path.is_file()
-    )
-    if not model_candidates:
-        diagnostics.append("asr_local_model_cache_missing")
-        return "asr-local-model-unavailable"
-    model_path = model_candidates[0]
-    model_id = f"local:{tree_manifest_digest(model_path, max_entries=MAX_MODEL_ENTRIES, max_file_bytes=MAX_MODEL_FILE_BYTES, max_total_bytes=MAX_MODEL_TOTAL_BYTES, max_metadata_bytes=MAX_MODEL_METADATA_BYTES)}"
+    remaining = MAX_TEMP_BYTES if remaining_temp_bytes is None else remaining_temp_bytes
+    with _admitted_asr_snapshot(model_cache, temporary_root, remaining) as checked:
+        if checked is None:
+            diagnostics.append("asr_local_model_cache_missing")
+            return "asr-local-model-unavailable"
+        staged, root_digest, subtree_digest, relative = checked
+        if admission is not None:
+            admission.update(root=root_digest, subtree=subtree_digest, relative_directory=relative)
+        # Import can initialize an opaque backend, so admission precedes it too.
+        try:
+            from faster_whisper import WhisperModel
+        except Exception as error:  # pragma: no cover - diagnostic boundary
+            diagnostics.append(f"faster_whisper_import_failed:{type(error).__name__}")
+            return "asr-import-failed"
+        return _transcribe_admitted_asr(audio, staged, subtree_digest, WhisperModel,
+                                      observations, executed, diagnostics)
+
+
+def _transcribe_admitted_asr(
+    audio: Path, model_path: Path, subtree_digest: str, WhisperModel: Any,
+    observations: list[dict[str, Any]], executed: set[str], diagnostics: list[str],
+) -> str:
+    model_id = f"local:{subtree_digest}"
     selected_device = "cpu"
     try:
         model = WhisperModel(
@@ -784,6 +1100,81 @@ def configure_worker_resource_limits() -> dict[str, Any]:
     }
 
 
+
+def _sampled_clock(probe: dict[str, Any]) -> tuple[str, int] | None:
+    """Common origin of the explicitly mapped audio/video streams, in this bounded profile."""
+    streams = probe.get("streams", [])
+    if not isinstance(streams, list) or any(not isinstance(s, dict) for s in streams):
+        return None
+    selected = [next((s for s in streams if s.get("codec_type") == kind), None)
+                for kind in ("video", "audio")]
+    if any(s is None for s in selected):
+        return None
+    disposition = selected[0].get("disposition", {})
+    if not isinstance(disposition, dict) or disposition.get("attached_pic", 0):
+        return None
+    def integer(value: Any) -> bool:
+        return type(value) is int and -(1 << 63) <= value < (1 << 63)
+    bases = []
+    for stream in selected:
+        ratio = stream.get("time_base")
+        if (not isinstance(ratio, str) or not re.fullmatch(r"[1-9][0-9]{0,9}/[1-9][0-9]{0,9}", ratio)
+                or not integer(stream.get("start_pts")) or not integer(stream.get("index"))
+                or stream["index"] < 0):
+            return None
+        numerator, denominator = map(int, ratio.split("/"))
+        bases.append(Fraction(numerator, denominator))
+    origins = [s["start_pts"] * base for s, base in zip(selected, bases)]
+    duration = selected[0].get("duration_ts")
+    if origins[0] != origins[1] or not integer(duration) or duration <= 0:
+        return None
+    exact_duration_ms = duration * bases[0] * 1000
+    if exact_duration_ms.denominator != 1:
+        return None
+    video_ms = exact_duration_ms.numerator
+    if not 0 < video_ms < (1 << 63):
+        return None
+    return (canonical_digest({"profile": "ffmpeg-shared-origin-fps2-v1",
+                              "video": selected[0]["index"], "audio": selected[1]["index"],
+                              "origin": [origins[0].numerator, origins[0].denominator]}), video_ms)
+
+
+def _observe_temporal_intersections(
+    frames: list[Path], pcm_end_ms: int, probe: dict[str, Any],
+    observations: list[dict[str, Any]], executed: set[str], diagnostics: list[str],
+) -> None:
+    if not frames or pcm_end_ms <= 0:
+        return
+    calibration = _sampled_clock(probe)
+    if calibration is None:
+        diagnostics.append("temporal_co_presence_unavailable:shared_stream_origin_or_extent_missing")
+        return
+    clock, video_end_ms = calibration
+    frame_digests: dict[int, str] = {}
+    transcripts = [item for item in observations if item["kind"] == "transcript_candidate"]
+    for transcript in transcripts:
+        start = transcript["start_ms"]
+        end = min(transcript["end_ms"], pcm_end_ms, video_end_ms)
+        if start < 0 or end <= start:
+            continue
+        for index in range(start // 500, min(len(frames), (end + 499) // 500)):
+            frame_start = index * 500
+            frame_end = min(frame_start + 500, video_end_ms)
+            lo, hi = max(start, frame_start), min(end, frame_end)
+            if lo >= hi:
+                continue
+            if index not in frame_digests:
+                frame_digests[index] = sha256_file(frames[index], max_bytes=_PpmFrames.MAX_FRAME_BYTES)
+            witness = {"profile": "ffmpeg-shared-origin-fps2-v1", "clock_digest": clock,
+                       "transcript_id": transcript["observation_id"],
+                       "frame_index": index, "frame_digest": frame_digests[index],
+                       "frame_start_ms": frame_start, "frame_end_ms": frame_end,
+                       "pcm_end_ms": pcm_end_ms}
+            add_observation(observations, "temporal_co_presence_candidate", lo, hi,
+                            "overlap of sampled decode and transcript intervals; meaning unverified",
+                            temporal_overlap=witness)
+            executed.add("temporal_co_presence")
+
 def main() -> int:
     global MAX_FRAMES, MAX_OBSERVATIONS, MAX_TEMP_BYTES, MAX_PCM_SAMPLES
     global MAX_MODEL_ENTRIES, MAX_MODEL_FILE_BYTES, MAX_MODEL_TOTAL_BYTES, MAX_MODEL_METADATA_BYTES
@@ -840,23 +1231,23 @@ def main() -> int:
         frames, audio = extract_media(ffmpeg, media, Path(temporary), diagnostics)
         if tree_size(Path(temporary)) > MAX_TEMP_BYTES:
             raise RuntimeError("temporary decode budget exceeded")
+        pcm_end_ms = 0
         if audio is not None:
             with wave.open(str(audio), "rb") as stream:
                 if stream.getnframes() * stream.getnchannels() > MAX_PCM_SAMPLES:
                     raise RuntimeError("PCM sample budget exceeded before ASR")
+                pcm_end_ms = stream.getnframes() * 1000 // stream.getframerate()
         diagnostics.append("coverage_bounded_by_frame_pcm_and_temporary_budgets")
         analyze_vision(frames, observations, executed, diagnostics)
-        asr_revision = analyze_asr(audio, args.model_cache, observations, executed, diagnostics)
+        asr_admission: dict[str, str] = {}
+        asr_revision = analyze_asr(
+            audio, args.model_cache, observations, executed, diagnostics,
+            temporary_root=Path(temporary),
+            remaining_temp_bytes=MAX_TEMP_BYTES - tree_size(Path(temporary)),
+            admission=asr_admission,
+        )
         analyze_diarization(audio, observations, executed, diagnostics)
-        if any(item["kind"] == "transcript_candidate" for item in observations) and frames:
-            executed.add("temporal_co_presence")
-            add_observation(
-                observations,
-                "temporal_co_presence_candidate",
-                0,
-                0,
-                "audio-video temporal co-presence candidate; semantic alignment unverified",
-            )
+        _observe_temporal_intersections(frames, pcm_end_ms, probe, observations, executed, diagnostics)
 
     versions = {
         "opencv-python-headless": package_version("opencv-python-headless"),
@@ -871,10 +1262,11 @@ def main() -> int:
         "backend_id": "lc631-local-ffmpeg-opencv-whisper-anonymous-diarization",
         "backend_version": backend_version,
         "model_revision": asr_revision,
-        "model_cache_manifest_sha256": tree_manifest_digest(
+        "model_cache_manifest_sha256": asr_admission.get("root") or tree_manifest_digest(
             args.model_cache, max_entries=MAX_MODEL_ENTRIES,
             max_file_bytes=MAX_MODEL_FILE_BYTES, max_total_bytes=MAX_MODEL_TOTAL_BYTES,
             max_metadata_bytes=MAX_MODEL_METADATA_BYTES),
+        "asr_model_admission": asr_admission,
         "model_card_license_hint": model_card_license_hint(
             args.model_cache, max_file_bytes=65_536, max_total_bytes=1024 * 1024),
         "executed_families": sorted(executed),

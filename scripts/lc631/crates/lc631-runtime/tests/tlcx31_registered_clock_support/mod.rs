@@ -23,7 +23,7 @@ use std::{
     io::Write,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 pub fn d(n: u8) -> Digest32 {
     Digest32::from_bytes([n; 32])
@@ -187,6 +187,91 @@ impl Clocks {
             .sum()
     }
 }
+
+// Passive fixture diagnostics: no clock sample or authority callback is invoked.
+// libtest captures these bounded messages and displays them when a case fails.
+struct FixtureDiagnostics {
+    started: Instant,
+    previous: Instant,
+}
+impl FixtureDiagnostics {
+    fn new() -> Self {
+        let now = Instant::now();
+        Self { started: now, previous: now }
+    }
+    fn stage(&mut self, name: &'static str) {
+        let now = Instant::now();
+        eprintln!(
+            "registered-clock setup stage={name} elapsed={:?} total={:?}",
+            now.duration_since(self.previous), now.duration_since(self.started),
+        );
+        self.previous = now;
+    }
+}
+
+pub struct NativeDiagnostics {
+    started: Instant,
+    remaining_before: Result<Duration, ResourceError>,
+    calls_before: [usize; 5],
+}
+impl NativeDiagnostics {
+    fn calls(clocks: &Clocks, registry: &Registry) -> [usize; 5] {
+        [
+            registry.calls.load(std::sync::atomic::Ordering::SeqCst),
+            clocks.be.calls(), clocks.bc.calls(), clocks.ce.calls(), clocks.cc.calls(),
+        ]
+    }
+    fn start(view: &ResourceReservationView<'_>, clocks: &Clocks, registry: &Registry) -> Self {
+        Self {
+            started: Instant::now(),
+            remaining_before: view.remaining(),
+            calls_before: Self::calls(clocks, registry),
+        }
+    }
+    fn report(
+        self, stage: &'static str, error: &c::Error,
+        session: &c::RoleSession<'_, '_, '_>, view: &ResourceReservationView<'_>,
+        clocks: &Clocks, registry: &Registry, marker: Option<&Path>,
+    ) {
+        let marker = marker.map(|path| std::fs::symlink_metadata(path)
+            .map(|m| (m.is_file(), m.file_type().is_symlink(), m.len()))
+            .map_err(|error| error.kind()));
+        let error = format!("{error:?}").chars().take(256).collect::<String>();
+        eprintln!(
+            "registered-clock native stage={stage} elapsed={:?} error={error} remaining_before={:?} remaining_after={:?} calls_before={:?} calls_after={:?} marker_metadata={marker:?}",
+            self.started.elapsed(), self.remaining_before, view.remaining(),
+            self.calls_before, Self::calls(clocks, registry),
+        );
+        let inspected = session.with_native_failure(|history| {
+            let Some(history) = history else {
+                eprintln!("registered-clock native stage={stage} history=none");
+                return;
+            };
+            let cause = format!("{:?}", history.cause()).chars().take(256).collect::<String>();
+            eprintln!(
+                "registered-clock native stage={stage} cause={cause} entered_lower={} process_present={} parsed_outputs={:?}",
+                history.lower_dispatch_entered(), history.process().is_some(), history.parsed_outputs(),
+            );
+            if let Some(process) = history.process() {
+                let report = process.reported();
+                let pin = report.executable_sha256.as_deref()
+                    .map(|s| s.chars().take(80).collect::<String>());
+                eprintln!(
+                    "registered-clock native stage={stage} state={:?} exit={:?} timed_out={} diagnostic_present={} stdout_bytes={} stderr_bytes={} truncated={:?} kill_attempted={} kill_verified={} executable_pin={pin:?}",
+                    report.state, report.exit_code, report.timed_out, report.diagnostic.is_some(),
+                    process.stdout().len(), process.stderr().len(),
+                    (report.stdout_truncated, report.stderr_truncated),
+                    report.process_tree_kill_attempted, report.process_tree_kill_verified,
+                );
+            }
+        });
+        if let Err(error) = inspected {
+            let error = format!("{error:?}").chars().take(256).collect::<String>();
+            eprintln!("registered-clock native stage={stage} history_unavailable={error}");
+        }
+    }
+}
+
 pub fn resources(
     f: impl for<'v, 'lease> FnOnce(&'v ResourceReservationView<'lease>, &Cancellation),
 ) {
@@ -240,6 +325,75 @@ pub fn full(
         &'v ResourceReservationView<'lease>,
     ),
 ) {
+    full_staged(false, NativeBirthProfile::Default5s, |_| {}, f);
+}
+
+/// The same registered fixture stopped immediately before its first native
+/// child. The birth-only executable records each start in its own root.
+pub struct NativeBirth<'o, 'p, 'v, 'lease> {
+    pub session: &'o c::RoleSession<'o, 'p, 'v>,
+    pub origin: &'o c::RegisteredCapture<'o, 'p, 'v>,
+    pub plan: &'o CodingProbePlan,
+    pub input: c::ProbeInputs<'o>,
+    pub clocks: &'o Clocks,
+    pub registry: &'o Registry,
+    pub marker: &'o Path,
+    pub view: &'v ResourceReservationView<'lease>,
+}
+impl NativeBirth<'_, '_, '_, '_> {
+    pub fn native_diagnostic(&self) -> NativeDiagnostics {
+        NativeDiagnostics::start(self.view, self.clocks, self.registry)
+    }
+    pub fn report_native_diagnostic(
+        &self, stage: &'static str, diagnostic: NativeDiagnostics, error: &c::Error,
+    ) {
+        diagnostic.report(
+            stage, error, self.session, self.view, self.clocks, self.registry, Some(self.marker),
+        );
+    }
+}
+
+pub fn at_native_birth(
+    inspect: impl for<'o, 'p, 'v, 'lease> FnOnce(NativeBirth<'o, 'p, 'v, 'lease>),
+) {
+    full_staged(true, NativeBirthProfile::Default5s, inspect, |_, _, _, _, _, _, _, _, _| {
+        unreachable!("the birth-only fixture returns before constructing the pair")
+    });
+}
+
+/// Explicit supplemental positive profile; the original five-second paths stay fixed.
+pub fn at_native_birth_supplemental_30s(
+    inspect: impl for<'o, 'p, 'v, 'lease> FnOnce(NativeBirth<'o, 'p, 'v, 'lease>),
+) {
+    full_staged(true, NativeBirthProfile::Supplemental30s, inspect, |_, _, _, _, _, _, _, _, _| {
+        unreachable!("the supplemental birth-only fixture returns before constructing the pair")
+    });
+}
+
+#[derive(Clone, Copy)]
+enum NativeBirthProfile {
+    Default5s,
+    Supplemental30s,
+}
+
+fn full_staged(
+    birth_only: bool,
+    native_profile: NativeBirthProfile,
+    inspect: impl for<'o, 'p, 'v, 'lease> FnOnce(NativeBirth<'o, 'p, 'v, 'lease>),
+    f: impl for<'v, 'lease, 'p, 'o, 'bi, 'br, 'ci, 'cr> FnOnce(
+        &c::Profile<'v>,
+        &c::RegisteredArtifactRoot<'o, 'p, 'v>,
+        c::RegisteredPair<'o, 'p, 'v>,
+        &mut c::CurrentPorts<'o, 'bi, 'br, 'ci, 'cr>,
+        &Clocks,
+        &Arc<Registry>,
+        &c::RoleSession<'o, 'p, 'v>,
+        &c::RoleSession<'o, 'p, 'v>,
+        &'v ResourceReservationView<'lease>,
+    ),
+) {
+    assert!(birth_only || matches!(native_profile, NativeBirthProfile::Default5s));
+    let mut diagnostics = FixtureDiagnostics::new();
     // New own roots only. Actual compile/native/capture happens only when central
     // selects this target; current source has no registered factory implementation.
     let entry = |s: &str| {
@@ -251,11 +405,26 @@ pub fn full(
         &entry(&native::BEFORE.replace("{None}", "{Some(a.wrapping_add(b))}")),
     );
     let cr = root("next", &entry(native::AFTER));
+    let marker = br.join("registered-native-starts.marker");
+    if birth_only {
+        let path = br.join("src/lib.rs");
+        let source = std::fs::read_to_string(&path).unwrap();
+        let marked = format!(
+            "fn main(){{{{use std::io::Write;std::fs::OpenOptions::new().create(true).append(true).open({:?}).unwrap().write_all(b\"X\").unwrap();}}",
+            marker.to_str().unwrap()
+        );
+        let source_with_marker = source.replacen("fn main(){", &marked, 1);
+        assert_ne!(source, source_with_marker);
+        std::fs::write(path, source_with_marker).unwrap();
+    }
     let bb = br.join(format!("base{}", std::env::consts::EXE_SUFFIX));
     let cb = cr.join(format!("next{}", std::env::consts::EXE_SUFFIX));
     assert!(!bb.exists() && !cb.exists());
+    diagnostics.stage("roots_and_marker_source_ready");
     native::compile_native(&br.join("src/lib.rs"), &bb);
+    diagnostics.stage("baseline_compiled");
     native::compile_native(&cr.join("src/lib.rs"), &cb);
+    diagnostics.stage("candidate_compiled");
     let pipeline = build_dgcl_pipeline(
         native::SOURCE,
         DgclBackendSet {
@@ -264,6 +433,7 @@ pub fn full(
         },
     )
     .unwrap();
+    diagnostics.stage("pipeline_ready");
     let scope = ContextScope::declared(d(21), d(22), d(23), d(24));
     let plan = CodingProbePlan::checked_add(scope.goal(), scope.semantics()).unwrap();
     let native_issuer =
@@ -300,6 +470,7 @@ pub fn full(
             q(ResourceKind::Cleanup, 2),
         ])
         .unwrap();
+    diagnostics.stage("shared_run_reserved");
     {
         let view = r.lease();
         let registry = Registry::new();
@@ -343,6 +514,7 @@ pub fn full(
             )
             .unwrap()
         };
+        diagnostics.stage("metadata_snapshots_ready");
         let be = c::EndpointCandidate::execution(
             &p,
             bind(
@@ -406,6 +578,7 @@ pub fn full(
         let bc = c::register(&p, bc, bcr, registry.clone(), &view).unwrap();
         let ce = c::register(&p, ce, cer, registry.clone(), &view).unwrap();
         let cc = c::register(&p, cc, ccr, registry.clone(), &view).unwrap();
+        diagnostics.stage("clock_endpoints_registered");
         let parse = |s: &str| declared_capture_digest(s).unwrap();
         let pg = parse(&pipeline.program_ir.program_digest);
         let pl = parse(&pipeline.completion_plan.plan_digest);
@@ -443,6 +616,7 @@ pub fn full(
         .unwrap();
         let bsession = c::RoleSession::bind(&p, &be, &bc, &bbinding, &plan, &view).unwrap();
         let csession = c::RoleSession::bind(&p, &ce, &cc, &cbinding, &plan, &view).unwrap();
+        diagnostics.stage("role_sessions_bound");
         let mut bp = CodingBuildPort::checked(
             &br,
             native::SOURCE,
@@ -465,6 +639,7 @@ pub fn full(
         .unwrap();
         let before = bsession.capture_before(&mut bp, &view);
         let expected = csession.capture_before(&mut cp, &view);
+        diagnostics.stage("actual_before_captures_returned");
         let bnf = native::NativeProbeFixture::registered(
             &plan,
             bs,
@@ -481,24 +656,66 @@ pub fn full(
             &native_issuer,
             &native_verifier,
         );
-        bnf.with_invocation(&native_verifier, |bi| {
+        diagnostics.stage("native_registrations_ready");
+        bnf.with_invocation(&native_verifier, |mut bi| {
+            assert_eq!(bi.timeout_ms, 5_000);
+            if matches!(native_profile, NativeBirthProfile::Supplemental30s) {
+                assert!(birth_only);
+                bi.timeout_ms = 30_000;
+                assert_eq!(bi.timeout_ms, 30_000);
+            }
             cnf.with_invocation(&native_verifier, |ci| {
-                let b = bsession
+                assert_eq!(ci.timeout_ms, 5_000);
+                eprintln!(
+                    "registered-clock native configuration baseline_timeout_ms={} candidate_timeout_ms={} baseline_executable_pin={} candidate_executable_pin={}",
+                    bi.timeout_ms, ci.timeout_ms,
+                    bi.registration.executable_digest, ci.registration.executable_digest,
+                );
+                if birth_only {
+                    diagnostics.stage("native_birth_callback_entered");
+                    inspect(NativeBirth {
+                        session: &bsession,
+                        origin: before.current().unwrap(),
+                        plan: &plan,
+                        input: c::ProbeInputs::without_clock(&bi),
+                        clocks: &clocks,
+                        registry: &registry,
+                        marker: &marker,
+                        view: &view,
+                    });
+                    diagnostics.stage("native_birth_callback_returned");
+                    return;
+                }
+                let baseline_diagnostic = NativeDiagnostics::start(&view, &clocks, &registry);
+                let baseline_attempt = bsession
                     .observe_native(
                         &plan,
                         c::ProbeInputs::without_clock(&bi),
                         before.current().unwrap(),
                         &view,
-                    )
-                    .unwrap();
-                let next = csession
+                    );
+                if let Err(error) = &baseline_attempt {
+                    baseline_diagnostic.report(
+                        "baseline_native", error, &bsession, &view, &clocks, &registry, None,
+                    );
+                }
+                let b = baseline_attempt.unwrap();
+                diagnostics.stage("baseline_native_returned");
+                let candidate_diagnostic = NativeDiagnostics::start(&view, &clocks, &registry);
+                let candidate_attempt = csession
                     .observe_native(
                         &plan,
                         c::ProbeInputs::without_clock(&ci),
                         expected.current().unwrap(),
                         &view,
-                    )
-                    .unwrap();
+                    );
+                if let Err(error) = &candidate_attempt {
+                    candidate_diagnostic.report(
+                        "candidate_native", error, &csession, &view, &clocks, &registry, None,
+                    );
+                }
+                let next = candidate_attempt.unwrap();
+                diagnostics.stage("candidate_native_returned");
                 assert_eq!(
                     b.actual_outputs(),
                     &[Some(0), Some(3), Some(0), Some(4294967295)]
@@ -545,6 +762,7 @@ pub fn full(
                     &view,
                 )
                 .unwrap();
+                diagnostics.stage("registered_root_ready");
                 let pair = c::RegisteredPair {
                     baseline: &b,
                     candidate: &next,
@@ -558,6 +776,7 @@ pub fn full(
                 f(
                     &p, &root, pair, &mut ports, &clocks, &registry, &bsession, &csession, &view,
                 );
+                diagnostics.stage("registered_pair_callback_returned");
             })
         });
     }

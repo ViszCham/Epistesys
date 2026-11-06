@@ -36,8 +36,15 @@ impl BoundGoalEpoch<'_> {
 pub(crate) struct GoalInvocationGate<'a, 'obs, 'lease> {
     plan: &'a CodingProbePlan,
     owner: &'a OwnedCodingProbeObservation<'obs>,
-    input: &'a ProbeInvocation<'a>,
+    input: ProbeInputs<'a>,
+    direct: DirectClock,
     resources: &'a ResourceReservationView<'lease>,
+}
+
+#[derive(Clone, Copy)]
+enum DirectClock {
+    Legacy(fn() -> u64),
+    Registered,
 }
 impl<'a, 'obs, 'lease> GoalInvocationGate<'a, 'obs, 'lease> {
     pub(crate) fn admit(
@@ -46,17 +53,39 @@ impl<'a, 'obs, 'lease> GoalInvocationGate<'a, 'obs, 'lease> {
         input: &'a ProbeInvocation<'a>,
         resources: &'a ResourceReservationView<'lease>,
     ) -> Result<Self, ProbeError> {
+        if !owner.clock.is_legacy() {
+            return Err(ProbeError::ClockDomain(crate::goal_clock_domain::ClockFault::BindingMismatch));
+        }
+        Self::admit_with(plan, owner, ProbeInputs::without_clock(input), DirectClock::Legacy(input.clock), resources)
+    }
+
+    pub(crate) fn admit_registered(
+        plan: &'a CodingProbePlan,
+        owner: &'a OwnedCodingProbeObservation<'obs>,
+        input: ProbeInputs<'a>,
+        resources: &'a ResourceReservationView<'lease>,
+    ) -> Result<Self, ProbeError> {
+        if owner.clock.is_legacy() {
+            return Err(ProbeError::ClockDomain(crate::goal_clock_domain::ClockFault::NeedsEvidence(
+                crate::goal_clock_domain::ClockGap::LegacyClockProvenanceUnassessed,
+            )));
+        }
+        Self::admit_with(plan, owner, input, DirectClock::Registered, resources)
+    }
+
+    fn admit_with(
+        plan: &'a CodingProbePlan,
+        owner: &'a OwnedCodingProbeObservation<'obs>,
+        input: ProbeInputs<'a>,
+        direct: DirectClock,
+        resources: &'a ResourceReservationView<'lease>,
+    ) -> Result<Self, ProbeError> {
         resources.check()?;
         bounds(input)?;
-        let gate = Self {
-            plan,
-            owner,
-            input,
-            resources,
-        };
+        let gate = Self { plan, owner, input, direct, resources };
         gate.binding_current()?;
         let scratch = super::super::measurement::claim(resources, SCRATCH_RAM)?;
-        let registration = &input.registration;
+        let registration = input.registration;
         let target = registration
             .snapshot
             .targets
@@ -76,7 +105,7 @@ impl<'a, 'obs, 'lease> GoalInvocationGate<'a, 'obs, 'lease> {
         }
         // Do not call owner.check_current here: it would read the hidden clock
         // before the consumer's first direct sample has entered the same Arc.
-        check_current(plan, input, input.authority.now_epoch)?;
+        check_current_at(plan, input, input.authority.now_epoch)?;
         gate.binding_current()?;
         scratch.check()?;
         Ok(gate)
@@ -97,22 +126,25 @@ impl<'a, 'obs, 'lease> GoalInvocationGate<'a, 'obs, 'lease> {
     /// The sole direct sampling site. Record even an expiry/rollback failure;
     /// do not put provided context epochs or a future horizon into this ledger.
     fn sample(&self) -> Result<u64, GoalEpochError> {
-        let now = (self.input.clock)();
-        match self
-            .owner
-            .observed_epoch
-            .observe(now, self.owner.expires_epoch)
-        {
-            Ok(()) => {}
-            Err(ProbeError::Stale) if now >= self.owner.expires_epoch => {
-                return Err(GoalEpochError::ObservedExpiry);
+        let now = match self.direct {
+            DirectClock::Legacy(clock) => {
+                let now = clock();
+                match self.owner.observed_epoch.observe(now, self.owner.expires_epoch) {
+                    Ok(()) => now,
+                    Err(ProbeError::Stale) if now >= self.owner.expires_epoch => {
+                        return Err(GoalEpochError::ObservedExpiry);
+                    }
+                    Err(error) => return Err(error.into()),
+                }
             }
-            Err(error) => return Err(error.into()),
-        }
+            DirectClock::Registered => self.owner.clock.sample(
+                &self.owner.observed_epoch, self.owner.expires_epoch, self.resources,
+            )?,
+        };
         if now < self.owner.checked_epoch || now < self.input.authority.now_epoch {
             return Err(ProbeError::ClockRollback.into());
         }
-        check_current(self.plan, self.input, now)?;
+        check_current_at(self.plan, self.input, now)?;
         self.binding_current()?;
         Ok(now)
     }
@@ -123,7 +155,7 @@ impl<'a, 'obs, 'lease> GoalInvocationGate<'a, 'obs, 'lease> {
     pub(crate) fn sample_current_epoch(&self) -> Result<BoundGoalEpoch<'_>, GoalEpochError> {
         self.binding_current()?;
         let scratch = super::super::measurement::claim(self.resources, SCRATCH_RAM)?;
-        check_current(self.plan, self.input, self.input.authority.now_epoch)?;
+        check_current_at(self.plan, self.input, self.input.authority.now_epoch)?;
         let before = self.sample()?;
         self.owner.check_current(self.plan, self.resources)?;
         let after = self.sample()?;
@@ -161,7 +193,7 @@ fn text(value: &str, cap: usize) -> Result<(), ProbeError> {
     }
     Ok(())
 }
-fn bounds(input: &ProbeInvocation<'_>) -> Result<(), ProbeError> {
+pub(super) fn bounds(input: ProbeInputs<'_>) -> Result<(), ProbeError> {
     // Length/count guards precede any hash, clone, allocation or physical I/O.
     text(input.source, SOURCE_CAP)?;
     let r = &input.registration;

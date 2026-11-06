@@ -6,6 +6,14 @@ impl<'a, 'v> Root<'a, 'v> {
         e: ExpectedPair<'s, 'a, 'v>,
         view: &'v ResourceReservationView<'_>,
     ) -> Result<Owned<'s, 'a, 'v>, Error> {
+        budget::with_call(&self.framework, || self.measure_in_call(e, view))
+    }
+
+    fn measure_in_call<'s>(
+        &'s self,
+        e: ExpectedPair<'s, 'a, 'v>,
+        view: &'v ResourceReservationView<'_>,
+    ) -> Result<Owned<'s, 'a, 'v>, Error> {
         self.check(view)?;
         self.expected(e)?;
         let attempt = self.attempts.get();
