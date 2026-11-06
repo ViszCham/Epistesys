@@ -11,10 +11,18 @@ pub struct BridgeWitness {
     target: bool,
 }
 impl BridgeWitness {
-    pub fn target_states(&self) -> &[u8] { &self.states[..self.arity] }
-    pub fn lost_future_atoms(&self) -> &[u8] { &self.lost[..self.lost_len] }
-    pub fn source_root_forced(&self) -> bool { self.source }
-    pub fn target_root_forced(&self) -> bool { self.target }
+    pub fn target_states(&self) -> &[u8] {
+        &self.states[..self.arity]
+    }
+    pub fn lost_future_atoms(&self) -> &[u8] {
+        &self.lost[..self.lost_len]
+    }
+    pub fn source_root_forced(&self) -> bool {
+        self.source
+    }
+    pub fn target_root_forced(&self) -> bool {
+        self.target
+    }
 }
 pub struct BridgeResult {
     pub(super) role: f::QueryRole,
@@ -22,18 +30,36 @@ pub struct BridgeResult {
     mismatches: Vec<BridgeWitness>,
 }
 impl BridgeResult {
-    pub fn passed(&self) -> bool { self.mismatches.is_empty() }
-    pub fn mismatches(&self) -> &[BridgeWitness] { &self.mismatches }
+    pub fn passed(&self) -> bool {
+        self.mismatches.is_empty()
+    }
+    pub fn mismatches(&self) -> &[BridgeWitness] {
+        &self.mismatches
+    }
 }
-pub(super) fn inspect(probe: BridgeProbe<'_>, pair: m::ExpectedPair<'_, '_, '_>,
-    work: &mut n::Work<'_>) -> Result<BridgeResult, Error> {
+pub(super) fn inspect(
+    probe: BridgeProbe<'_>,
+    pair: m::ExpectedPair<'_, '_, '_>,
+    work: &mut n::Work<'_>,
+) -> Result<BridgeResult, Error> {
     let src = pair.source.owner;
     let dst = pair.target.owner;
     let role = usize::from(probe.role as u8);
     let mut mismatches = reserve(dst.data.rows.len(), 27)?;
-    for (i, target) in dst.data.rows.iter().enumerate().filter(|(_, r)| r.admitted()) {
-        work.charge((src.data.rows.len() as u64 + 1) * 16).map_err(native)?;
-        let target_map = dst.data.mapbacks.get(i).ok_or(Error::ExpectedInputMismatch)?;
+    for (i, target) in dst
+        .data
+        .rows
+        .iter()
+        .enumerate()
+        .filter(|(_, r)| r.admitted())
+    {
+        work.charge((src.data.rows.len() as u64 + 1) * 16)
+            .map_err(native)?;
+        let target_map = dst
+            .data
+            .mapbacks
+            .get(i)
+            .ok_or(Error::ExpectedInputMismatch)?;
         let states = target.valuation_states();
         let mut mapped = [0u8; 3];
         if states.len() > 3 || target_map.root_assignment().len() != states.len() {
@@ -55,7 +81,11 @@ pub(super) fn inspect(probe: BridgeProbe<'_>, pair: m::ExpectedPair<'_, '_, '_>,
             }
             _ => return Err(Error::ExpectedInputMismatch),
         }
-        let source = src.data.rows.iter().find(|r| r.valuation_states() == &mapped[..states.len()])
+        let source = src
+            .data
+            .rows
+            .iter()
+            .find(|r| r.valuation_states() == &mapped[..states.len()])
             .ok_or(Error::ExpectedInputMismatch)?;
         // 日本語: 実写像先の付値で、source族全体を参照する。両contextの実行可能性は
         // 異なり得るため、この方向付きbridgeは同型ではない。
@@ -65,17 +95,33 @@ pub(super) fn inspect(probe: BridgeProbe<'_>, pair: m::ExpectedPair<'_, '_, '_>,
             BridgeRule::RootGoalUseV1 => (source.goal_bits() & 1 != 0, target.goal_bits() & 1 != 0),
             BridgeRule::MappedRootForcingV1 => (
                 source.query_bits().get(role).ok_or(Error::InvalidProbe)? & 1 != 0,
-                target.query_bits().get(role).ok_or(Error::InvalidProbe)? & 1 != 0),
+                target.query_bits().get(role).ok_or(Error::InvalidProbe)? & 1 != 0,
+            ),
         };
-        let pass = match probe.rule { BridgeRule::RootGoalUseV1 => s && t, BridgeRule::MappedRootForcingV1 => s == t };
+        let pass = match probe.rule {
+            BridgeRule::RootGoalUseV1 => s && t,
+            BridgeRule::MappedRootForcingV1 => s == t,
+        };
         if !pass {
-            if lost.len() > 3 { return Err(Error::ExpectedInputMismatch); }
-            let mut row = BridgeWitness { states: [0; 3], arity: states.len(), lost: [0; 3],
-                lost_len: lost.len(), source: s, target: t };
+            if lost.len() > 3 {
+                return Err(Error::ExpectedInputMismatch);
+            }
+            let mut row = BridgeWitness {
+                states: [0; 3],
+                arity: states.len(),
+                lost: [0; 3],
+                lost_len: lost.len(),
+                source: s,
+                target: t,
+            };
             row.states[..states.len()].copy_from_slice(states);
             row.lost[..lost.len()].copy_from_slice(lost);
             mismatches.push(row);
         }
     }
-    Ok(BridgeResult { role: probe.role, rule: probe.rule, mismatches })
+    Ok(BridgeResult {
+        role: probe.role,
+        rule: probe.rule,
+        mismatches,
+    })
 }

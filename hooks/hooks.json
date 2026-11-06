@@ -1,5 +1,5 @@
 {
-  "description": "Bind the exact Codex Stop hook assistant message through the Epistesys 7.0.0-beta.1 packaged binary; no user or mutation authority is created.",
+  "description": "Bind the exact Codex Stop hook assistant message through the Epistesys 7.1.0-beta.1 packaged binary; no user or mutation authority is created.",
   "hooks": {
     "Stop": [
       {

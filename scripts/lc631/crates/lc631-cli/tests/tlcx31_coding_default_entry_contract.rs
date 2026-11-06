@@ -6,25 +6,49 @@ use lc631_analysis::{run_bounded_tool_with_resources, BoundedToolRequest, ToolRu
 use lc631_core::context::SourceRevision;
 use lc631_runtime::resource::*;
 use serde_json::Value;
-use std::{fs, io::Read, path::{Path, PathBuf}, time::{Duration, SystemTime, UNIX_EPOCH}};
+use std::{
+    fs,
+    io::Read,
+    path::{Path, PathBuf},
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
 const SOURCE: &str = "Please edit the source and test the package.";
 const COMMANDS: [&str; 2] = ["lc631-dgcl-coding-repair", "lc631-dgcl-coding-resume"];
 type FileState = (String, bool, Vec<u8>, SystemTime);
 
 fn fixture() -> PathBuf {
-    let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
     let root = std::env::temp_dir().join(format!("t31cli-{}-{nonce:x}", std::process::id()));
     fs::create_dir_all(root.join("src")).unwrap();
     fs::create_dir_all(root.join("receipts")).unwrap();
     fs::create_dir_all(root.join("author")).unwrap();
-    fs::write(root.join("Cargo.toml"), b"[package]\nname=\"cli_hold\"\nversion=\"0.0.0\"\n").unwrap();
+    fs::write(
+        root.join("Cargo.toml"),
+        b"[package]\nname=\"cli_hold\"\nversion=\"0.0.0\"\n",
+    )
+    .unwrap();
     fs::write(root.join("src/lib.rs"), b"pub fn value()->u8{1}\n").unwrap();
     // Deliberately UNTRUSTED input. Provider availability must be decided before
     // expensive packet/history admission. Flags cannot establish a trust domain.
-    fs::write(root.join("packet.bin"), b"EPITLCX1 untrusted locator input\n").unwrap();
-    fs::write(root.join("receipts/host.key"), b"untrusted local key material is not a host issuer\n").unwrap();
-    fs::write(root.join("author/host.key"), b"untrusted author material is not an independent intent\n").unwrap();
+    fs::write(
+        root.join("packet.bin"),
+        b"EPITLCX1 untrusted locator input\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("receipts/host.key"),
+        b"untrusted local key material is not a host issuer\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("author/host.key"),
+        b"untrusted author material is not an independent intent\n",
+    )
+    .unwrap();
     eprintln!("retained owned default-CLI fixture: {}", root.display());
     root
 }
@@ -39,20 +63,36 @@ fn inventory(root: &Path) -> Vec<FileState> {
             assert!(visited <= 64, "unexpected fixture-tree growth");
             let path = entry.unwrap().path();
             let metadata = fs::symlink_metadata(&path).unwrap();
-            assert!(!metadata.file_type().is_symlink(), "unexpected fixture symlink");
+            assert!(
+                !metadata.file_type().is_symlink(),
+                "unexpected fixture symlink"
+            );
             #[cfg(windows)]
             {
                 use std::os::windows::fs::MetadataExt;
-                assert_eq!(metadata.file_attributes() & 0x400, 0, "unexpected reparse point");
+                assert_eq!(
+                    metadata.file_attributes() & 0x400,
+                    0,
+                    "unexpected reparse point"
+                );
             }
-            let relative = path.strip_prefix(root).unwrap().to_str().unwrap().replace('\\', "/");
+            let relative = path
+                .strip_prefix(root)
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .replace('\\', "/");
             if metadata.is_dir() {
                 result.push((relative, true, Vec::new(), metadata.modified().unwrap()));
                 pending.push(path);
             } else {
                 assert!(metadata.is_file() && metadata.len() <= 4096);
                 let mut bytes = Vec::new();
-                fs::File::open(&path).unwrap().take(4097).read_to_end(&mut bytes).unwrap();
+                fs::File::open(&path)
+                    .unwrap()
+                    .take(4097)
+                    .read_to_end(&mut bytes)
+                    .unwrap();
                 assert!(bytes.len() <= 4096);
                 result.push((relative, false, bytes, metadata.modified().unwrap()));
             }
@@ -71,45 +111,97 @@ fn scenario(command: &str, supplied_untrusted_root_flags: bool) {
     let before = inventory(&root);
     let limits = ResourceLimits::checked([16 * 1024 * 1024, 0, 256 * 1024, 0, 1, 1]).unwrap();
     let broker = ResourceBroker::new(limits).unwrap();
-    let mut run = broker.begin_run(1, SourceRevision::of(SOURCE).digest(), limits,
-        Deadline::after(Duration::from_secs(15)).unwrap(), Cancellation::default()).unwrap();
-    let mut reservation = run.reserve(&[
-        request(ResourceKind::Ram, 4 * 1024 * 1024),
-        request(ResourceKind::Output, 128 * 1024),
-        request(ResourceKind::Child, 1), request(ResourceKind::Cleanup, 1),
-    ]).unwrap();
+    let mut run = broker
+        .begin_run(
+            1,
+            SourceRevision::of(SOURCE).digest(),
+            limits,
+            Deadline::after(Duration::from_secs(15)).unwrap(),
+            Cancellation::default(),
+        )
+        .unwrap();
+    let mut reservation = run
+        .reserve(&[
+            request(ResourceKind::Ram, 4 * 1024 * 1024),
+            request(ResourceKind::Output, 128 * 1024),
+            request(ResourceKind::Child, 1),
+            request(ResourceKind::Cleanup, 1),
+        ])
+        .unwrap();
     {
         let view = reservation.lease();
-        let mut arguments = vec![command.to_owned(), "--repo".into(), root.to_str().unwrap().into(),
-            "--prompt".into(), SOURCE.into(), "--execute".into(), "--evidence-file".into(),
-            root.join("packet.bin").to_str().unwrap().into()];
+        let mut arguments = vec![
+            command.to_owned(),
+            "--repo".into(),
+            root.to_str().unwrap().into(),
+            "--prompt".into(),
+            SOURCE.into(),
+            "--execute".into(),
+            "--evidence-file".into(),
+            root.join("packet.bin").to_str().unwrap().into(),
+        ];
         if supplied_untrusted_root_flags {
-            arguments.extend(["--receipt-root".into(), root.join("receipts").to_str().unwrap().into(),
-                "--author-receipt-root".into(), root.join("author").to_str().unwrap().into()]);
+            arguments.extend([
+                "--receipt-root".into(),
+                root.join("receipts").to_str().unwrap().into(),
+                "--author-receipt-root".into(),
+                root.join("author").to_str().unwrap().into(),
+            ]);
         }
         let borrowed: Vec<&str> = arguments.iter().map(String::as_str).collect();
         // This is the actual Cargo-built production binary, never a fake runner,
         // source-string registry assertion or environment-selected test provider.
-        let capture = run_bounded_tool_with_resources(BoundedToolRequest {
-            program: env!("CARGO_BIN_EXE_lc631"), args: &borrowed, stdin: None,
-            timeout_ms: 8000, stdout_limit: 65536, stderr_limit: 16384,
-        }, &view).unwrap();
+        let capture = run_bounded_tool_with_resources(
+            BoundedToolRequest {
+                program: env!("CARGO_BIN_EXE_lc631"),
+                args: &borrowed,
+                stdin: None,
+                timeout_ms: 8000,
+                stdout_limit: 65536,
+                stderr_limit: 16384,
+            },
+            &view,
+        )
+        .unwrap();
         let process = capture.reported();
-        assert_eq!(process.state, ToolRunState::Failed,
-            "exit={:?}; timeout={}; stdout={}; stderr={}", process.exit_code,
-            process.timed_out, String::from_utf8_lossy(capture.stdout()).chars().take(512).collect::<String>(),
-            String::from_utf8_lossy(capture.stderr()).chars().take(512).collect::<String>());
-        assert_eq!(process.exit_code, Some(1), "new default profile must return a non-success Hold");
+        assert_eq!(
+            process.state,
+            ToolRunState::Failed,
+            "exit={:?}; timeout={}; stdout={}; stderr={}",
+            process.exit_code,
+            process.timed_out,
+            String::from_utf8_lossy(capture.stdout())
+                .chars()
+                .take(512)
+                .collect::<String>(),
+            String::from_utf8_lossy(capture.stderr())
+                .chars()
+                .take(512)
+                .collect::<String>()
+        );
+        assert_eq!(
+            process.exit_code,
+            Some(1),
+            "new default profile must return a non-success Hold"
+        );
         assert!(!process.timed_out && !process.stdout_truncated && !process.stderr_truncated);
         assert!(process.process_tree_kill_verified);
-        assert_eq!(inventory(&root), before, "default admission changed owned fixture files");
+        assert_eq!(
+            inventory(&root),
+            before,
+            "default admission changed owned fixture files"
+        );
         // Empty/unknown-command output is RED. Merely rejecting the command is
         // not consumption by the new normal profile's missing-provider path.
-        let envelope: Value = serde_json::from_slice(capture.stdout()).expect("typed Hold summary required");
+        let envelope: Value =
+            serde_json::from_slice(capture.stdout()).expect("typed Hold summary required");
         assert_eq!(envelope["schema_version"], "lc631-wire.v1");
         assert_eq!(envelope["command"], command);
         let summary = &envelope["payload"];
-        assert_eq!(summary["schema_version"], "epistesys-coding-command-summary.v1");
+        assert_eq!(
+            summary["schema_version"],
+            "epistesys-coding-command-summary.v1"
+        );
         assert_eq!(summary["profile"], command);
         assert_eq!(summary["status"], "hold");
         assert_eq!(summary["reason"], "missing_external_host_provider");
@@ -122,7 +214,12 @@ fn scenario(command: &str, supplied_untrusted_root_flags: bool) {
         // proof that no other child/syscall occurred. SDK marker tests are separate.
         assert_eq!(summary["source_writes"], 0);
         assert_eq!(summary["native_invocations"], 0);
-        for flag in ["repair_reapplied", "head_renewed", "quota_reset", "resend_attempted"] {
+        for flag in [
+            "repair_reapplied",
+            "head_renewed",
+            "quota_reset",
+            "resend_attempted",
+        ] {
             assert_eq!(summary[flag], false);
         }
         assert!(capture.stdout().len() <= 65536);

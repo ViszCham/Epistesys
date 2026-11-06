@@ -67,6 +67,12 @@ impl<'res, E> ResourceRunAttempt<'res, E> {
         // Diagnostic/effect history is intentionally never cleared by cleanup.
         Ok(())
     }
+    // Failure must return the original live capture/cleanup/resource owner.
+    // Boxing it here would introduce an unbudgeted allocation on failure.
+    #[expect(
+        clippy::result_large_err,
+        reason = "return the original owner without allocating on failure"
+    )]
     pub fn into_completed(mut self) -> Result<ResourceRunOutcome<'res>, Self> {
         if self.resource_error.is_some()
             || self.admission_error.is_some()

@@ -25,19 +25,34 @@ struct OwnedTestRoot {
 
 impl OwnedTestRoot {
     fn create() -> Self {
-        let canonical_base = std::env::temp_dir()
-            .canonicalize()
-            .expect("system temp directory should be accessible");
         let nonce = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("system clock should be after Unix epoch")
             .as_nanos();
-        let path = canonical_base.join(format!("{TEST_ROOT_PREFIX}{}-{nonce}", std::process::id()));
-        std::fs::create_dir(&path).expect("unique temporary test root should be created");
-        Self {
-            path,
-            canonical_base,
+        Self::create_with_nonce(nonce)
+    }
+
+    fn create_with_nonce(nonce: u128) -> Self {
+        let canonical_base = std::env::temp_dir()
+            .canonicalize()
+            .expect("system temp directory should be accessible");
+        for attempt in 0..64 {
+            let path = canonical_base.join(format!(
+                "{TEST_ROOT_PREFIX}{}-{nonce}-{attempt}",
+                std::process::id()
+            ));
+            match std::fs::create_dir(&path) {
+                Ok(()) => {
+                    return Self {
+                        path,
+                        canonical_base,
+                    }
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(error) => panic!("temporary test root: {error}"),
+            }
         }
+        panic!("temporary test root collision budget exhausted");
     }
 
     fn path(&self) -> &Path {
@@ -47,6 +62,14 @@ impl OwnedTestRoot {
     fn segment(&self, sequence: u64) -> PathBuf {
         self.path.join(format!("segment-{sequence:020}.bin"))
     }
+}
+
+#[test]
+fn equal_clock_nonces_do_not_alias_owned_checkpoint_roots() {
+    let a = OwnedTestRoot::create_with_nonce(1);
+    let b = OwnedTestRoot::create_with_nonce(1);
+    assert_ne!(a.path(), b.path());
+    assert!(a.path().is_dir() && b.path().is_dir());
 }
 
 impl Drop for OwnedTestRoot {

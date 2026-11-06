@@ -268,9 +268,7 @@ impl FacetLedger {
                 .entries
                 .iter()
                 .chain(entries[..index].iter())
-                .any(|old| {
-                    old.transform == entry.transform && same_event(old.facet, entry.facet)
-                })
+                .any(|old| old.transform == entry.transform && same_event(old.facet, entry.facet))
             {
                 return Err(LedgerError::DuplicateEvent);
             }

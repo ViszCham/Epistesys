@@ -53,7 +53,8 @@ impl<'a, 'v> Root<'a, 'v> {
                     &check,
                 );
                 admission::inputs(&framework_owner, registration, &mut work)?;
-                let constructions = construction::universe(&framework_owner, registration, &mut work)?;
+                let constructions =
+                    construction::universe(&framework_owner, registration, &mut work)?;
                 let signature = signature::build(&framework_owner, registration.limits, &mut work)?;
                 let (digest, producer) = identity::root(
                     &framework_owner,
@@ -85,7 +86,11 @@ impl<'a, 'v> Root<'a, 'v> {
         view: &ResourceReservationView<'_>,
     ) -> Result<(), Error> {
         framework_root.check(view).map_err(framework)?;
-        budget::current(retained, view, framework_root.native.state.source.id().digest())
+        budget::current(
+            retained,
+            view,
+            framework_root.native.state.source.id().digest(),
+        )
     }
 
     pub(super) fn check(&self, view: &ResourceReservationView<'_>) -> Result<(), Error> {
@@ -180,11 +185,13 @@ impl<'a, 'v> Root<'a, 'v> {
     ) -> Result<ComparisonRole, Error> {
         self.expected(e)?;
         let primary = self.framework.declaration.comparison;
-        Ok(if case_key(e.source) == primary.source && case_key(e.target) == primary.target {
-            ComparisonRole::Primary
-        } else {
-            ComparisonRole::DiagnosticControl
-        })
+        Ok(
+            if case_key(e.source) == primary.source && case_key(e.target) == primary.target {
+                ComparisonRole::Primary
+            } else {
+                ComparisonRole::DiagnosticControl
+            },
+        )
     }
 
     pub(super) fn payload_guard(

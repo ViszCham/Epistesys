@@ -22,13 +22,24 @@ pub use plan::BranchPlan;
 
 pub const PROFILE: &str = "explicit-context-signed-horn-v1";
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum SourceMeaning { SourceUnverified }
+pub enum SourceMeaning {
+    SourceUnverified,
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum BranchError {
-    UnknownContext, UnknownParent, ForeignGraph, ScopeMismatch, QueryMismatch,
-    InvalidAtomCount, UndeclaredAtom, UnsupportedSyntax, UnsupportedBasis, PremiseBudget,
-    AllocationFailed, ArithmeticOverflow,
+    UnknownContext,
+    UnknownParent,
+    ForeignGraph,
+    ScopeMismatch,
+    QueryMismatch,
+    InvalidAtomCount,
+    UndeclaredAtom,
+    UnsupportedSyntax,
+    UnsupportedBasis,
+    PremiseBudget,
+    AllocationFailed,
+    ArithmeticOverflow,
     Resource(ResourceError),
     Observation(FourValuedError),
     Ledger(crate::facet_ledger::LedgerError),
@@ -49,14 +60,19 @@ impl<'plan, 'graph, 'view> BranchInputs<'plan, 'graph, 'view> {
     ) -> Result<Self, BranchError> {
         plan.check(view)?;
         let count = plan.parsed.len();
-        let bytes = count.checked_mul(std::mem::size_of::<Literal>() + std::mem::size_of::<Rule<'_>>())
+        let bytes = count
+            .checked_mul(std::mem::size_of::<Literal>() + std::mem::size_of::<Rule<'_>>())
             .and_then(|bytes| bytes.checked_add(std::mem::size_of::<Self>()))
             .ok_or(BranchError::ArithmeticOverflow)?;
         let held = claim(view, bytes)?;
         let mut facts = Vec::new();
         let mut rules = Vec::new();
-        facts.try_reserve_exact(count).map_err(|_| BranchError::AllocationFailed)?;
-        rules.try_reserve_exact(count).map_err(|_| BranchError::AllocationFailed)?;
+        facts
+            .try_reserve_exact(count)
+            .map_err(|_| BranchError::AllocationFailed)?;
+        rules
+            .try_reserve_exact(count)
+            .map_err(|_| BranchError::AllocationFailed)?;
         if facts.capacity() > count || rules.capacity() > count {
             return Err(BranchError::AllocationFailed);
         }
@@ -64,21 +80,38 @@ impl<'plan, 'graph, 'view> BranchInputs<'plan, 'graph, 'view> {
             match premise {
                 plan::Parsed::Fact(fact) => facts.push(*fact),
                 plan::Parsed::Rule { body, len, head } => rules.push(Rule {
-                    body: &body[..usize::from(*len)], head: *head,
+                    body: &body[..usize::from(*len)],
+                    head: *head,
                 }),
             }
         }
-        let result = Self { plan, facts, rules, held };
+        let result = Self {
+            plan,
+            facts,
+            rules,
+            held,
+        };
         let request = result.request();
-        Program::new(request.atoms, request.facts, request.rules, request.context, request.query)
-            .map_err(|e| BranchError::Observation(FourValuedError::Evaluation(e)))?;
+        Program::new(
+            request.atoms,
+            request.facts,
+            request.rules,
+            request.context,
+            request.query,
+        )
+        .map_err(|e| BranchError::Observation(FourValuedError::Evaluation(e)))?;
         result.check(view)?;
         Ok(result)
     }
     fn request(&self) -> FourValuedRequest<'_> {
-        FourValuedRequest { atoms: self.plan.atoms, facts: &self.facts, rules: &self.rules,
-            context: self.plan.state.revision(), scope: self.plan.state.scope(),
-            query: self.plan.query_digest }
+        FourValuedRequest {
+            atoms: self.plan.atoms,
+            facts: &self.facts,
+            rules: &self.rules,
+            context: self.plan.state.revision(),
+            scope: self.plan.state.scope(),
+            query: self.plan.query_digest,
+        }
     }
     fn check(&self, view: &ResourceReservationView<'_>) -> Result<(), BranchError> {
         self.plan.check(view)?;
@@ -108,46 +141,74 @@ impl<'input, 'plan, 'graph, 'view> BranchObservation<'input, 'plan, 'graph, 'vie
         input.check(view)?;
         let mut store = FourValuedObservationStore::with_resources(broker, 1, view)
             .map_err(BranchError::Observation)?;
-        let id = store.evaluate(input.request(), max_steps, view).map_err(BranchError::Observation)?;
+        let id = store
+            .evaluate(input.request(), max_steps, view)
+            .map_err(BranchError::Observation)?;
         input.check(view)?;
         Ok(Self { input, store, id })
     }
-    pub const fn source_meaning(&self) -> SourceMeaning { SourceMeaning::SourceUnverified }
-    pub fn actual_evaluations(&self) -> usize { self.store.len() }
+    pub const fn source_meaning(&self) -> SourceMeaning {
+        SourceMeaning::SourceUnverified
+    }
+    pub fn actual_evaluations(&self) -> usize {
+        self.store.len()
+    }
     pub fn historical_report(&self) -> Result<&Evaluation, BranchError> {
-        self.store.historical(self.id, self.input.request()).map_err(BranchError::Observation)
+        self.store
+            .historical(self.id, self.input.request())
+            .map_err(BranchError::Observation)
     }
     pub fn report_current(
-        &self, graph: &ContextGraph, context: ContextRevision, query: Atom,
+        &self,
+        graph: &ContextGraph,
+        context: ContextRevision,
+        query: Atom,
         view: &ResourceReservationView<'_>,
     ) -> Result<&Evaluation, BranchError> {
         self.input.check(view)?;
-        if !std::ptr::eq(graph, self.input.plan.graph) { return Err(BranchError::ForeignGraph); }
-        if graph.get(context).map(ContextState::revision) != Some(self.input.plan.state.revision()) {
+        if !std::ptr::eq(graph, self.input.plan.graph) {
+            return Err(BranchError::ForeignGraph);
+        }
+        if graph.get(context).map(ContextState::revision) != Some(self.input.plan.state.revision())
+        {
             return Err(BranchError::UnknownContext);
         }
-        if query != self.input.plan.query { return Err(BranchError::QueryMismatch); }
-        self.store.current(self.id, self.input.request(), view).map_err(BranchError::Observation)
+        if query != self.input.plan.query {
+            return Err(BranchError::QueryMismatch);
+        }
+        self.store
+            .current(self.id, self.input.request(), view)
+            .map_err(BranchError::Observation)
     }
     pub fn truth_current(
-        &self, graph: &ContextGraph, context: ContextRevision, query: Atom,
+        &self,
+        graph: &ContextGraph,
+        context: ContextRevision,
+        query: Atom,
         view: &ResourceReservationView<'_>,
     ) -> Result<Truth, BranchError> {
-        self.report_current(graph, context, query, view)?.truth(query)
+        self.report_current(graph, context, query, view)?
+            .truth(query)
             .map_err(|e| BranchError::Observation(FourValuedError::Evaluation(e)))
     }
 }
 
-fn claim<'view>(view: &'view ResourceReservationView<'_>, bytes: usize)
-    -> Result<ResourceClaim<'view>, BranchError> {
+fn claim<'view>(
+    view: &'view ResourceReservationView<'_>,
+    bytes: usize,
+) -> Result<ResourceClaim<'view>, BranchError> {
     let bytes = u64::try_from(bytes).map_err(|_| BranchError::ArithmeticOverflow)?;
     let amount = ResourceAmount::checked(bytes).map_err(BranchError::Resource)?;
     view.claim_resources(&[ResourceRequest::new(ResourceKind::Ram, amount)])
         .map_err(BranchError::Resource)
 }
-fn check_claim(held: &ResourceClaim<'_>, view: &ResourceReservationView<'_>)
-    -> Result<(), BranchError> {
+fn check_claim(
+    held: &ResourceClaim<'_>,
+    view: &ResourceReservationView<'_>,
+) -> Result<(), BranchError> {
     held.check().map_err(BranchError::Resource)?;
-    if !held.same_reservation(view) { return Err(BranchError::Resource(ResourceError::ForeignOwner)); }
+    if !held.same_reservation(view) {
+        return Err(BranchError::Resource(ResourceError::ForeignOwner));
+    }
     Ok(())
 }

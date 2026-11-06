@@ -10,13 +10,16 @@ pub use comparison::{
     measure_clock_bound, ClockBasis, CurrentPorts, HostAuthenticity, OwnedRegisteredPair,
     RegisteredArtifactRoot, RegisteredPair, RegisteredRootInput, RegisteredView,
 };
-pub use native::{check_observation_for_registered_profile, ProbeInputs, RegisteredNativeFailure, RegisteredObservation};
+pub use native::{
+    check_observation_for_registered_profile, ProbeInputs, RegisteredNativeFailure,
+    RegisteredObservation,
+};
+pub(crate) use registration::EndpointReader;
 pub use registration::{
     register, ClockEpochSource, ClockWork, EndpointBinding, EndpointCandidate, Limits, Profile,
     ProfileInput, Protocol, Purpose, RegisteredEndpoint, RegistryAuthority, RegistryView, Role,
     TrustRequirement,
 };
-pub(crate) use registration::EndpointReader;
 pub use session::{
     CaptureAttempt, RegisteredCapture, RoleSession, SnapshotGrantSource, SnapshotGrantView,
 };
@@ -56,9 +59,20 @@ pub enum ClockFault {
 /// Keep them distinct when using the existing four-output artifact evaluator.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ArtifactFailure {
-    MissingBaselineOrigin, MissingVerifiedOrigin, OracleMismatch, InvalidLimits,
-    GoalOrProbeMismatch, BaselineMismatch, RoleOrOriginMismatch, UndeclaredOverlap,
-    HardInvariantFailed, BuildDrift, ReadBudget, AllocationFailed, Unsupported, NoScalar,
+    MissingBaselineOrigin,
+    MissingVerifiedOrigin,
+    OracleMismatch,
+    InvalidLimits,
+    GoalOrProbeMismatch,
+    BaselineMismatch,
+    RoleOrOriginMismatch,
+    UndeclaredOverlap,
+    HardInvariantFailed,
+    BuildDrift,
+    ReadBudget,
+    AllocationFailed,
+    Unsupported,
+    NoScalar,
     Gate(crate::contextual_repair::snapshot_gate::SnapshotGateError),
     Native(lc631_solvers::runner::ProcessFailure),
     Measurement(lc631_analysis::creativity_measurement::MeasurementError),
@@ -73,10 +87,14 @@ pub enum Error {
     Artifact(ArtifactFailure),
 }
 impl From<ResourceError> for Error {
-    fn from(value: ResourceError) -> Self { Self::Clock(ClockFault::Resource(value)) }
+    fn from(value: ResourceError) -> Self {
+        Self::Clock(ClockFault::Resource(value))
+    }
 }
 impl From<ClockFault> for Error {
-    fn from(value: ClockFault) -> Self { Self::Clock(value) }
+    fn from(value: ClockFault) -> Self {
+        Self::Clock(value)
+    }
 }
 impl From<ProbeError> for Error {
     fn from(value: ProbeError) -> Self {
@@ -88,7 +106,9 @@ impl From<ProbeError> for Error {
     }
 }
 impl From<SnapshotCaptureError> for Error {
-    fn from(value: SnapshotCaptureError) -> Self { Self::Snapshot(value) }
+    fn from(value: SnapshotCaptureError) -> Self {
+        Self::Snapshot(value)
+    }
 }
 impl From<goal::Error> for Error {
     fn from(value: goal::Error) -> Self {

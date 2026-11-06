@@ -136,11 +136,8 @@ pub(super) fn execute<'v>(
     verification_claim.check()?;
     drop(raw_reference);
     drop(verification_claim);
-    let closure_work = super::super::programs::require_native_adapter_closure(
-        package,
-        profile.limits,
-        view,
-    )?;
+    let closure_work =
+        super::super::programs::require_native_adapter_closure(package, profile.limits, view)?;
     ledger.work = ledger
         .work
         .checked_add(closure_work)

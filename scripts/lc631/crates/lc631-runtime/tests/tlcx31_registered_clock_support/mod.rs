@@ -197,13 +197,17 @@ struct FixtureDiagnostics {
 impl FixtureDiagnostics {
     fn new() -> Self {
         let now = Instant::now();
-        Self { started: now, previous: now }
+        Self {
+            started: now,
+            previous: now,
+        }
     }
     fn stage(&mut self, name: &'static str) {
         let now = Instant::now();
         eprintln!(
             "registered-clock setup stage={name} elapsed={:?} total={:?}",
-            now.duration_since(self.previous), now.duration_since(self.started),
+            now.duration_since(self.previous),
+            now.duration_since(self.started),
         );
         self.previous = now;
     }
@@ -218,7 +222,10 @@ impl NativeDiagnostics {
     fn calls(clocks: &Clocks, registry: &Registry) -> [usize; 5] {
         [
             registry.calls.load(std::sync::atomic::Ordering::SeqCst),
-            clocks.be.calls(), clocks.bc.calls(), clocks.ce.calls(), clocks.cc.calls(),
+            clocks.be.calls(),
+            clocks.bc.calls(),
+            clocks.ce.calls(),
+            clocks.cc.calls(),
         ]
     }
     fn start(view: &ResourceReservationView<'_>, clocks: &Clocks, registry: &Registry) -> Self {
@@ -228,14 +235,25 @@ impl NativeDiagnostics {
             calls_before: Self::calls(clocks, registry),
         }
     }
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "failure diagnostic includes independent clock, registry and native marker observations"
+    )]
     fn report(
-        self, stage: &'static str, error: &c::Error,
-        session: &c::RoleSession<'_, '_, '_>, view: &ResourceReservationView<'_>,
-        clocks: &Clocks, registry: &Registry, marker: Option<&Path>,
+        self,
+        stage: &'static str,
+        error: &c::Error,
+        session: &c::RoleSession<'_, '_, '_>,
+        view: &ResourceReservationView<'_>,
+        clocks: &Clocks,
+        registry: &Registry,
+        marker: Option<&Path>,
     ) {
-        let marker = marker.map(|path| std::fs::symlink_metadata(path)
-            .map(|m| (m.is_file(), m.file_type().is_symlink(), m.len()))
-            .map_err(|error| error.kind()));
+        let marker = marker.map(|path| {
+            std::fs::symlink_metadata(path)
+                .map(|m| (m.is_file(), m.file_type().is_symlink(), m.len()))
+                .map_err(|error| error.kind())
+        });
         let error = format!("{error:?}").chars().take(256).collect::<String>();
         eprintln!(
             "registered-clock native stage={stage} elapsed={:?} error={error} remaining_before={:?} remaining_after={:?} calls_before={:?} calls_after={:?} marker_metadata={marker:?}",
@@ -345,10 +363,19 @@ impl NativeBirth<'_, '_, '_, '_> {
         NativeDiagnostics::start(self.view, self.clocks, self.registry)
     }
     pub fn report_native_diagnostic(
-        &self, stage: &'static str, diagnostic: NativeDiagnostics, error: &c::Error,
+        &self,
+        stage: &'static str,
+        diagnostic: NativeDiagnostics,
+        error: &c::Error,
     ) {
         diagnostic.report(
-            stage, error, self.session, self.view, self.clocks, self.registry, Some(self.marker),
+            stage,
+            error,
+            self.session,
+            self.view,
+            self.clocks,
+            self.registry,
+            Some(self.marker),
         );
     }
 }
@@ -356,18 +383,28 @@ impl NativeBirth<'_, '_, '_, '_> {
 pub fn at_native_birth(
     inspect: impl for<'o, 'p, 'v, 'lease> FnOnce(NativeBirth<'o, 'p, 'v, 'lease>),
 ) {
-    full_staged(true, NativeBirthProfile::Default5s, inspect, |_, _, _, _, _, _, _, _, _| {
-        unreachable!("the birth-only fixture returns before constructing the pair")
-    });
+    full_staged(
+        true,
+        NativeBirthProfile::Default5s,
+        inspect,
+        |_, _, _, _, _, _, _, _, _| {
+            unreachable!("the birth-only fixture returns before constructing the pair")
+        },
+    );
 }
 
 /// Explicit supplemental positive profile; the original five-second paths stay fixed.
 pub fn at_native_birth_supplemental_30s(
     inspect: impl for<'o, 'p, 'v, 'lease> FnOnce(NativeBirth<'o, 'p, 'v, 'lease>),
 ) {
-    full_staged(true, NativeBirthProfile::Supplemental30s, inspect, |_, _, _, _, _, _, _, _, _| {
-        unreachable!("the supplemental birth-only fixture returns before constructing the pair")
-    });
+    full_staged(
+        true,
+        NativeBirthProfile::Supplemental30s,
+        inspect,
+        |_, _, _, _, _, _, _, _, _| {
+            unreachable!("the supplemental birth-only fixture returns before constructing the pair")
+        },
+    );
 }
 
 #[derive(Clone, Copy)]

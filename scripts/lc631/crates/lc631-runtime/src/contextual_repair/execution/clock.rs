@@ -78,9 +78,12 @@ impl ObservationClock<'_> {
                 }
                 let x = a.binding();
                 let y = b.binding();
-                if x.role != Role::Baseline || y.role != Role::Candidate
-                    || x.purpose != Purpose::Execution || y.purpose != Purpose::Execution
-                    || x.source != y.source || x.probe_plan != y.probe_plan
+                if x.role != Role::Baseline
+                    || y.role != Role::Candidate
+                    || x.purpose != Purpose::Execution
+                    || y.purpose != Purpose::Execution
+                    || x.source != y.source
+                    || x.probe_plan != y.probe_plan
                 {
                     return Err(ProbeError::ClockDomain(ClockFault::BindingMismatch));
                 }
@@ -93,11 +96,15 @@ impl ObservationClock<'_> {
     }
 
     pub(crate) fn check_registered_profile(
-        &self, profile: &Profile<'_>, view: &ResourceReservationView<'_>,
+        &self,
+        profile: &Profile<'_>,
+        view: &ResourceReservationView<'_>,
     ) -> Result<(), ClockFault> {
         match self {
             Self::Registered(reader) => reader.check_profile_current(profile, view),
-            Self::Legacy(_) => Err(ClockFault::NeedsEvidence(ClockGap::LegacyClockProvenanceUnassessed)),
+            Self::Legacy(_) => Err(ClockFault::NeedsEvidence(
+                ClockGap::LegacyClockProvenanceUnassessed,
+            )),
         }
     }
 }
@@ -126,7 +133,11 @@ impl<'v> NativeBirth<'v> {
         match self {
             Self::Legacy(clock) => {
                 let birth = clock();
-                Ok((ObservationClock::Legacy(clock), ObservedEpoch::shared(birth), birth))
+                Ok((
+                    ObservationClock::Legacy(clock),
+                    ObservedEpoch::shared(birth),
+                    birth,
+                ))
             }
             Self::Registered(reader, ledger) => {
                 let clock = ObservationClock::Registered(reader);
@@ -146,12 +157,15 @@ impl super::OwnedCodingProbeObservation<'_> {
     ) -> Result<(), ProbeError> {
         view.check()?;
         self.retained.check()?;
-        if !self.retained.same_reservation(view) || self.source != view.source_revision()
+        if !self.retained.same_reservation(view)
+            || self.source != view.source_revision()
             || self.plan != plan.digest()
         {
             return Err(ProbeError::BindingMismatch);
         }
-        self.clock.check_registered_profile(profile, view).map_err(ProbeError::ClockDomain)?;
+        self.clock
+            .check_registered_profile(profile, view)
+            .map_err(ProbeError::ClockDomain)?;
         self.check_current(plan, view)
     }
 }

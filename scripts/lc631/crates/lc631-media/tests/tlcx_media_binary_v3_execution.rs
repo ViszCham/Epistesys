@@ -285,7 +285,13 @@ fn beta7_v2_elapsed_before_execution_refuses_expired_parent_without_starting_bac
     assert_eq!(control.process.exit_code, Some(0));
     assert_eq!(std::fs::read(&marker).unwrap(), b"x");
     assert_eq!(
-        control.authenticity_attestation.as_ref().unwrap().claims().scope().as_str(),
+        control
+            .authenticity_attestation
+            .as_ref()
+            .unwrap()
+            .claims()
+            .scope()
+            .as_str(),
         "media/backend/v2/v3-process-fixture"
     );
 
@@ -297,25 +303,39 @@ fn beta7_v2_elapsed_before_execution_refuses_expired_parent_without_starting_bac
         network_requested: false,
     };
     let pending = authorize_media_source(&request);
-    let wire = fixture.issuer.issue(
-        ReceiptClass::MediaSource,
-        SubjectRevision::checked(pending.source_snapshot_sha256.as_ref().unwrap()).unwrap(),
-        ReceiptScope::checked(media_source_scope(request.kind)).unwrap(),
-        media_source_payload_digest(&request, &pending).unwrap(),
-        NOW,
-        Some(NOW + WINDOW),
-        None,
-    ).unwrap();
+    let wire = fixture
+        .issuer
+        .issue(
+            ReceiptClass::MediaSource,
+            SubjectRevision::checked(pending.source_snapshot_sha256.as_ref().unwrap()).unwrap(),
+            ReceiptScope::checked(media_source_scope(request.kind)).unwrap(),
+            media_source_payload_digest(&request, &pending).unwrap(),
+            NOW,
+            Some(NOW + WINDOW),
+            None,
+        )
+        .unwrap();
     let parent = authorize_media_source_attested(
-        &request, wire, &fixture.verifier, &mut ReplayGuard::default(), NOW,
-    ).unwrap();
+        &request,
+        wire,
+        &fixture.verifier,
+        &mut ReplayGuard::default(),
+        NOW,
+    )
+    .unwrap();
     // The verified parent is current at NOW. Monotonic preparation time takes
     // it across its exclusive upper bound before the executor is entered.
     std::thread::sleep(Duration::from_millis(WINDOW * 1000 + 50));
     let mut backend_replay = ReplayGuard::default();
     let result = execute_local_media_backend_attested(
-        &parent, &fixture.descriptor, &fixture.config, &MediaResourceBudget::default(),
-        &fixture.issuer, &fixture.verifier, &mut backend_replay, NOW,
+        &parent,
+        &fixture.descriptor,
+        &fixture.config,
+        &MediaResourceBudget::default(),
+        &fixture.issuer,
+        &fixture.verifier,
+        &mut backend_replay,
+        NOW,
     );
     let observed_starts = std::fs::read(&marker).unwrap();
     eprintln!(
@@ -326,7 +346,10 @@ fn beta7_v2_elapsed_before_execution_refuses_expired_parent_without_starting_bac
         observed_starts, b"x",
         "expired source authority started a second backend during legacy dispatch"
     );
-    assert!(matches!(result, Err(lc631_media::MediaError::SourceReceiptRejected)));
+    assert!(matches!(
+        result,
+        Err(lc631_media::MediaError::SourceReceiptRejected)
+    ));
     assert_eq!(backend_replay.observed_count(), 0);
 }
 
@@ -354,16 +377,30 @@ fn beta7_unbound_temporal_co_presence_never_issues_a_backend_receipt() {
         ],
         "diagnostics":[]
     });
-    std::fs::write(&fixture.config.backend_script, format!("print({:?})\n", payload.to_string())).unwrap();
+    std::fs::write(
+        &fixture.config.backend_script,
+        format!("print({:?})\n", payload.to_string()),
+    )
+    .unwrap();
     let mut replay = ReplayGuard::default();
     let result = execute_local_media_backend_attested_v3(
-        &fixture.authority, &fixture.descriptor, &fixture.config,
-        &MediaResourceBudget::default(), &fixture.issuer, &fixture.verifier, &mut replay, 1,
+        &fixture.authority,
+        &fixture.descriptor,
+        &fixture.config,
+        &MediaResourceBudget::default(),
+        &fixture.issuer,
+        &fixture.verifier,
+        &mut replay,
+        1,
     );
     assert!(
-        matches!(result, Err(lc631_media::MediaError::InvalidBackendObservation)),
+        matches!(
+            result,
+            Err(lc631_media::MediaError::InvalidBackendObservation)
+        ),
         "unbound 0..0 co-presence was accepted and signed (success={}, backend replay={})",
-        result.is_ok(), replay.observed_count()
+        result.is_ok(),
+        replay.observed_count()
     );
     assert_eq!(replay.observed_count(), 0);
 }
@@ -400,14 +437,24 @@ fn beta7_temporal_receipt_retains_frame_and_transcript_occurrences() {
             ],
             "diagnostics": []
         });
-        std::fs::write(&fixture.config.backend_script, format!("print({:?})\n", payload.to_string())).unwrap();
+        std::fs::write(
+            &fixture.config.backend_script,
+            format!("print({:?})\n", payload.to_string()),
+        )
+        .unwrap();
         let report = fixture.execute(true);
-        let pair = report.graph.observations().iter()
-            .find(|o| o.observation_id == "pair-1").unwrap();
+        let pair = report
+            .graph
+            .observations()
+            .iter()
+            .find(|o| o.observation_id == "pair-1")
+            .unwrap();
         assert_eq!((pair.span.start.ticks, pair.span.end.ticks), (100, 500));
         assert!(pair.candidate_only && !pair.identity_committed && !pair.internal_state_committed);
         fragments.push(pair.source_fragment_digest.clone());
     }
-    assert_ne!(fragments[0], fragments[1],
-        "different sampled frame occurrences collapsed into one signed source fragment");
+    assert_ne!(
+        fragments[0], fragments[1],
+        "different sampled frame occurrences collapsed into one signed source fragment"
+    );
 }

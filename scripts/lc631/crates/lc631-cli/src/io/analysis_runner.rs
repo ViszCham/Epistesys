@@ -92,38 +92,6 @@ fn classify_baseline_read(
     }
 }
 
-#[cfg(test)]
-mod baseline_read_tests {
-    use super::*;
-    use lc631_compat::CompatError;
-
-    #[test]
-    fn tlcx95_call_limit_is_not_missing_metadata_or_output_bytes() {
-        assert!(matches!(
-            classify_baseline_read(Err(CompatError::ReadCallLimit)),
-            Ok(BaselineRead::ReadCallLimit)
-        ));
-        assert!(matches!(
-            classify_baseline_read(Err(CompatError::ReaderFailed)),
-            Ok(BaselineRead::Unavailable)
-        ));
-        assert!(matches!(
-            classify_baseline_read(Err(CompatError::BudgetExceeded)),
-            Err(ResourceError::Exhausted(
-                lc631_process_supervisor::ResourceKind::Output
-            ))
-        ));
-        assert!(matches!(
-            classify_baseline_read(Err(CompatError::InvalidBudget)),
-            Err(ResourceError::InvalidConfig)
-        ));
-        assert!(matches!(
-            classify_baseline_read(Ok("observed".to_owned())),
-            Ok(BaselineRead::Digest(digest)) if digest == "observed"
-        ));
-    }
-}
-
 struct CheckedRead<'a, R> {
     inner: &'a mut R,
     view: &'a ResourceReservationView<'a>,
@@ -300,5 +268,37 @@ impl lc631_analysis::DgclFileEffectOwner for FileEffectOwner<'_> {
             Err(_) if attempted => Err(Failure::Failed),
             Err(_) => Err(Failure::Unavailable),
         }
+    }
+}
+
+#[cfg(test)]
+mod baseline_read_tests {
+    use super::*;
+    use lc631_compat::CompatError;
+
+    #[test]
+    fn tlcx95_call_limit_is_not_missing_metadata_or_output_bytes() {
+        assert!(matches!(
+            classify_baseline_read(Err(CompatError::ReadCallLimit)),
+            Ok(BaselineRead::ReadCallLimit)
+        ));
+        assert!(matches!(
+            classify_baseline_read(Err(CompatError::ReaderFailed)),
+            Ok(BaselineRead::Unavailable)
+        ));
+        assert!(matches!(
+            classify_baseline_read(Err(CompatError::BudgetExceeded)),
+            Err(ResourceError::Exhausted(
+                lc631_process_supervisor::ResourceKind::Output
+            ))
+        ));
+        assert!(matches!(
+            classify_baseline_read(Err(CompatError::InvalidBudget)),
+            Err(ResourceError::InvalidConfig)
+        ));
+        assert!(matches!(
+            classify_baseline_read(Ok("observed".to_owned())),
+            Ok(BaselineRead::Digest(digest)) if digest == "observed"
+        ));
     }
 }

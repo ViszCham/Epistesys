@@ -174,7 +174,15 @@ impl<'view, 'lease> NativeScheduler<'view, 'lease> {
             return Err(DispatchError::CapabilityProfileRequired);
         }
         self.dispatch_inner(
-            run, works, frontier, now, cancelled, registry, working_directory, None, consume,
+            run,
+            works,
+            frontier,
+            now,
+            cancelled,
+            registry,
+            working_directory,
+            None,
+            consume,
         )
     }
 

@@ -22,8 +22,8 @@ use lc631_substrate::{
 };
 use sha2::{Digest, Sha256};
 
-mod selection;
 pub mod owned_graph_join;
+mod selection;
 pub use selection::{select_current, CurrentSelection, PreservationRow};
 pub const METRIC: ComponentMetric = ComponentMetric::Preserve;
 pub const MAX_PROBES: usize = 64;

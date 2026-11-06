@@ -16,7 +16,8 @@ mod resources;
 mod runner;
 pub(crate) use resources::{capture_tool, ToolCapture};
 pub use resources::{
-    run_bounded_tool_attempt, run_bounded_tool_with_resources, NativeProcessEffect,
+    run_bounded_tool_attempt, run_bounded_tool_with_resources, run_prepared_tool_attempt,
+    FrameDispatchBinding, FrameDispatchPurpose, NativeProcessEffect, PreparedToolFrame,
     ResourceToolAttempt, ResourceToolResult,
 };
 pub use runner::ToolProcessRunner;

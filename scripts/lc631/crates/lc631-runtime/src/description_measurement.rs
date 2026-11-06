@@ -180,8 +180,11 @@ impl OwnedDescription<'_, '_, '_, '_> {
         &self,
         view: &ResourceReservationView<'_>,
         consume: impl for<'p> FnOnce(
-            &'p [u8], &'p [u8], ContextRevision,
-            &'p OriginalLineage, &'p ComponentReport,
+            &'p [u8],
+            &'p [u8],
+            ContextRevision,
+            &'p OriginalLineage,
+            &'p ComponentReport,
         ) -> R,
     ) -> Result<R, Error> {
         self.check(view)?;

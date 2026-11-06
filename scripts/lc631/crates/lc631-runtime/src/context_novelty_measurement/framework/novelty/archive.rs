@@ -41,7 +41,7 @@ pub(super) fn measure<'a, 'v>(
             data.status = ArchiveStatus::Unavailable;
             return Ok(data);
         }
-        ArchiveInput::Read(v) if v.is_empty() => {
+        ArchiveInput::Read([]) => {
             data.status = ArchiveStatus::Empty;
             data.state = ComponentState::Undefined(MeasurementError::EmptyCorpus);
             return Ok(data);

@@ -928,18 +928,37 @@ fn run_dgcl_repair_loop_inner(
         let after_consumer_now =
             sample_repair_epoch(driver, input.authorization.now_epoch, started.elapsed());
         let stop = if started.elapsed() > input.max_wall_time {
-            Some((DgclRepairStatus::BudgetExceeded, "verified_validation_consumer_exceeded_wall_budget"))
+            Some((
+                DgclRepairStatus::BudgetExceeded,
+                "verified_validation_consumer_exceeded_wall_budget",
+            ))
         } else if !permit_authorizes_repair(
-            &input.authorization, request, input.source_revision, after_consumer_now,
+            &input.authorization,
+            request,
+            input.source_revision,
+            after_consumer_now,
         ) {
-            Some((DgclRepairStatus::Unauthorized, "authority_expired_after_validation_consumer"))
-        } else if verified_validation.expires_at_epoch().is_some_and(|end| after_consumer_now >= end)
+            Some((
+                DgclRepairStatus::Unauthorized,
+                "authority_expired_after_validation_consumer",
+            ))
+        } else if verified_validation
+            .expires_at_epoch()
+            .is_some_and(|end| after_consumer_now >= end)
             || validate_dgcl_target_lease(
-                &application.after_lease, &application.after_snapshot, &request.target_ref,
-                &application.target_digest_after, after_consumer_now,
-            ).state != DgclLifecycleState::Current
+                &application.after_lease,
+                &application.after_snapshot,
+                &request.target_ref,
+                &application.target_digest_after,
+                after_consumer_now,
+            )
+            .state
+                != DgclLifecycleState::Current
         {
-            Some((DgclRepairStatus::Hold, "validation_or_target_expired_after_consumer"))
+            Some((
+                DgclRepairStatus::Hold,
+                "validation_or_target_expired_after_consumer",
+            ))
         } else {
             None
         };
@@ -948,8 +967,13 @@ fn run_dgcl_repair_loop_inner(
             attempt_record.reason = reason;
             attempts.push(attempt_record);
             return Ok(repair_report(
-                input.source_revision, input.plan_digest, initial_snapshot_digest,
-                snapshot.snapshot_digest, attempts, current_gaps, status,
+                input.source_revision,
+                input.plan_digest,
+                initial_snapshot_digest,
+                snapshot.snapshot_digest,
+                attempts,
+                current_gaps,
+                status,
             ));
         }
         current_gaps = validation.remaining_gap_ids.iter().cloned().collect();

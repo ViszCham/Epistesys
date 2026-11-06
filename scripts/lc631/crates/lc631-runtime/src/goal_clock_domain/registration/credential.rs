@@ -1,12 +1,12 @@
 //! 署名は actual actor の occurrence と固定 binding を対象に検査する。
 //! Verification binds one actor occurrence, its typed inputs and exact receipt class.
 use super::{
-    profile::ProfileState, registry, ClockFault, ClockGap, EndpointBinding, Error, Profile, Purpose,
-    RegistryAuthority, Role,
+    profile::ProfileState, registry, ClockFault, ClockGap, EndpointBinding, Error, Profile,
+    Purpose, RegistryAuthority, Role,
 };
 use lc631_receipt_kernel::{
-    digest_bytes, generate_key, ReceiptClass, ReceiptError, ReceiptPolicy, ReceiptScope, ReplayGuard,
-    SubjectRevision, UntrustedReceipt, VerifiedReceipt,
+    digest_bytes, generate_key, ReceiptClass, ReceiptError, ReceiptPolicy, ReceiptScope,
+    ReplayGuard, SubjectRevision, UntrustedReceipt, VerifiedReceipt,
 };
 use lc631_substrate::resource::{ResourceError, ResourceReservationView};
 use sha2::{Digest, Sha256};
@@ -46,8 +46,13 @@ impl Identity {
         hash.update(profile.state.fingerprint.as_bytes());
         hash.update([0]);
         for pin in [
-            profile.domain(), binding.root, binding.source, binding.program, binding.completion_plan,
-            binding.probe_plan, binding.endpoint_revision,
+            profile.domain(),
+            binding.root,
+            binding.source,
+            binding.program,
+            binding.completion_plan,
+            binding.probe_plan,
+            binding.endpoint_revision,
         ] {
             hash.update(pin.as_bytes());
         }
@@ -62,7 +67,11 @@ impl Identity {
             use std::fmt::Write as _;
             let _ = write!(payload, "{byte:02x}");
         }
-        Ok(Self { subject, scope, payload })
+        Ok(Self {
+            subject,
+            scope,
+            payload,
+        })
     }
     pub(super) fn subject(&self) -> &str {
         &self.subject
@@ -77,7 +86,13 @@ impl Identity {
     fn policy(&self, now: u64) -> Result<ReceiptPolicy, ClockFault> {
         let subject = SubjectRevision::checked(self.subject.clone()).map_err(classify)?;
         let scope = ReceiptScope::checked(self.scope).map_err(classify)?;
-        Ok(ReceiptPolicy::exact(ReceiptClass::ToolExecution, subject, scope, &self.payload, now))
+        Ok(ReceiptPolicy::exact(
+            ReceiptClass::ToolExecution,
+            subject,
+            scope,
+            &self.payload,
+            now,
+        ))
     }
 }
 
@@ -98,22 +113,33 @@ impl Credential {
         let bytes = wire_metadata(&receipt)
             .checked_add(identity.subject.len() + identity.scope.len() + identity.payload.len())
             .ok_or(Error::InputLimit)?;
-        let revocation_bytes = profile.limits.max_metadata_bytes.checked_sub(bytes)
+        let revocation_bytes = profile
+            .limits
+            .max_metadata_bytes
+            .checked_sub(bytes)
             .ok_or(Error::InputLimit)?;
         registry::with_registry(registry, |view| {
             let mut history = profile.registry.lock().map_err(|_| poisoned())?;
             history.observe(&view, &profile.fingerprint, revocation_bytes)?;
             let policy = identity.policy(view.now_epoch)?;
-            let proof = view.verifier.verify(receipt, &policy, &mut history.replay).map_err(classify)?;
-            let expiry = proof.expires_at_epoch().ok_or(ClockFault::NeedsEvidence(
-                ClockGap::RegistrationMissing,
-            ))?;
+            let proof = view
+                .verifier
+                .verify(receipt, &policy, &mut history.replay)
+                .map_err(classify)?;
+            let expiry = proof
+                .expires_at_epoch()
+                .ok_or(ClockFault::NeedsEvidence(ClockGap::RegistrationMissing))?;
             let digest = proof.receipt_digest();
             if view.revoked_receipt_digests.contains(&digest) {
                 return Err(ClockFault::RegistrationRevoked);
             }
             let slot = history.add(digest, expiry)?;
-            Ok(Self { proof, slot, registry_revision: view.revision, revocation_bytes })
+            Ok(Self {
+                proof,
+                slot,
+                registry_revision: view.revision,
+                revocation_bytes,
+            })
         })
         .map_err(Error::Clock)
     }
@@ -125,7 +151,11 @@ impl Credential {
     ) -> Result<(), ClockFault> {
         // Once observed, expiry/revocation is terminal for this occurrence even
         // if the registry later presents an older or incomplete view.
-        profile.registry.lock().map_err(|_| poisoned())?.check_known(self.slot)?;
+        profile
+            .registry
+            .lock()
+            .map_err(|_| poisoned())?
+            .check_known(self.slot)?;
         registry::with_registry(registry, |view| {
             let mut history = profile.registry.lock().map_err(|_| poisoned())?;
             history.observe(&view, &profile.fingerprint, self.revocation_bytes)?;
@@ -145,7 +175,8 @@ impl Credential {
             // profile's persistent-in-memory admission replay guard. This
             // one-entry verification context issues no new endpoint or slot.
             let mut check = ReplayGuard::with_capacity(1).map_err(classify)?;
-            view.verifier.verify(self.proof.clone().into_untrusted(), &policy, &mut check)
+            view.verifier
+                .verify(self.proof.clone().into_untrusted(), &policy, &mut check)
                 .map_err(classify)?;
             Ok(())
         })
@@ -156,7 +187,10 @@ fn wire_metadata(receipt: &UntrustedReceipt) -> usize {
     // check_size_bounds ran first: at most 2,048 bytes of bounded string fields.
     // Account for schema, nonce, MAC, two epoch values and the optional parent.
     let c = receipt.claims();
-    lc631_receipt_kernel::RECEIPT_SCHEMA.len() + 32 + 71 + 16
+    lc631_receipt_kernel::RECEIPT_SCHEMA.len()
+        + 32
+        + 71
+        + 16
         + c.class().as_str().len()
         + c.issuer().as_str().len()
         + c.subject_revision().as_str().len()
@@ -177,9 +211,15 @@ fn classify(error: ReceiptError) -> ClockFault {
         ReceiptError::ReplayCapacityExceeded | ReceiptError::InvalidReplayCapacity => {
             ClockFault::BudgetExhausted
         }
-        ReceiptError::ClassMismatch | ReceiptError::InvalidDigest | ReceiptError::InvalidExpiry
-        | ReceiptError::InvalidField(_) | ReceiptError::InvalidWire | ReceiptError::PayloadMismatch
-        | ReceiptError::ParentMismatch | ReceiptError::ReplayDetected | ReceiptError::ScopeMismatch
+        ReceiptError::ClassMismatch
+        | ReceiptError::InvalidDigest
+        | ReceiptError::InvalidExpiry
+        | ReceiptError::InvalidField(_)
+        | ReceiptError::InvalidWire
+        | ReceiptError::PayloadMismatch
+        | ReceiptError::ParentMismatch
+        | ReceiptError::ReplayDetected
+        | ReceiptError::ScopeMismatch
         | ReceiptError::SubjectMismatch => ClockFault::BindingMismatch,
     }
 }

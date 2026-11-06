@@ -1065,7 +1065,7 @@ checksum = "e2db585e1d738fc771bf08a151420d3ed193d9d895a36df7f6f8a9456b911ddc"
 
 [[package]]
 name = "lc631-accelerator"
-version = "7.0.0-beta.1"
+version = "7.1.0-beta.1"
 dependencies = [
  "cubecl-core",
  "cubecl-wgpu",
@@ -1079,7 +1079,7 @@ dependencies = [
 
 [[package]]
 name = "lc631-analysis"
-version = "7.0.0-beta.1"
+version = "7.1.0-beta.1"
 dependencies = [
  "lc631-core",
  "lc631-process-supervisor",
@@ -1094,7 +1094,7 @@ dependencies = [
 
 [[package]]
 name = "lc631-cli"
-version = "7.0.0-beta.1"
+version = "7.1.0-beta.1"
 dependencies = [
  "lc631-accelerator",
  "lc631-analysis",
@@ -1116,7 +1116,7 @@ dependencies = [
 
 [[package]]
 name = "lc631-compat"
-version = "7.0.0-beta.1"
+version = "7.1.0-beta.1"
 dependencies = [
  "serde",
  "sha2",
@@ -1124,7 +1124,7 @@ dependencies = [
 
 [[package]]
 name = "lc631-core"
-version = "7.0.0-beta.1"
+version = "7.1.0-beta.1"
 dependencies = [
  "lc631-receipt-kernel",
  "lc631-substrate",
@@ -1135,7 +1135,7 @@ dependencies = [
 
 [[package]]
 name = "lc631-host"
-version = "7.0.0-beta.1"
+version = "7.1.0-beta.1"
 dependencies = [
  "lc631-core",
  "lc631-process-supervisor",
@@ -1147,7 +1147,7 @@ dependencies = [
 
 [[package]]
 name = "lc631-media"
-version = "7.0.0-beta.1"
+version = "7.1.0-beta.1"
 dependencies = [
  "lc631-core",
  "lc631-process-supervisor",
@@ -1160,7 +1160,7 @@ dependencies = [
 
 [[package]]
 name = "lc631-process-supervisor"
-version = "7.0.0-beta.1"
+version = "7.1.0-beta.1"
 dependencies = [
  "lc631-substrate",
  "libc",
@@ -1170,7 +1170,7 @@ dependencies = [
 
 [[package]]
 name = "lc631-receipt-kernel"
-version = "7.0.0-beta.1"
+version = "7.1.0-beta.1"
 dependencies = [
  "getrandom 0.3.4",
  "serde",
@@ -1180,7 +1180,7 @@ dependencies = [
 
 [[package]]
 name = "lc631-runtime"
-version = "7.0.0-beta.1"
+version = "7.1.0-beta.1"
 dependencies = [
  "lc631-accelerator",
  "lc631-analysis",
@@ -1199,7 +1199,7 @@ dependencies = [
 
 [[package]]
 name = "lc631-solvers"
-version = "7.0.0-beta.1"
+version = "7.1.0-beta.1"
 dependencies = [
  "lc631-process-supervisor",
  "lc631-substrate",
@@ -1208,7 +1208,7 @@ dependencies = [
 
 [[package]]
 name = "lc631-substrate"
-version = "7.0.0-beta.1"
+version = "7.1.0-beta.1"
 dependencies = [
  "num-bigint",
  "num-rational",
@@ -1218,7 +1218,7 @@ dependencies = [
 
 [[package]]
 name = "lc631-tl"
-version = "7.0.0-beta.1"
+version = "7.1.0-beta.1"
 dependencies = [
  "lc631-core",
  "lc631-receipt-kernel",
@@ -1227,7 +1227,7 @@ dependencies = [
 
 [[package]]
 name = "lc631-tldg"
-version = "7.0.0-beta.1"
+version = "7.1.0-beta.1"
 dependencies = [
  "lc631-accelerator",
  "lc631-core",
@@ -1244,7 +1244,7 @@ dependencies = [
 
 [[package]]
 name = "lc631-wire"
-version = "7.0.0-beta.1"
+version = "7.1.0-beta.1"
 dependencies = [
  "lc631-core",
  "lc631-receipt-kernel",
@@ -1254,7 +1254,7 @@ dependencies = [
 
 [[package]]
 name = "lc631-world"
-version = "7.0.0-beta.1"
+version = "7.1.0-beta.1"
 dependencies = [
  "lc631-core",
  "num-traits",

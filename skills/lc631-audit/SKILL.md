@@ -1,6 +1,6 @@
 ---
 name: lc631-audit
-description: Inspect Epistesys 7.0.0-beta.1 evidence boundaries, accelerator receipts, media authority and remaining gates when an audit is requested.
+description: Inspect Epistesys 7.1.0-beta.1 evidence boundaries, accelerator receipts, media authority and remaining gates when an audit is requested.
 ---
 
 # Epistesys Audit

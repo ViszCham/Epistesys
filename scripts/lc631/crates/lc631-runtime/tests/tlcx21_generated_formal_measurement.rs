@@ -3,8 +3,7 @@
 //! These tests require central module registration; no execution is claimed here.
 use lc631_analysis::creativity_measurement::RationalInterval;
 use lc631_core::context::{
-    ContextLimits, ContextPremise, ContextScope, OriginalContext, PremiseBasis,
-    SourceRevision,
+    ContextLimits, ContextPremise, ContextScope, OriginalContext, PremiseBasis, SourceRevision,
 };
 use lc631_core::AuthorityRevision;
 use lc631_runtime::creative_candidate_bridge::{measurement::*, *};
@@ -42,36 +41,65 @@ fn original(source: &SourceStore) -> OriginalContext {
         AuthorityRevision(7),
         vec![
             ContextPremise::from_source(
-                d(5), source, SourceSpan::checked(source, 0, 7).unwrap(),
-                PremiseBasis::Given, true,
-            ).unwrap(),
+                d(5),
+                source,
+                SourceSpan::checked(source, 0, 7).unwrap(),
+                PremiseBasis::Given,
+                true,
+            )
+            .unwrap(),
             ContextPremise::from_source(
-                d(6), source, SourceSpan::checked(source, 8, 9).unwrap(),
-                PremiseBasis::Given, false,
-            ).unwrap(),
+                d(6),
+                source,
+                SourceSpan::checked(source, 8, 9).unwrap(),
+                PremiseBasis::Given,
+                false,
+            )
+            .unwrap(),
         ],
         ContextLimits {
-            max_contexts: 8, max_premises: 2, max_edits: 1, max_statement_bytes: 8192,
+            max_contexts: 8,
+            max_premises: 2,
+            max_edits: 1,
+            max_statement_bytes: 8192,
         },
-    ).unwrap()
+    )
+    .unwrap()
 }
 fn limits() -> BridgeLimits {
     BridgeLimits {
-        max_candidates: 4, max_ast_nodes: 128,
-        max_validation_checks: 10_000, max_payload_bytes: 8192,
+        max_candidates: 4,
+        max_ast_nodes: 128,
+        max_validation_checks: 10_000,
+        max_payload_bytes: 8192,
     }
 }
 fn work() -> m::WorkBudget {
-    m::WorkBudget { max_work: 100_000, max_payload_bytes: 1_000_000 }
+    m::WorkBudget {
+        max_work: 100_000,
+        max_payload_bytes: 1_000_000,
+    }
 }
 fn resource(kind: ResourceKind, amount: u64) -> ResourceRequest {
     ResourceRequest::new(kind, ResourceAmount::checked(amount).unwrap())
 }
 #[derive(Clone, Copy)]
 enum Variant {
-    Full, Cut, Unknown, CopyTarget, CopySource, CandidateId, CandidateContext,
-    Scope, ProbeContext, RequestSwap, ForeignBridge, ForeignReservation,
-    CancelBefore, CancelInside, OutputExhausted,
+    Full,
+    Cut,
+    Unknown,
+    CopyTarget,
+    CopySource,
+    CandidateId,
+    CandidateContext,
+    Scope,
+    ProbeContext,
+    RequestSwap,
+    ForeignBridge,
+    ForeignReservation,
+    CancelBefore,
+    CancelInside,
+    OutputExhausted,
 }
 #[derive(Debug)]
 struct Summary {
@@ -91,115 +119,231 @@ fn run(operator: Operator, variant: Variant, calls: &Cell<usize>) -> Result<Summ
     let goal_query = query(vec![var(0)]);
     let bindings = [
         GivenPremise {
-            id: d(5), span: SourceSpan::checked(&source, 0, 7).unwrap(),
+            id: d(5),
+            span: SourceSpan::checked(&source, 0, 7).unwrap(),
             formula: &source_query.assertions()[0],
         },
         GivenPremise {
-            id: d(6), span: SourceSpan::checked(&source, 8, 9).unwrap(),
+            id: d(6),
+            span: SourceSpan::checked(&source, 8, 9).unwrap(),
             formula: &source_query.assertions()[1],
         },
     ];
     let broker = ResourceBroker::new(ResourceLimits::uniform(64 * 1024 * 1024).unwrap()).unwrap();
     let cancellation = Cancellation::default();
-    let run = broker.begin_run(
-        1, source.id().digest(), ResourceLimits::uniform(64 * 1024 * 1024).unwrap(),
-        Deadline::after(Duration::from_secs(60)).unwrap(), cancellation.clone(),
-    ).unwrap();
-    let reservation = run.reserve(&[
-        resource(ResourceKind::Ram, 32 * 1024 * 1024),
-        resource(ResourceKind::Output, 4 * 1024 * 1024),
-    ]).unwrap();
+    let run = broker
+        .begin_run(
+            1,
+            source.id().digest(),
+            ResourceLimits::uniform(64 * 1024 * 1024).unwrap(),
+            Deadline::after(Duration::from_secs(60)).unwrap(),
+            cancellation.clone(),
+        )
+        .unwrap();
+    let reservation = run
+        .reserve(&[
+            resource(ResourceKind::Ram, 32 * 1024 * 1024),
+            resource(ResourceKind::Output, 4 * 1024 * 1024),
+        ])
+        .unwrap();
     let view = reservation.lease();
-    let goal = GoalPolicy { revision: d(2), query: &goal_query };
+    let goal = GoalPolicy {
+        revision: d(2),
+        query: &goal_query,
+    };
     let mut bridge = CreativeCandidateBridge::with_resources(
-        &source, original(&source), d(5), &bindings, goal, limits(), &view,
-    ).unwrap();
+        &source,
+        original(&source),
+        d(5),
+        &bindings,
+        goal,
+        limits(),
+        &view,
+    )
+    .unwrap();
     let generated = bridge.generate(operator, &view).unwrap();
     assert_eq!(bridge.proposals().len(), 1);
     assert_eq!(generated.validation().assignments(), 4);
     assert!(generated.validation().feasible_models() > 0);
-    assert_eq!(generated.validation().boundary(),
-        ValidationBoundary::SeparateAlgorithmSharedIrGivenSource);
-    let identity = generated.measurement_identity_current(&bridge, &view).unwrap();
+    assert_eq!(
+        generated.validation().boundary(),
+        ValidationBoundary::SeparateAlgorithmSharedIrGivenSource
+    );
+    let identity = generated
+        .measurement_identity_current(&bridge, &view)
+        .unwrap();
     let target = generated.project_current(&bridge, &view).unwrap();
     let target_copy = target.clone();
-    let source_input = if matches!(variant, Variant::CopySource) { &source_copy } else { &source_query };
-    let target_input = if matches!(variant, Variant::CopyTarget) { &target_copy } else { target };
+    let source_input = if matches!(variant, Variant::CopySource) {
+        &source_copy
+    } else {
+        &source_query
+    };
+    let target_input = if matches!(variant, Variant::CopyTarget) {
+        &target_copy
+    } else {
+        target
+    };
     let parent = generated.prepared().parent();
     let context = generated.prepared().target();
     let predicate = BoolExpr::Not(Box::new(var(1)));
     let other_predicate = BoolExpr::Constant(true);
-    let symbols = [(BoolSymbolId::new(0), BoolSymbolId::new(0)),
-        (BoolSymbolId::new(1), BoolSymbolId::new(1))];
+    let symbols = [
+        (BoolSymbolId::new(0), BoolSymbolId::new(0)),
+        (BoolSymbolId::new(1), BoolSymbolId::new(1)),
+    ];
     let mut request = f::Request {
-        source: source_input, target: target_input,
-        source_predicate: &predicate, target_predicate: &predicate,
-        symbols: &symbols, unconstrained: f::UnconstrainedPolicy::ExplicitlyGiven,
+        source: source_input,
+        target: target_input,
+        source_predicate: &predicate,
+        target_predicate: &predicate,
+        symbols: &symbols,
+        unconstrained: f::UnconstrainedPolicy::ExplicitlyGiven,
         binding: f::Binding {
-            source: parent.source(), target: context.source(), source_context: parent,
-            target_context: if matches!(variant, Variant::ProbeContext) { parent } else { context },
-            probe_set: d(3), probe_map: d(0),
+            source: parent.source(),
+            target: context.source(),
+            source_context: parent,
+            target_context: if matches!(variant, Variant::ProbeContext) {
+                parent
+            } else {
+                context
+            },
+            probe_set: d(3),
+            probe_map: d(0),
         },
     };
     request.binding.probe_map = f::probe_map_digest(&request, 10_000).unwrap();
     let weight = RationalInterval::exact_ratio(1, 1).unwrap();
-    let fixed = [m::FixedProbe { identity: b"protected-negative-q", weight: weight.lower(), template: &request }];
+    let fixed = [m::FixedProbe {
+        identity: b"protected-negative-q",
+        weight: weight.lower(),
+        template: &request,
+    }];
     let scope = m::PlanScope {
-        comparison: if matches!(variant, Variant::Scope) { d(99) } else { d(1) },
-        definition: d(9), probe_set: d(3), source: parent.source(), context: parent,
+        comparison: if matches!(variant, Variant::Scope) {
+            d(99)
+        } else {
+            d(1)
+        },
+        definition: d(9),
+        probe_set: d(3),
+        source: parent.source(),
+        context: parent,
     };
     let plan = m::ProbePlan::checked(scope, source_input, &fixed, work()).unwrap();
     let candidate = m::Candidate::given(
-        if matches!(variant, Variant::CandidateId) { d(99) } else { identity },
-        scope.comparison, target_input, context.source(),
-        if matches!(variant, Variant::CandidateContext) { parent } else { context },
-    ).unwrap();
+        if matches!(variant, Variant::CandidateId) {
+            d(99)
+        } else {
+            identity
+        },
+        scope.comparison,
+        target_input,
+        context.source(),
+        if matches!(variant, Variant::CandidateContext) {
+            parent
+        } else {
+            context
+        },
+    )
+    .unwrap();
     let swapped = f::Request {
-        source_predicate: &other_predicate, ..request
+        source_predicate: &other_predicate,
+        ..request
     };
     let schedule = [ScheduledProbe {
         identity: b"protected-negative-q",
-        request: if matches!(variant, Variant::RequestSwap) { &swapped } else { &request },
-        max_work: if matches!(variant, Variant::Unknown) { 1 } else { 10_000 },
+        request: if matches!(variant, Variant::RequestSwap) {
+            &swapped
+        } else {
+            &request
+        },
+        max_work: if matches!(variant, Variant::Unknown) {
+            1
+        } else {
+            10_000
+        },
     }];
     let foreign_bridge = CreativeCandidateBridge::with_resources(
-        &source, original(&source), d(5), &bindings, goal, limits(), &view,
-    ).unwrap();
-    let foreign_reservation = run.reserve(&[
-        resource(ResourceKind::Ram, 16 * 1024 * 1024),
-        resource(ResourceKind::Output, 1024 * 1024),
-    ]).unwrap();
+        &source,
+        original(&source),
+        d(5),
+        &bindings,
+        goal,
+        limits(),
+        &view,
+    )
+    .unwrap();
+    let foreign_reservation = run
+        .reserve(&[
+            resource(ResourceKind::Ram, 16 * 1024 * 1024),
+            resource(ResourceKind::Output, 1024 * 1024),
+        ])
+        .unwrap();
     let foreign_view = foreign_reservation.lease();
     let exhausted = if matches!(variant, Variant::OutputExhausted) {
-        Some(view.claim_resources(&[resource(ResourceKind::Output,
-            4 * 1024 * 1024 - CANDIDATE_OUTPUT)]).unwrap())
-    } else { None };
-    if matches!(variant, Variant::CancelBefore) { cancellation.cancel(); }
+        Some(
+            view.claim_resources(&[resource(
+                ResourceKind::Output,
+                4 * 1024 * 1024 - CANDIDATE_OUTPUT,
+            )])
+            .unwrap(),
+        )
+    } else {
+        None
+    };
+    if matches!(variant, Variant::CancelBefore) {
+        cancellation.cancel();
+    }
     let result = generated.with_formal_measurement_current(
-        if matches!(variant, Variant::ForeignBridge) { &foreign_bridge } else { &bridge },
+        if matches!(variant, Variant::ForeignBridge) {
+            &foreign_bridge
+        } else {
+            &bridge
+        },
         MeasurementInput {
-            source: source_input, plan: &plan, candidate: &candidate,
-            schedule: if matches!(variant, Variant::Cut) { &[] } else { &schedule },
+            source: source_input,
+            plan: &plan,
+            candidate: &candidate,
+            schedule: if matches!(variant, Variant::Cut) {
+                &[]
+            } else {
+                &schedule
+            },
             budget: work(),
         },
-        if matches!(variant, Variant::ForeignReservation) { &foreign_view } else { &view },
+        if matches!(variant, Variant::ForeignReservation) {
+            &foreign_view
+        } else {
+            &view
+        },
         |pair| {
             calls.set(calls.get() + 1);
             let sound = pair.soundness();
             let complete = pair.completeness();
             assert_eq!(sound.probes().len(), 1);
             assert_eq!(sound.mapping_basis(), f::MappingBasis::Given);
-            assert_eq!(sound.source_interpretation(), f::SourceInterpretation::Unverified);
-            assert_eq!(sound.checker_independence(), f::CheckerIndependence::UnassessedSharedIr);
+            assert_eq!(
+                sound.source_interpretation(),
+                f::SourceInterpretation::Unverified
+            );
+            assert_eq!(
+                sound.checker_independence(),
+                f::CheckerIndependence::UnassessedSharedIr
+            );
             assert!(std::ptr::eq(sound.plan(), &plan));
             assert!(std::ptr::eq(sound.candidate(), &candidate));
             assert!(std::ptr::eq(sound.probes()[0].fixed().template, &request));
             let summary = Summary {
-                sound: sound.bounds().clone(), complete: complete.bounds().clone(),
-                produced: pair.produced_count(), missing: pair.missing_count(),
+                sound: sound.bounds().clone(),
+                complete: complete.bounds().clone(),
+                produced: pair.produced_count(),
+                missing: pair.missing_count(),
                 sound_probe: sound.probes()[0].state(),
             };
-            if matches!(variant, Variant::CancelInside) { cancellation.cancel(); }
+            if matches!(variant, Variant::CancelInside) {
+                cancellation.cancel();
+            }
             summary
         },
     );
@@ -207,36 +351,54 @@ fn run(operator: Operator, variant: Variant, calls: &Cell<usize>) -> Result<Summ
     if !matches!(variant, Variant::CancelBefore | Variant::CancelInside) {
         // Connector-local producer/observation/both K1 claims have all dropped.
         // The two bridge metadata claims and generated packet remain live.
-        let returned = view.claim_resources(&[
-            resource(ResourceKind::Ram,
-                32 * 1024 * 1024 - 2 * METADATA_RAM - CANDIDATE_RAM),
-            resource(ResourceKind::Output, 4 * 1024 * 1024 - CANDIDATE_OUTPUT),
-        ]).unwrap();
+        let returned = view
+            .claim_resources(&[
+                resource(
+                    ResourceKind::Ram,
+                    32 * 1024 * 1024 - 2 * METADATA_RAM - CANDIDATE_RAM,
+                ),
+                resource(ResourceKind::Output, 4 * 1024 * 1024 - CANDIDATE_OUTPUT),
+            ])
+            .unwrap();
         drop(returned);
     }
     result
 }
 
 fn weakening() -> Operator {
-    Operator::Recombine { partner: d(6), connective: Connective::Or }
+    Operator::Recombine {
+        partner: d(6),
+        connective: Connective::Or,
+    }
 }
 
 #[test]
 fn tlcx21_generated_formal_exact_foreign_scope_and_request_cuts_do_not_consume() {
-    for variant in [Variant::CopyTarget, Variant::CopySource, Variant::CandidateId,
-        Variant::CandidateContext, Variant::Scope, Variant::ProbeContext,
-        Variant::RequestSwap, Variant::ForeignBridge, Variant::ForeignReservation] {
+    for variant in [
+        Variant::CopyTarget,
+        Variant::CopySource,
+        Variant::CandidateId,
+        Variant::CandidateContext,
+        Variant::Scope,
+        Variant::ProbeContext,
+        Variant::RequestSwap,
+        Variant::ForeignBridge,
+        Variant::ForeignReservation,
+    ] {
         let calls = Cell::new(0);
         let expected = match variant {
             Variant::CopySource => Error::SourceQueryMismatch,
             Variant::Scope => Error::ScopeMismatch,
             Variant::ProbeContext => Error::ProbeBindingMismatch,
-            Variant::RequestSwap => Error::Produced(
-                m::produced::ProducedError::Bridge(m::BridgeError::LineageMismatch)),
-            Variant::ForeignBridge | Variant::ForeignReservation =>
-                Error::Creative(CreativeError::BindingMismatch),
-            Variant::CopyTarget | Variant::CandidateId | Variant::CandidateContext =>
-                Error::CandidateMismatch,
+            Variant::RequestSwap => Error::Produced(m::produced::ProducedError::Bridge(
+                m::BridgeError::LineageMismatch,
+            )),
+            Variant::ForeignBridge | Variant::ForeignReservation => {
+                Error::Creative(CreativeError::BindingMismatch)
+            }
+            Variant::CopyTarget | Variant::CandidateId | Variant::CandidateContext => {
+                Error::CandidateMismatch
+            }
             _ => unreachable!("only the explicit binding variants above are tested"),
         };
         assert_eq!(run(weakening(), variant, &calls).unwrap_err(), expected);
@@ -248,11 +410,20 @@ fn tlcx21_generated_formal_exact_foreign_scope_and_request_cuts_do_not_consume()
 fn tlcx21_generated_formal_reframe_and_soft_weakening_have_actual_distinct_losses() {
     let calls = Cell::new(0);
     let preserved = run(Operator::ReframeDeMorgan, Variant::Full, &calls).unwrap();
-    assert_eq!(preserved.sound, RationalInterval::exact_ratio(0, 1).unwrap());
-    assert_eq!(preserved.complete, RationalInterval::exact_ratio(0, 1).unwrap());
+    assert_eq!(
+        preserved.sound,
+        RationalInterval::exact_ratio(0, 1).unwrap()
+    );
+    assert_eq!(
+        preserved.complete,
+        RationalInterval::exact_ratio(0, 1).unwrap()
+    );
     let changed = run(weakening(), Variant::Full, &calls).unwrap();
     assert_eq!(changed.sound, RationalInterval::exact_ratio(1, 1).unwrap());
-    assert_eq!(changed.complete, RationalInterval::exact_ratio(0, 1).unwrap());
+    assert_eq!(
+        changed.complete,
+        RationalInterval::exact_ratio(0, 1).unwrap()
+    );
     assert_eq!(changed.sound_probe, m::ProbeState::Countermodel(1));
     assert_eq!((changed.produced, changed.missing), (1, 0));
     assert_eq!(calls.get(), 2);

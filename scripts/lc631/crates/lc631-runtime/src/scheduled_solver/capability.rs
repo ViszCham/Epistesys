@@ -2,7 +2,9 @@
 //! Owner checks are not an atomic revocation fence or a semantic/proof oracle.
 #![forbid(unsafe_code)]
 
-use super::{DispatchError, DispatchStep, NativeResult, NativeScheduler, NativeWork, NativeWorkSpec};
+use super::{
+    DispatchError, DispatchStep, NativeResult, NativeScheduler, NativeWork, NativeWorkSpec,
+};
 use crate::capability_measurement::{OwnedPriority, Plan, Registry};
 use crate::resource::RunResources;
 use lc631_solvers::registry::SolverRegistry;

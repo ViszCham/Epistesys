@@ -4,8 +4,8 @@ use lc631_substrate::resource::{
     checked_requests, LiveDeadline, ResourceLease, ResourceLeaseIssuer, RESOURCE_KINDS,
 };
 pub use lc631_substrate::resource::{
-    Cancellation, Deadline, DeadlineNarrowing, ReportedResourceLease, ResourceAmount, ResourceClaim,
-    ResourceError, ResourceKind, ResourceRequest, ResourceReservationView,
+    Cancellation, Deadline, DeadlineNarrowing, ReportedResourceLease, ResourceAmount,
+    ResourceClaim, ResourceError, ResourceKind, ResourceRequest, ResourceReservationView,
 };
 pub use lc631_substrate::Digest32;
 use std::sync::{Arc, Mutex};
@@ -351,9 +351,10 @@ impl RunResources {
         )?;
         // The mutex is the transaction boundary: no reader sees provisional
         // charges or a live lease until all components are ready to publish.
-        let lease = self.root.issuer.issue_admitted_with_deadline(
-            id, report, Arc::clone(&run.deadline),
-        )?;
+        let lease =
+            self.root
+                .issuer
+                .issue_admitted_with_deadline(id, report, Arc::clone(&run.deadline))?;
         ledger.used = process_after;
         ledger.runs[index].used = run_after;
         ledger.next_id = next_id;

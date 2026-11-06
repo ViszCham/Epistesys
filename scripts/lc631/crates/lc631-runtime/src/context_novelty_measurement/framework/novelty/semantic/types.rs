@@ -1,17 +1,36 @@
 use super::*;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Side { Source, Target }
+pub enum Side {
+    Source,
+    Target,
+}
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum StatusMap { CanonicalForcingV1 }
+pub enum StatusMap {
+    CanonicalForcingV1,
+}
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum BridgeMap { ActualProfileMapV1 }
+pub enum BridgeMap {
+    ActualProfileMapV1,
+}
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum BridgeRule { RootGoalUseV1, MappedRootForcingV1 }
+pub enum BridgeRule {
+    RootGoalUseV1,
+    MappedRootForcingV1,
+}
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum CanonicalStatus { Supported, Refuted, Undetermined }
+pub enum CanonicalStatus {
+    Supported,
+    Refuted,
+    Undetermined,
+}
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Status { Complete, Partial, NoComparable, Undefined }
+pub enum Status {
+    Complete,
+    Partial,
+    NoComparable,
+    Undefined,
+}
 #[derive(Clone, Copy)]
 pub struct SemanticProbe<'a> {
     pub role: f::QueryRole,

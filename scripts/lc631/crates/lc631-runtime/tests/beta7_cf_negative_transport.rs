@@ -28,7 +28,11 @@ fn launched<'v>(
     assert!(sup::required_ram_bytes(&request).unwrap() <= 32 * 1024 * 1024);
     let trace = sup::observe_native_dispatches(|| probe::run(request, purpose, view)).unwrap();
     assert!(trace.is_complete());
-    assert_eq!(trace.dispatches().len(), 1, "one actual compiler root is required");
+    assert_eq!(
+        trace.dispatches().len(),
+        1,
+        "one actual compiler root is required"
+    );
     assert!(trace.dispatches()[0].process_id() > 0);
     trace.into_result()
 }
@@ -55,16 +59,28 @@ fn fixed_negative_source() {
 // English: Read diagnostics after transport acceptance; this oracle is not a compiler/status producer.
 fn complete_ndjson(bytes: &[u8]) -> Vec<Value> {
     assert!(!bytes.is_empty() && bytes.len() <= 1024 * 1024);
-    assert!(bytes.ends_with(b"\n"), "a JSON prefix is not a complete diagnostic stream");
+    assert!(
+        bytes.ends_with(b"\n"),
+        "a JSON prefix is not a complete diagnostic stream"
+    );
     let text = std::str::from_utf8(bytes).expect("complete diagnostic bytes are UTF-8");
     let mut records = Vec::new();
     for line in text.lines() {
         assert!(!line.is_empty() && line.len() <= 65536);
         assert!(records.len() < 256);
         let record: Value = serde_json::from_str(line).expect("each complete line is JSON");
-        assert_eq!(record.get("$message_type").and_then(Value::as_str), Some("diagnostic"));
-        assert_ne!(record.get("level").and_then(Value::as_str), Some("error: internal compiler error"));
-        let code = record.get("code").and_then(|code| code.get("code")).and_then(Value::as_str);
+        assert_eq!(
+            record.get("$message_type").and_then(Value::as_str),
+            Some("diagnostic")
+        );
+        assert_ne!(
+            record.get("level").and_then(Value::as_str),
+            Some("error: internal compiler error")
+        );
+        let code = record
+            .get("code")
+            .and_then(|code| code.get("code"))
+            .and_then(Value::as_str);
         assert!(!matches!(code, Some("E0432" | "E0463")));
         records.push(record);
     }
@@ -73,30 +89,61 @@ fn complete_ndjson(bytes: &[u8]) -> Vec<Value> {
 }
 
 fn exact_e0599_span(records: &[Value]) {
-    let errors: Vec<_> = records.iter().filter(|record| {
-        record.get("level").and_then(Value::as_str) == Some("error")
-            && record.get("code").and_then(|code| code.get("code")).and_then(Value::as_str)
-                == Some("E0599")
-    }).collect();
+    let errors: Vec<_> = records
+        .iter()
+        .filter(|record| {
+            record.get("level").and_then(Value::as_str) == Some("error")
+                && record
+                    .get("code")
+                    .and_then(|code| code.get("code"))
+                    .and_then(Value::as_str)
+                    == Some("E0599")
+        })
+        .collect();
     assert_eq!(errors.len(), 1, "one intended E0599 diagnostic is required");
     let spans = errors[0].get("spans").and_then(Value::as_array).unwrap();
-    let primary: Vec<_> = spans.iter()
+    let primary: Vec<_> = spans
+        .iter()
         .filter(|span| span.get("is_primary").and_then(Value::as_bool) == Some(true))
         .collect();
     assert_eq!(primary.len(), 1);
     let span = primary[0];
-    assert_eq!(span.get("file_name").and_then(Value::as_str), Some("<anon>"));
-    assert_eq!(span.get("byte_start").and_then(Value::as_u64), Some(PRIMARY_BYTES.0));
-    assert_eq!(span.get("byte_end").and_then(Value::as_u64), Some(PRIMARY_BYTES.1));
+    assert_eq!(
+        span.get("file_name").and_then(Value::as_str),
+        Some("<anon>")
+    );
+    assert_eq!(
+        span.get("byte_start").and_then(Value::as_u64),
+        Some(PRIMARY_BYTES.0)
+    );
+    assert_eq!(
+        span.get("byte_end").and_then(Value::as_u64),
+        Some(PRIMARY_BYTES.1)
+    );
     assert_eq!(span.get("line_start").and_then(Value::as_u64), Some(2));
     assert_eq!(span.get("line_end").and_then(Value::as_u64), Some(2));
-    assert_eq!(span.get("column_start").and_then(Value::as_u64), Some(PRIMARY_COLUMNS.0));
-    assert_eq!(span.get("column_end").and_then(Value::as_u64), Some(PRIMARY_COLUMNS.1));
+    assert_eq!(
+        span.get("column_start").and_then(Value::as_u64),
+        Some(PRIMARY_COLUMNS.0)
+    );
+    assert_eq!(
+        span.get("column_end").and_then(Value::as_u64),
+        Some(PRIMARY_COLUMNS.1)
+    );
     let text = span.get("text").and_then(Value::as_array).unwrap();
     assert_eq!(text.len(), 1);
-    assert_eq!(text[0].get("text").and_then(Value::as_str), Some(PRIMARY_LINE));
-    assert_eq!(text[0].get("highlight_start").and_then(Value::as_u64), Some(PRIMARY_COLUMNS.0));
-    assert_eq!(text[0].get("highlight_end").and_then(Value::as_u64), Some(PRIMARY_COLUMNS.1));
+    assert_eq!(
+        text[0].get("text").and_then(Value::as_str),
+        Some(PRIMARY_LINE)
+    );
+    assert_eq!(
+        text[0].get("highlight_start").and_then(Value::as_u64),
+        Some(PRIMARY_COLUMNS.0)
+    );
+    assert_eq!(
+        text[0].get("highlight_end").and_then(Value::as_u64),
+        Some(PRIMARY_COLUMNS.1)
+    );
 }
 
 #[test]
@@ -106,25 +153,32 @@ fn positive_control_keeps_actual_nonzero_binary_metadata() {
     let compiler = ChildRequest::compiler();
     let attempt = launched(compiler.request(), probe::Purpose::PositiveControl, &view);
     assert!(attempt.failure().is_none() && attempt.supervisor_error().is_none());
-    let raw = attempt.raw().expect("the real compiler capture is retained");
+    let raw = attempt
+        .raw()
+        .expect("the real compiler capture is retained");
     clean(raw, 0);
     assert!(!raw.stdout.is_empty() && raw.stdout.len() <= 1024 * 1024);
-    assert!(!has_fixture_entry(&raw.stdout), "binary fixture frames are not compiler metadata");
+    assert!(
+        !has_fixture_entry(&raw.stdout),
+        "binary fixture frames are not compiler metadata"
+    );
     let calls = Cell::new(0);
-    let observed = attempt.with_complete(&view, |complete| {
-        calls.set(calls.get() + 1);
-        assert_eq!(complete.purpose(), probe::Purpose::PositiveControl);
-        assert_eq!(complete.exit_code(), 0);
-        assert_eq!(complete.stdout(), raw.stdout.as_slice());
-        assert_eq!(complete.stderr(), raw.stderr.as_slice());
-        // 日本語: metadata stdoutはbyteのまま保持し、診断textとしてparseしない。
-        // English: Preserve metadata stdout as bytes instead of parsing it as diagnostic text.
-        (complete.stdout().len(), complete.stderr().len())
-    }).expect("the actual positive compiler capture is complete");
+    let observed = attempt
+        .with_complete(&view, |complete| {
+            calls.set(calls.get() + 1);
+            assert_eq!(complete.purpose(), probe::Purpose::PositiveControl);
+            assert_eq!(complete.exit_code(), 0);
+            assert_eq!(complete.stdout(), raw.stdout.as_slice());
+            assert_eq!(complete.stderr(), raw.stderr.as_slice());
+            // 日本語: metadata stdoutはbyteのまま保持し、診断textとしてparseしない。
+            // English: Preserve metadata stdout as bytes instead of parsing it as diagnostic text.
+            (complete.stdout().len(), complete.stderr().len())
+        })
+        .expect("the actual positive compiler capture is complete");
     assert_eq!(calls.get(), 1);
     assert_eq!(observed, (raw.stdout.len(), raw.stderr.len()));
     drop(attempt);
-    drop(view);
+    let _ = view;
     finish(budget);
 }
 
@@ -134,38 +188,52 @@ fn complete_real_negative_transport_keeps_e0599_and_exact_span() {
     let budget = budget(22302);
     let view = budget.reservation.lease();
     let compiler = ChildRequest::compiler();
-    let request = sup::RunRequest { stdin: Some(NEGATIVE_SOURCE), ..compiler.request() };
+    let request = sup::RunRequest {
+        stdin: Some(NEGATIVE_SOURCE),
+        ..compiler.request()
+    };
     let attempt = launched(request, probe::Purpose::NegativeCompile, &view);
     assert!(attempt.failure().is_none() && attempt.supervisor_error().is_none());
-    let raw = attempt.raw().expect("the actual failed-compile capture is retained");
+    let raw = attempt
+        .raw()
+        .expect("the actual failed-compile capture is retained");
     clean(raw, 1);
     let calls = Cell::new(0);
-    let records = attempt.with_complete(&view, |complete| {
-        calls.set(calls.get() + 1);
-        assert_eq!(complete.purpose(), probe::Purpose::NegativeCompile);
-        assert_eq!(complete.exit_code(), 1);
-        assert_eq!(complete.stdout(), raw.stdout.as_slice());
-        assert_eq!(complete.stderr(), raw.stderr.as_slice());
-        complete_ndjson(complete.stderr())
-    }).expect("valid NegativeCompile must reach the complete consumer");
+    let records = attempt
+        .with_complete(&view, |complete| {
+            calls.set(calls.get() + 1);
+            assert_eq!(complete.purpose(), probe::Purpose::NegativeCompile);
+            assert_eq!(complete.exit_code(), 1);
+            assert_eq!(complete.stdout(), raw.stdout.as_slice());
+            assert_eq!(complete.stderr(), raw.stderr.as_slice());
+            complete_ndjson(complete.stderr())
+        })
+        .expect("valid NegativeCompile must reach the complete consumer");
     assert_eq!(calls.get(), 1);
     // 日本語: transportの成功と、期待した診断code/source spanの一致は別に検査する。
     // English: Check transport acceptance separately from the expected diagnostic code/source span.
     exact_e0599_span(&records);
 
-    let mut foreign = budget.run.reserve(&[ResourceRequest::new(
-        ResourceKind::Ram, ResourceAmount::checked(1024).unwrap(),
-    )]).unwrap();
+    let mut foreign = budget
+        .run
+        .reserve(&[ResourceRequest::new(
+            ResourceKind::Ram,
+            ResourceAmount::checked(1024).unwrap(),
+        )])
+        .unwrap();
     let foreign_view = foreign.lease();
     let rejected_calls = Cell::new(0);
-    assert!(matches!(attempt.with_complete(&foreign_view, |_| {
-        rejected_calls.set(rejected_calls.get() + 1);
-    }), Err(probe::Failure::ForeignReservation)));
+    assert!(matches!(
+        attempt.with_complete(&foreign_view, |_| {
+            rejected_calls.set(rejected_calls.get() + 1);
+        }),
+        Err(probe::Failure::ForeignReservation)
+    ));
     assert_eq!(rejected_calls.get(), 0);
     assert_eq!(calls.get(), 1);
     drop(attempt);
-    drop(foreign_view);
+    let _ = foreign_view;
     foreign.release_confirmed().unwrap();
-    drop(view);
+    let _ = view;
     finish(budget);
 }

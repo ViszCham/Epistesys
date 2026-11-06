@@ -30,7 +30,12 @@ pub(crate) fn observe_registered_run<'v>(
     reader: crate::goal_clock_domain::EndpointReader<'v>,
     history: std::sync::Arc<ObservedEpoch>,
 ) -> NativeRun<'v> {
-    observe_native_run(plan, input, resources, NativeBirth::Registered(reader, history))
+    observe_native_run(
+        plan,
+        input,
+        resources,
+        NativeBirth::Registered(reader, history),
+    )
 }
 
 pub(super) fn observe_native_run<'v>(
@@ -209,5 +214,8 @@ fn observe_native_into<'v>(
         retained,
     });
     scratch.check()?;
-    run.observed.as_ref().ok_or(ProbeError::ProcessFailed)?.check_current(plan, resources)
+    run.observed
+        .as_ref()
+        .ok_or(ProbeError::ProcessFailed)?
+        .check_current(plan, resources)
 }

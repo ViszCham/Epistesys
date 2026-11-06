@@ -36,7 +36,7 @@ fn s01_api_compatible_shape_with_foreign_fingerprint_is_not_selected() {
     let root = root();
     let stale = candidate(Kind::Runtime, 99);
     assert!(matches!(
-        select(&root, Kind::Runtime, &[stale.clone()]),
+        select(&root, Kind::Runtime, std::slice::from_ref(&stale)),
         Err(Error::MissingArtifact(_))
     ));
     let current = candidate(Kind::Runtime, 100);
@@ -195,7 +195,7 @@ fn s11_empty_foreign_marker_is_rejected_and_diagnostics_are_bounded() {
             .record(
                 Kind::Runtime,
                 &format!("foreign-{index}"),
-                Reason::MalformedMarker,
+                Reason::Malformed,
             )
             .unwrap();
     }

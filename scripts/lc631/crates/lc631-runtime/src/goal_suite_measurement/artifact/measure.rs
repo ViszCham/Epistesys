@@ -72,8 +72,10 @@ fn admit_pair<'v>(
 
 /// Both admitted routes use the same four real outputs, oracle, identity and reports.
 fn evaluate_pair<'r, 'o, 'origin, 'v>(
-    root: &'r ArtifactPairRoot<'origin, 'v>, pair: CodingPair<'o, 'v>,
-    retained: ResourceClaim<'v>, view: &ResourceReservationView<'_>,
+    root: &'r ArtifactPairRoot<'origin, 'v>,
+    pair: CodingPair<'o, 'v>,
+    retained: ResourceClaim<'v>,
+    view: &ResourceReservationView<'_>,
 ) -> Result<OwnedArtifactPair<'r, 'o, 'origin, 'v>, Error> {
     let a = successes(pair.baseline)?;
     let b = successes(pair.candidate)?;
@@ -119,8 +121,10 @@ fn evaluate_pair<'r, 'o, 'origin, 'v>(
 }
 impl<'o, 'p, 'v> clock::RegisteredArtifactRoot<'o, 'p, 'v> {
     pub(crate) fn measure_registered<'r>(
-        &'r self, pair: clock::RegisteredPair<'o, 'p, 'v>,
-        ports: &mut clock::CurrentPorts<'_, '_, '_, '_, '_>, view: &'v ResourceReservationView<'_>,
+        &'r self,
+        pair: clock::RegisteredPair<'o, 'p, 'v>,
+        ports: &mut clock::CurrentPorts<'_, '_, '_, '_, '_>,
+        view: &'v ResourceReservationView<'_>,
     ) -> Result<OwnedArtifactPair<'r, 'o, 'o, 'v>, clock::Error> {
         let (retained, scratch) = admit_pair(&self.artifact, view)?;
         current::check_registered(self, pair, ports, view)?;
@@ -174,7 +178,9 @@ impl<'r, 'o, 'origin, 'v> OwnedArtifactPair<'r, 'o, 'origin, 'v> {
     }
 
     fn admit_read<'s>(
-        &self, root: &ArtifactPairRoot<'origin, 'v>, pair: CodingPair<'o, 'v>,
+        &self,
+        root: &ArtifactPairRoot<'origin, 'v>,
+        pair: CodingPair<'o, 'v>,
         view: &'s ResourceReservationView<'_>,
     ) -> Result<ResourceClaim<'s>, Error> {
         root.check(view)?;
@@ -210,9 +216,11 @@ impl<'r, 'o, 'origin, 'v> OwnedArtifactPair<'r, 'o, 'origin, 'v> {
 
 impl<'r, 'o, 'v> OwnedArtifactPair<'r, 'o, 'o, 'v> {
     pub(crate) fn with_registered<'p, R>(
-        &self, root: &'r clock::RegisteredArtifactRoot<'o, 'p, 'v>,
+        &self,
+        root: &'r clock::RegisteredArtifactRoot<'o, 'p, 'v>,
         pair: clock::RegisteredPair<'o, 'p, 'v>,
-        ports: &mut clock::CurrentPorts<'_, '_, '_, '_, '_>, view: &'v ResourceReservationView<'_>,
+        ports: &mut clock::CurrentPorts<'_, '_, '_, '_, '_>,
+        view: &'v ResourceReservationView<'_>,
         consume: impl for<'current> FnOnce(ArtifactView<'current>) -> R,
     ) -> Result<R, clock::Error> {
         let scratch = self.admit_read(&root.artifact, pair.actual(), view)?;
@@ -227,7 +235,9 @@ impl<'r, 'o, 'v> OwnedArtifactPair<'r, 'o, 'o, 'v> {
 }
 
 impl<'current> ArtifactView<'current> {
-    pub fn clock_basis(&self) -> clock::ClockBasis { self.clock_basis }
+    pub fn clock_basis(&self) -> clock::ClockBasis {
+        self.clock_basis
+    }
     pub fn baseline_outputs(&self) -> &'current [Option<u32>; 4] {
         self.baseline_outputs
     }

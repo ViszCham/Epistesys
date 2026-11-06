@@ -40,9 +40,15 @@ pub(super) fn measure(
     let mut outcomes = Vec::new();
     let mut values = Vec::new();
     let mut probes = Vec::new();
-    outcomes.try_reserve_exact(plan.features.len()).map_err(|_| Error::Budget)?;
-    values.try_reserve_exact(plan.features.len()).map_err(|_| Error::Budget)?;
-    probes.try_reserve_exact(plan.features.len()).map_err(|_| Error::Budget)?;
+    outcomes
+        .try_reserve_exact(plan.features.len())
+        .map_err(|_| Error::Budget)?;
+    values
+        .try_reserve_exact(plan.features.len())
+        .map_err(|_| Error::Budget)?;
+    probes
+        .try_reserve_exact(plan.features.len())
+        .map_err(|_| Error::Budget)?;
     for feature in &plan.features {
         let outcome = match extract(target, &feature.spec) {
             Ok(actual) if actual.as_ref() == Some(&feature.expected) => FeatureOutcome::Preserved,
@@ -55,7 +61,8 @@ pub(super) fn measure(
             FeatureOutcome::Violated => (1, 1),
             FeatureOutcome::Unknown(FeatureGap::ExtractionBudget) => (0, 1),
         };
-        values.push(RationalInterval::from_ratio(lower, 1, upper, 1).map_err(|_| Error::Arithmetic)?);
+        values
+            .push(RationalInterval::from_ratio(lower, 1, upper, 1).map_err(|_| Error::Arithmetic)?);
         outcomes.push(outcome);
     }
     for (feature, value) in plan.features.iter().zip(&values) {

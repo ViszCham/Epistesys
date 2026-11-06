@@ -22,9 +22,9 @@ use std::{
 };
 pub(super) mod attempt_producer;
 mod clock;
-pub use clock::ProbeInputs;
-pub(crate) use clock::ObservationClock;
 use clock::NativeBirth;
+pub(crate) use clock::ObservationClock;
+pub use clock::ProbeInputs;
 mod clock_worker;
 use clock_worker::observe_native_run;
 pub(crate) use clock_worker::{observe_registered_run, NativeRun};
@@ -193,7 +193,6 @@ pub fn observe_current<'v>(
     observe_native_run(plan, metadata, resources, NativeBirth::Legacy(input.clock))
         .into_legacy_result()
 }
-
 
 fn check_current_at(
     plan: &CodingProbePlan,

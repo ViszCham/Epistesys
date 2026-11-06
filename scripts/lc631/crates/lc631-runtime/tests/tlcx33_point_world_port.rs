@@ -112,7 +112,11 @@ fn scenario(hardware: bool, consume: bool, reverse: bool) {
         )
         .unwrap();
         let clock = ClockSpec::exact(d(70), TimeScale::Monotonic, d(71), d(72));
-        let truths = if reverse { [Truth::False, Truth::True] } else { [Truth::True, Truth::False] };
+        let truths = if reverse {
+            [Truth::False, Truth::True]
+        } else {
+            [Truth::True, Truth::False]
+        };
         let traces = truths.map(|truth| {
             FiniteTrace::checked(
                 vec![TraceStep::new(
@@ -218,10 +222,12 @@ fn scenario(hardware: bool, consume: bool, reverse: bool) {
             max_candidates: 2,
             max_canonical_bytes: 8192,
         };
-        let values = truths.map(|truth| [
-            AxisValue::Exact(if truth == Truth::True { &one } else { &zero }),
-            AxisValue::Exact(loss),
-        ]);
+        let values = truths.map(|truth| {
+            [
+                AxisValue::Exact(if truth == Truth::True { &one } else { &zero }),
+                AxisValue::Exact(loss),
+            ]
+        });
         let rows = [
             JointCandidate {
                 id: CandidateId(1),
@@ -390,14 +396,32 @@ fn scenario(hardware: bool, consume: bool, reverse: bool) {
             if consume {
                 use lc631_runtime::semantic_accelerator::selection::given_points::*;
                 assert!(select_given_points_current(
-                    &missing, &batch, &grid, &mut native, budget(), &view,
-                ).is_err());
+                    &missing,
+                    &batch,
+                    &grid,
+                    &mut native,
+                    budget(),
+                    &view,
+                )
+                .is_err());
                 assert!(select_given_points_current(
-                    &duplicated, &batch, &grid, &mut native, budget(), &view,
-                ).is_err());
+                    &duplicated,
+                    &batch,
+                    &grid,
+                    &mut native,
+                    budget(),
+                    &view,
+                )
+                .is_err());
                 assert!(select_given_points_current(
-                    &masquerade, &batch, &grid, &mut native, budget(), &view,
-                ).is_err());
+                    &masquerade,
+                    &batch,
+                    &grid,
+                    &mut native,
+                    budget(),
+                    &view,
+                )
+                .is_err());
             }
         } else {
             assert_eq!(
@@ -427,30 +451,44 @@ fn scenario(hardware: bool, consume: bool, reverse: bool) {
             EligibilityBasis::ReportedConditional
         );
         if hardware {
-            assert_eq!(projected.actual_ordered_gpu_words().unwrap(), if reverse { [0, 1] } else { [1, 0] });
+            assert_eq!(
+                projected.actual_ordered_gpu_words().unwrap(),
+                if reverse { [0, 1] } else { [1, 0] }
+            );
         } else {
             assert_eq!(projected.actual_ordered_gpu_words(), None);
         }
         let consumed = if consume {
             use lc631_runtime::semantic_accelerator::selection::given_points::*;
-            let selected = select_given_points_current(
-                &checked, &batch, &grid, &mut native, budget(), &view,
-            ).unwrap();
+            let selected =
+                select_given_points_current(&checked, &batch, &grid, &mut native, budget(), &view)
+                    .unwrap();
             let report = selected.project_current(&batch, &native, &view).unwrap();
             assert_eq!(report.provided_point_recommendation(), Some(winner));
-            assert_eq!(report.eligibility_basis(), EligibilityBasis::ReportedConditional);
+            assert_eq!(
+                report.eligibility_basis(),
+                EligibilityBasis::ReportedConditional
+            );
             assert_eq!(report.world_recommendation(), None);
             assert_eq!(report.numeric_frontier(), [winner]);
             assert_eq!(report.checked_point_instances(), 2);
             if hardware {
-                assert_eq!(report.actual_ordered_gpu_words().unwrap(), if reverse { [0, 1] } else { [1, 0] });
+                assert_eq!(
+                    report.actual_ordered_gpu_words().unwrap(),
+                    if reverse { [0, 1] } else { [1, 0] }
+                );
             } else {
                 assert_eq!(report.actual_ordered_gpu_words(), None);
             }
             Some(selected)
-        } else { None };
+        } else {
+            None
+        };
         let before = outcome.historical_gpu_words().map(|v| v.to_vec());
-        let consumed_words = consumed.as_ref().and_then(|v| v.historical_gpu_words()).map(|v| v.to_vec());
+        let consumed_words = consumed
+            .as_ref()
+            .and_then(|v| v.historical_gpu_words())
+            .map(|v| v.to_vec());
         cancel.cancel();
         if let Some(selected) = consumed.as_ref() {
             assert!(selected.project_current(&batch, &native, &view).is_err());

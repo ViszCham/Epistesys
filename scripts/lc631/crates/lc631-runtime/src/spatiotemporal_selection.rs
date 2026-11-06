@@ -117,8 +117,10 @@ impl<'input, 'view> TemporalOwner<'input, 'view> {
         &self,
         view: &ResourceReservationView<'_>,
         consume: impl for<'p> FnOnce(
-            TemporalModelInput<'p>, TemporalModelInput<'p>,
-            &'p TemporalPreservationPolicy, &'p TemporalPreservationReport,
+            TemporalModelInput<'p>,
+            TemporalModelInput<'p>,
+            &'p TemporalPreservationPolicy,
+            &'p TemporalPreservationReport,
         ) -> R,
     ) -> Result<R, Error> {
         self.check_current(view)?;
@@ -262,8 +264,10 @@ impl<'policy, 'view> SpatialOwner<'policy, 'view> {
         &self,
         view: &ResourceReservationView<'_>,
         consume: impl for<'p> FnOnce(
-            SpatialModelInput, SpatialModelInput,
-            &'p SpatialPreservationPolicy, &'p SpatialPreservationReport,
+            SpatialModelInput,
+            SpatialModelInput,
+            &'p SpatialPreservationPolicy,
+            &'p SpatialPreservationReport,
         ) -> R,
     ) -> Result<R, Error> {
         self.check_current(view)?;

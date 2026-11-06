@@ -12,17 +12,22 @@ const POSITIVE_TIMEOUT_MS: u64 = 30_000;
 #[test]
 fn registered_first_native_positive_preserves_exact_capture_supplemental_30s() {
     at_native_birth_supplemental_30s(|case| {
-        let remaining = case.view.remaining().expect("positive fixture run must still be live");
-        assert!(remaining >= std::time::Duration::from_millis(POSITIVE_TIMEOUT_MS),
-            "positive fixture needs its full30s operation budget; remaining={remaining:?}");
+        let remaining = case
+            .view
+            .remaining()
+            .expect("positive fixture run must still be live");
+        assert!(
+            remaining >= std::time::Duration::from_millis(POSITIVE_TIMEOUT_MS),
+            "positive fixture needs its full30s operation budget; remaining={remaining:?}"
+        );
         eprintln!("registered-clock profile=supplemental_positive_30s timeout_ms={} shared_remaining={remaining:?} original_negative_timeout_ms=5000 logical_epoch=100 expiry=400",
             POSITIVE_TIMEOUT_MS);
         assert!(!case.marker.exists());
 
         let diagnostic = case.native_diagnostic();
-        let attempt = case.session.observe_native(
-            case.plan, case.input, case.origin, case.view,
-        );
+        let attempt = case
+            .session
+            .observe_native(case.plan, case.input, case.origin, case.view);
         if let Err(error) = &attempt {
             case.report_native_diagnostic("positive_pilot_native", diagnostic, error);
         }
@@ -45,4 +50,3 @@ fn registered_first_native_positive_preserves_exact_capture_supplemental_30s() {
             .unwrap();
     });
 }
-

@@ -18,8 +18,21 @@ pub fn root() -> PathBuf {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_nanos();
-    let p = std::env::temp_dir().join(format!("tlcx32-verified-{}-{now}", std::process::id()));
-    std::fs::create_dir_all(p.join("src")).unwrap();
+    // Acquire one fresh owner; equal clock values never share mutable fixtures.
+    let p = (0..64)
+        .find_map(|attempt| {
+            let path = std::env::temp_dir().join(format!(
+                "tlcx32-verified-{}-{now}-{attempt}",
+                std::process::id()
+            ));
+            match std::fs::create_dir(&path) {
+                Ok(()) => Some(path),
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => None,
+                Err(error) => panic!("fixture directory: {error}"),
+            }
+        })
+        .expect("fixture collision budget exhausted");
+    std::fs::create_dir(p.join("src")).unwrap();
     std::fs::write(
         p.join("Cargo.toml"),
         "[package]\nname='tlcx32_verified'\nversion='0.0.0'\nedition='2021'\n",

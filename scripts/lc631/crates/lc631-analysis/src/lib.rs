@@ -9,10 +9,10 @@ pub mod context_lowering;
 pub mod creative_candidates;
 pub mod creativity_measurement;
 pub mod declared_build_capture;
-pub mod source_build_origin;
 pub mod logical_lowering;
 pub mod reconstruction_loss;
 pub mod solver_coding_bridge;
+pub mod source_build_origin;
 pub mod spatiotemporal_loss;
 pub use cargo_world::observe_cargo_world_with_resources;
 
@@ -184,7 +184,8 @@ pub use pipeline::{
 pub(crate) use process::not_started_request;
 pub use process::{
     run_bounded_tool, run_bounded_tool_attempt, run_bounded_tool_with_resources,
-    BoundedToolRequest, BoundedToolResult, NativeProcessEffect, ResourceToolAttempt,
+    run_prepared_tool_attempt, BoundedToolRequest, BoundedToolResult, FrameDispatchBinding,
+    FrameDispatchPurpose, NativeProcessEffect, PreparedToolFrame, ResourceToolAttempt,
     ResourceToolResult, ToolProcessRunner, ToolRunState,
 };
 pub use release::{

@@ -39,8 +39,8 @@ impl<'report, 'context> CurrentCodingInput<'report, 'context> {
         current: &'context LoweredContext,
         budget: LogicalLoweringBudget,
     ) -> Result<Self, CurrentCodingError> {
-        let input = DgclCodingInput::lower(report, current, budget)
-            .map_err(CurrentCodingError::Input)?;
+        let input =
+            DgclCodingInput::lower(report, current, budget).map_err(CurrentCodingError::Input)?;
         Self::checked(input, current)
     }
 
@@ -50,8 +50,8 @@ impl<'report, 'context> CurrentCodingInput<'report, 'context> {
         current: &'context LoweredContext,
         logical: LogicalTask,
     ) -> Result<Self, CurrentCodingError> {
-        let input = DgclCodingInput::from_lowered(report, logical)
-            .map_err(CurrentCodingError::Input)?;
+        let input =
+            DgclCodingInput::from_lowered(report, logical).map_err(CurrentCodingError::Input)?;
         Self::checked(input, current)
     }
 
@@ -81,8 +81,15 @@ impl<'report, 'context> CurrentCodingInput<'report, 'context> {
         &self,
         index: usize,
     ) -> Result<CurrentCodingRequirement<'_, 'report, 'context>, CurrentCodingError> {
-        let requirement = self.input.bind_requirement(index).map_err(CurrentCodingError::Input)?;
-        Ok(CurrentCodingRequirement { input: self, requirement, index })
+        let requirement = self
+            .input
+            .bind_requirement(index)
+            .map_err(CurrentCodingError::Input)?;
+        Ok(CurrentCodingRequirement {
+            input: self,
+            requirement,
+            index,
+        })
     }
 }
 
@@ -118,17 +125,26 @@ impl<'report, 'context> CurrentCodingRequirement<'_, 'report, 'context> {
         {
             return Err(CurrentCodingError::ValidationPlanMismatch);
         }
-        let task = self.requirement.planned_tasks().iter().find(|task| {
-            task.task_id == plan.task_id
-                && task.requirement_id == plan.requirement_id
-                && task.evidence_kind == plan.kind
-                && task.applicability == TaskApplicability::Required
-                && task.not_applicable_basis.is_none()
-                && task.condition_ids.is_empty()
-                && !task.producer_revision.is_empty()
-                && !task.acceptance_criterion.is_empty()
-        }).ok_or(CurrentCodingError::ValidationPlanMismatch)?;
-        Ok(BoundValidationInput { input: self.input, task, plan })
+        let task = self
+            .requirement
+            .planned_tasks()
+            .iter()
+            .find(|task| {
+                task.task_id == plan.task_id
+                    && task.requirement_id == plan.requirement_id
+                    && task.evidence_kind == plan.kind
+                    && task.applicability == TaskApplicability::Required
+                    && task.not_applicable_basis.is_none()
+                    && task.condition_ids.is_empty()
+                    && !task.producer_revision.is_empty()
+                    && !task.acceptance_criterion.is_empty()
+            })
+            .ok_or(CurrentCodingError::ValidationPlanMismatch)?;
+        Ok(BoundValidationInput {
+            input: self.input,
+            task,
+            plan,
+        })
     }
 }
 
@@ -168,7 +184,11 @@ impl BoundValidationInput<'_, '_, '_, '_> {
     ) -> Result<CheckedDgclCargoObservation, DgclValidationProducerError> {
         let pipeline = self.input.input.pipeline();
         observe_dgcl_cargo_validation(
-            root, pipeline.source_store().text(), pipeline, self.plan, execution,
+            root,
+            pipeline.source_store().text(),
+            pipeline,
+            self.plan,
+            execution,
         )
     }
 
@@ -181,7 +201,12 @@ impl BoundValidationInput<'_, '_, '_, '_> {
     ) -> Result<CheckedDgclCargoObservation, DgclValidationProducerError> {
         let pipeline = self.input.input.pipeline();
         observe_dgcl_cargo_validation_with_runner(
-            root, pipeline.source_store().text(), pipeline, self.plan, execution, runner,
+            root,
+            pipeline.source_store().text(),
+            pipeline,
+            self.plan,
+            execution,
+            runner,
         )
     }
 }

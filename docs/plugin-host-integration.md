@@ -2,7 +2,7 @@
 
 ## 日本語
 
-Beta-7.0のplugin identityは`epistesys`、versionは`7.0.0-beta.1`です。`lc631-*`は既存command・wireの互換識別子です。個人の全session既定はhost側の設定と利用者指示で選び、この公開repositoryから他の利用者へ強制しません。
+Beta-7.1のplugin identityは`epistesys`、versionは`7.1.0-beta.1`です。`lc631-*`は既存command・wireの互換識別子です。個人の全session既定はhost側の設定と利用者指示で選び、この公開repositoryから他の利用者へ強制しません。
 
 ### 通常turnの最小経路
 
@@ -28,11 +28,11 @@ Stop hookは元のstdinをPowerShellで読み直したりJSONへ再変換した�
 
 sourceのversion更新、Git merge、marketplace登録、cache install、enabled設定、既存chatでの読み込み、実callbackは別々に記録します。公式のmarketplace/install操作を使用し、古い版のcacheを手動で別版の内容へ上書きしません。別version directoryを使うことで、旧版と再開状態を保持できます。新規chatの読み込みと、既存chatのhot reload／再起動後の観測も区別します。
 
-通常の診断成功は操作権限・一般性能・形式証明を作りません。現在の試験範囲と残存条件は[Beta-7.0記録](epistesys-7.0.0-beta.1-release-notes-2026-11-06.md)、修復・再開の条件は[DGCL実行契約](dgcl-operating-profile-and-closure.md)をご覧ください。
+通常の診断成功は操作権限・一般性能・形式証明を作りません。現在の試験範囲と残存条件は[Beta-7.1記録](epistesys-7.1.0-beta.1-release-notes-2026-11-06.md)、修復・再開の条件は[DGCL実行契約](dgcl-operating-profile-and-closure.md)をご覧ください。
 
 ## English
 
-The Beta-7.0 plugin identity is `epistesys`, version `7.0.0-beta.1`. Existing `lc631-*` command and wire identifiers remain compatible. A personal default across sessions is chosen through host settings and user instructions; this public repository does not impose it on other users.
+The Beta-7.1 plugin identity is `epistesys`, version `7.1.0-beta.1`. Existing `lc631-*` command and wire identifiers remain compatible. A personal default across sessions is chosen through host settings and user instructions; this public repository does not impose it on other users.
 
 ### Minimal ordinary-turn route
 
@@ -58,4 +58,4 @@ The Stop hook forwards original stdin to the packaged native `lc631-host-stop-ho
 
 Record source versions, Git merges, marketplace registration, cache installation, enablement, existing-chat pickup and actual callbacks separately. Use official marketplace/install operations; never overwrite an old-version cache with another version. Separate version directories preserve the previous installation and resume state. Distinguish new-chat loading from existing-chat hot reload or post-restart observation.
 
-A successful diagnostic creates no permission, general-performance result or formal proof. See the [Beta-7.0 record](epistesys-7.0.0-beta.1-release-notes-2026-11-06.md) for tests and residuals, and the [DGCL execution contract](dgcl-operating-profile-and-closure.md) for repair/resume conditions.
+A successful diagnostic creates no permission, general-performance result or formal proof. See the [Beta-7.1 record](epistesys-7.1.0-beta.1-release-notes-2026-11-06.md) for tests and residuals, and the [DGCL execution contract](dgcl-operating-profile-and-closure.md) for repair/resume conditions.

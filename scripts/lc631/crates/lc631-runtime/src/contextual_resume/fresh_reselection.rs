@@ -11,8 +11,8 @@ use crate::contextual_repair::{
     },
     snapshot_gate::{CodingBuildPort, ExpectedCurrentBuild, SnapshotGateError},
 };
-use lc631_analysis::lifecycle_binds_target;
 use lc631_analysis::declared_build_capture::{CurrentSnapshotAuthority, SnapshotCaptureAttempt};
+use lc631_analysis::lifecycle_binds_target;
 use lc631_core::{context::ContextRevision, stable_sha256};
 use lc631_substrate::{resource::ResourceReservationView, Digest32};
 
@@ -41,14 +41,30 @@ pub struct CodingResumeBuildAttempt<'res> {
     capture: Option<SnapshotCaptureAttempt<'res>>,
 }
 impl CodingResumeBuildAttempt<'_> {
-    pub fn diagnostic(&self) -> Option<&FreshResumeError> { self.diagnostic.as_ref() }
-    pub fn capture_attempt(&self) -> Option<&SnapshotCaptureAttempt<'_>> { self.capture.as_ref() }
+    pub fn diagnostic(&self) -> Option<&FreshResumeError> {
+        self.diagnostic.as_ref()
+    }
+    pub fn capture_attempt(&self) -> Option<&SnapshotCaptureAttempt<'_>> {
+        self.capture.as_ref()
+    }
     /// Selection sampled at this gate; rerun the gate for a later publication.
-    pub fn selection(&self, resources: &ResourceReservationView<'_>) -> Result<bool, FreshResumeError> {
-        if let Some(error) = &self.diagnostic { return Err(error.clone()); }
-        let capture = self.capture.as_ref().ok_or(FreshResumeError::UnexpectedSelection)?;
-        let actual = capture.current().map_err(|e| FreshResumeError::Build(SnapshotGateError::Capture(e)))?;
-        actual.check_current(resources).map_err(|e| FreshResumeError::Build(SnapshotGateError::Capture(e)))?;
+    pub fn selection(
+        &self,
+        resources: &ResourceReservationView<'_>,
+    ) -> Result<bool, FreshResumeError> {
+        if let Some(error) = &self.diagnostic {
+            return Err(error.clone());
+        }
+        let capture = self
+            .capture
+            .as_ref()
+            .ok_or(FreshResumeError::UnexpectedSelection)?;
+        let actual = capture
+            .current()
+            .map_err(|e| FreshResumeError::Build(SnapshotGateError::Capture(e)))?;
+        actual
+            .check_current(resources)
+            .map_err(|e| FreshResumeError::Build(SnapshotGateError::Capture(e)))?;
         self.selection.ok_or(FreshResumeError::UnexpectedSelection)
     }
 }
@@ -82,10 +98,18 @@ impl OwnedCodingResumeSelection<'_> {
             BaselineBuildCorrespondence::NeedsEvidence
         }
     }
-    pub fn history(&self) -> &HistoricalRepairTransition { &self.history }
-    pub fn baseline(&self) -> &OwnedCodingProbeObservation<'_> { &self.baseline }
-    pub fn current(&self) -> &OwnedCodingProbeObservation<'_> { &self.current }
-    pub fn gain(&self) -> &OwnedCodingProbeGain<'_> { &self.gain }
+    pub fn history(&self) -> &HistoricalRepairTransition {
+        &self.history
+    }
+    pub fn baseline(&self) -> &OwnedCodingProbeObservation<'_> {
+        &self.baseline
+    }
+    pub fn current(&self) -> &OwnedCodingProbeObservation<'_> {
+        &self.current
+    }
+    pub fn gain(&self) -> &OwnedCodingProbeGain<'_> {
+        &self.gain
+    }
     /// Rechecks the declared current build and current Test authority through
     /// the same concrete port as live repair. Historical baseline stays fixed.
     pub fn selected_current<'res>(
@@ -99,28 +123,58 @@ impl OwnedCodingResumeSelection<'_> {
             let expected = ExpectedCurrentBuild::from_verified_history(&self.history, port)
                 .map_err(FreshResumeError::Build)?;
             self.check_probe_owners(plan, resources)?;
-            self.current.check_current_artifact(plan, resources).map_err(FreshResumeError::Probe)?;
+            self.current
+                .check_current_artifact(plan, resources)
+                .map_err(FreshResumeError::Probe)?;
             Ok(expected)
         })();
         let expected = match expected {
             Ok(expected) => expected,
-            Err(error) => return CodingResumeBuildAttempt { selection: None, diagnostic: Some(error), capture: None },
+            Err(error) => {
+                return CodingResumeBuildAttempt {
+                    selection: None,
+                    diagnostic: Some(error),
+                    capture: None,
+                }
+            }
         };
         let capture = port.capture_current(authority, resources);
-        let result = expected.check_attempt(&capture, resources).map_err(FreshResumeError::Build)
+        let result = expected
+            .check_attempt(&capture, resources)
+            .map_err(FreshResumeError::Build)
             .and_then(|()| self.check_probe_owners(plan, resources))
-            .and_then(|()| self.current.check_current_artifact(plan, resources).map_err(FreshResumeError::Probe));
+            .and_then(|()| {
+                self.current
+                    .check_current_artifact(plan, resources)
+                    .map_err(FreshResumeError::Probe)
+            });
         let (selection, diagnostic) = match result {
             Ok(()) => (Some(self.selected), None),
             Err(error) => (None, Some(error)),
         };
-        CodingResumeBuildAttempt { selection, diagnostic, capture: Some(capture) }
+        CodingResumeBuildAttempt {
+            selection,
+            diagnostic,
+            capture: Some(capture),
+        }
     }
-    fn check_probe_owners(&self, plan: &CodingProbePlan, resources: &ResourceReservationView<'_>) -> Result<(), FreshResumeError> {
-        self.baseline.check_current(plan, resources).map_err(FreshResumeError::Probe)?;
-        self.current.check_current(plan, resources).map_err(FreshResumeError::Probe)?;
-        self.baseline_gain.check_current(plan, resources).map_err(FreshResumeError::Probe)?;
-        self.gain.check_current(plan, resources).map_err(FreshResumeError::Probe)
+    fn check_probe_owners(
+        &self,
+        plan: &CodingProbePlan,
+        resources: &ResourceReservationView<'_>,
+    ) -> Result<(), FreshResumeError> {
+        self.baseline
+            .check_current(plan, resources)
+            .map_err(FreshResumeError::Probe)?;
+        self.current
+            .check_current(plan, resources)
+            .map_err(FreshResumeError::Probe)?;
+        self.baseline_gain
+            .check_current(plan, resources)
+            .map_err(FreshResumeError::Probe)?;
+        self.gain
+            .check_current(plan, resources)
+            .map_err(FreshResumeError::Probe)
     }
     pub fn claim_boundary(&self) -> &'static str {
         if self.history.before_build().is_some() {
@@ -140,21 +194,29 @@ pub fn resume_reselect_coding<'v>(
     resources: &'v ResourceReservationView<'_>,
 ) -> Result<OwnedCodingResumeSelection<'v>, FreshResumeError> {
     check_bindings(&input, resources)?;
-    let baseline = observe_current(input.plan, input.baseline, resources)
-        .map_err(FreshResumeError::Probe)?;
-    let current = observe_current(input.plan, input.current, resources)
-        .map_err(FreshResumeError::Probe)?;
-    let gain = paired_gain(input.plan, &baseline, &current, resources)
-        .map_err(FreshResumeError::Probe)?;
+    let baseline =
+        observe_current(input.plan, input.baseline, resources).map_err(FreshResumeError::Probe)?;
+    let current =
+        observe_current(input.plan, input.current, resources).map_err(FreshResumeError::Probe)?;
+    let gain =
+        paired_gain(input.plan, &baseline, &current, resources).map_err(FreshResumeError::Probe)?;
     let baseline_gain = paired_gain(input.plan, &baseline, &baseline, resources)
         .map_err(FreshResumeError::Probe)?;
     let selected = match select_current(input.plan, &[&baseline_gain, &gain], resources)
-        .map_err(FreshResumeError::Probe)? {
+        .map_err(FreshResumeError::Probe)?
+    {
         Some(1) => true,
         Some(0) | None => false,
         Some(_) => return Err(FreshResumeError::UnexpectedSelection),
     };
-    Ok(OwnedCodingResumeSelection { history: input.history, baseline, current, baseline_gain, gain, selected })
+    Ok(OwnedCodingResumeSelection {
+        history: input.history,
+        baseline,
+        current,
+        baseline_gain,
+        gain,
+        selected,
+    })
 }
 
 fn check_bindings(
@@ -167,7 +229,8 @@ fn check_bindings(
         || input.context.interpretation_digest() != history.context()
         || input.comparison_scope != history.comparison_scope()
         || input.plan.digest() != history.probe_plan()
-        || input.plan.goal() != history.goal() || input.plan.policy() != history.policy()
+        || input.plan.goal() != history.goal()
+        || input.plan.policy() != history.policy()
         || resources.source_revision() != history.task_source()
         || input.baseline.source != input.current.source
         || parse(&stable_sha256(input.current.source))? != history.task_source()
@@ -181,15 +244,24 @@ fn check_bindings(
     // and target content separately instead of restoring an old snapshot permit.
     if before.target_ref != after.target_ref
         || parse(&stable_sha256(after.target_ref))? != history.target_ref_digest()
-        || !lifecycle_binds_target(before.snapshot, before.target_ref,
-            &super::transition::digest_text(history.before_target()))
-        || !lifecycle_binds_target(after.snapshot, after.target_ref,
-            &super::transition::digest_text(history.after_target()))
+        || !lifecycle_binds_target(
+            before.snapshot,
+            before.target_ref,
+            &super::transition::digest_text(history.before_target()),
+        )
+        || !lifecycle_binds_target(
+            after.snapshot,
+            after.target_ref,
+            &super::transition::digest_text(history.after_target()),
+        )
         || parse(&after.snapshot.build_input_digest)? != history.after_build()
-        || history.before_build().is_some_and(|expected|
-            parse_digest(&before.snapshot.build_input_digest) != Ok(expected))
+        || history.before_build().is_some_and(|expected| {
+            parse_digest(&before.snapshot.build_input_digest) != Ok(expected)
+        })
     {
         return Err(FreshResumeError::BindingMismatch);
     }
-    resources.check().map_err(|error| FreshResumeError::Probe(ProbeError::Resource(error)))
+    resources
+        .check()
+        .map_err(|error| FreshResumeError::Probe(ProbeError::Resource(error)))
 }

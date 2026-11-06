@@ -160,11 +160,9 @@ fn check(order: &[usize], change: Change, ram: u64, expected: Expected) {
                 NumericPayloadProfile::LegacyV1 => {
                     prepare_numeric_batch(&policy, &rows, coverage, stamp, &view, 8)
                 }
-                NumericPayloadProfile::TiledWorld2048V1 => {
-                    prepare_numeric_batch_with_profile(
-                        &policy, &rows, coverage, stamp, &view, 8, profile,
-                    )
-                }
+                NumericPayloadProfile::TiledWorld2048V1 => prepare_numeric_batch_with_profile(
+                    &policy, &rows, coverage, stamp, &view, 8, profile,
+                ),
             };
             match expected {
                 Expected::Rejected(error) => assert_eq!(
@@ -237,11 +235,17 @@ fn malformed_order_is_rejected_before_scratch_admission() {
 fn invalid_policy_or_key_is_rejected_at_preparation() {
     for (change, error) in [
         (Change::ZeroCandidateLimit, SelectionError::InvalidLimits),
-        (Change::ExceededCandidateLimit, SelectionError::ResourceExhausted),
+        (
+            Change::ExceededCandidateLimit,
+            SelectionError::ResourceExhausted,
+        ),
         (Change::ZeroKeyBudget, SelectionError::InvalidLimits),
         (Change::ExceededKeyBudget, SelectionError::ResourceExhausted),
         (Change::DuplicateAxis, SelectionError::InvalidAxes),
-        (Change::UndeclaredGoalSolveOverlap, SelectionError::InvalidAxes),
+        (
+            Change::UndeclaredGoalSolveOverlap,
+            SelectionError::InvalidAxes,
+        ),
         (Change::EmptyKey, SelectionError::MissingCanonicalKey),
     ] {
         check(&[1, 0], change, NORMAL_RAM, Expected::Rejected(error));
@@ -262,5 +266,10 @@ fn invalid_value_is_rejected_at_preparation() {
 #[test]
 fn valid_permutation_preserves_the_exact_cpu_selection() {
     check(&[1, 0], Change::None, NORMAL_RAM, Expected::CpuFrontier);
-    check(&[1, 0], Change::SignedGain, NORMAL_RAM, Expected::CpuFrontier);
+    check(
+        &[1, 0],
+        Change::SignedGain,
+        NORMAL_RAM,
+        Expected::CpuFrontier,
+    );
 }

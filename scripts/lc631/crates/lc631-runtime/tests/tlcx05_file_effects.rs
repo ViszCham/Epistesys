@@ -169,11 +169,21 @@ fn exercise(cut: Cut) {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_nanos();
-    let root = std::env::temp_dir().join(format!(
-        "tlcx05-file-effect-{}-{unique}",
-        std::process::id()
-    ));
-    std::fs::create_dir_all(root.join("src")).unwrap();
+    // Acquire one fresh owner; equal clock values never share mutable fixtures.
+    let root = (0..64)
+        .find_map(|attempt| {
+            let path = std::env::temp_dir().join(format!(
+                "tlcx05-file-effect-{}-{unique}-{attempt}",
+                std::process::id()
+            ));
+            match std::fs::create_dir(&path) {
+                Ok(()) => Some(path),
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => None,
+                Err(error) => panic!("fixture directory: {error}"),
+            }
+        })
+        .expect("fixture collision budget exhausted");
+    std::fs::create_dir(root.join("src")).unwrap();
     let before = "pub fn value() -> u8 { 0 }\n";
     let after = "pub fn value() -> u8 { 1 }\n";
     std::fs::write(

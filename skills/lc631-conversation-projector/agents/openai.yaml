@@ -1,6 +1,6 @@
 interface:
-  display_name: "Epistesys Beta-7.0 Conversation"
+  display_name: "Epistesys Beta-7.1 Conversation"
   short_description: "Keep source, candidates and unresolved states distinct"
-  default_prompt: "Use $lc631-conversation-projector to inspect this prompt with Epistesys Beta-7.0."
+  default_prompt: "Use $lc631-conversation-projector to inspect this prompt with Epistesys Beta-7.1."
 policy:
   allow_implicit_invocation: true

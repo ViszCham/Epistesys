@@ -22,7 +22,10 @@ pub use lc631_substrate::{
     source::{SourceSpan, SourceStore},
     Digest32,
 };
-pub use std::{cell::Cell, sync::Arc, time::Duration};
+// Re-exported for sibling fixtures; not every integration target uses it.
+#[allow(unused_imports)]
+pub use std::cell::Cell;
+pub use std::{sync::Arc, time::Duration};
 #[path = "../tlcx22_context_novelty_support/mod.rs"]
 mod base;
 pub use base::{bridge_limits, d, limits as context_limits, original, q, resource, var, weak};

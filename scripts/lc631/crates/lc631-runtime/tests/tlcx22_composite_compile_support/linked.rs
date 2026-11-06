@@ -109,7 +109,7 @@ fn marker_for_entry(
     let exists = |p: &Path| p.try_exists().map_err(|e| Error::Io(e.kind()));
     if !exists(&path)? {
         if exists(&dir.join(format!("{stem}.json")))? {
-            rejected.record(kind, directory, Reason::MissingMarker)?;
+            rejected.record(kind, directory, Reason::Missing)?;
         }
         return Ok(None);
     }
@@ -118,8 +118,8 @@ fn marker_for_entry(
     let expected = root.expected_fingerprint(kind)?;
     let reason = match diagnostics::classify_marker(&bytes, expected)? {
         MarkerState::Exact => return Ok(Some((expected, stamp))),
-        MarkerState::Foreign => Reason::ForeignMarker,
-        MarkerState::Malformed => Reason::MalformedMarker,
+        MarkerState::Foreign => Reason::Foreign,
+        MarkerState::Malformed => Reason::Malformed,
     };
     rejected.record(kind, directory, reason)?;
     Ok(None)

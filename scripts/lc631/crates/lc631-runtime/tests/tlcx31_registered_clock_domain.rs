@@ -142,10 +142,10 @@ fn r04_expired_revoked_and_wrong_issuer_are_pre_provider_typed_cuts() {
                 } else {
                     registry.revoke(id);
                 }
-                let rejected = endpoint
-                    .check_registration_current(view)
-                    .err()
-                    .expect("credential no longer current");
+                let rejected = match endpoint.check_registration_current(view) {
+                    Err(error) => error,
+                    Ok(_) => panic!("credential no longer current"),
+                };
                 if mode == 0 {
                     assert!(matches!(
                         rejected,

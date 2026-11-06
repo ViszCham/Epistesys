@@ -300,7 +300,10 @@ fn check_prepared(
     prepared: &PreparedTemporalReprojection<'_, '_>,
     pair: &CurrentTemporalPair<'_, '_, '_, '_>,
 ) -> Result<(), ReprojectionError> {
-    prepared.retained.check().map_err(ReprojectionError::Resource)?;
+    prepared
+        .retained
+        .check()
+        .map_err(ReprojectionError::Resource)?;
     if !prepared.retained.same_reservation(pair.left_resources) {
         return Err(ReprojectionError::ForeignPreparationOwner);
     }
@@ -340,8 +343,9 @@ fn check_pair<'store>(
         .request()
         .inspect_current(pair.contexts, pair.left.binding, pair.right.binding)
         .map_err(ReprojectionError::Preparation)?;
-    let diagnostic = analyze_temporal_pair(pair.left_store, pair.left, pair.right_store, pair.right)
-        .map_err(ReprojectionError::Bridge)?;
+    let diagnostic =
+        analyze_temporal_pair(pair.left_store, pair.left, pair.right_store, pair.right)
+            .map_err(ReprojectionError::Bridge)?;
     let actual = diagnostic
         .reprojection()
         .map_err(ReprojectionError::Preparation)?;
