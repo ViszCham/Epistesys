@@ -1,13 +1,13 @@
 {
   "name": "epistesys",
-  "version": "7.0.0-beta.1",
-  "description": "Epistesys Beta-7.0 development support: requirement traceability, EpiMapLoss and EpiRecompScore, bounded validation, repair/resume, and explicit evidence and authority boundaries.",
+  "version": "7.1.0-beta.1",
+  "description": "Epistesys Beta-7.1 development support: requirement traceability, EpiMapLoss and EpiRecompScore, bounded validation, repair/resume, and explicit evidence and authority boundaries.",
   "author": {
     "name": "Labyrinth-Codex authors"
   },
   "skills": "./skills/",
   "interface": {
-    "displayName": "Epistesys Beta-7.0 (7.0.0-beta.1)",
+    "displayName": "Epistesys Beta-7.1 (7.1.0-beta.1)",
     "shortDescription": "Trace requirements, validate changes and support repair.",
     "longDescription": "A development tool connecting original requirements, typed context, finite-logic checks, EpiMapLoss/EpiRecompScore, binary state, resource ownership and Coding/Media boundaries. The declared Windows no-default-features test profile is recorded separately from other OS/features, external backends, general effectiveness and real-host delivery. Installing the plugin does not create execution authority or establish all-path correctness.",
     "developerName": "Epistesys authors",
@@ -17,7 +17,7 @@
       "Read"
     ],
     "defaultPrompt": [
-      "Use Epistesys Beta-7.0 to trace this development request and its validation gaps.",
+      "Use Epistesys Beta-7.1 to trace this development request and its validation gaps.",
       "Explain the current EpiMapLoss and EpiRecompScore contracts without changing their formulas."
     ]
   }

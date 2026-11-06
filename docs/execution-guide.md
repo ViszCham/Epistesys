@@ -4,7 +4,7 @@
 
 ### 実行前の条件
 
-まず診断で元の要求と未確認事項を確認し、実ファイルを変更する修復へ進むときだけ、権限・対象の版・検証計画を用意します。配布済みbinary、モデルweight、receiptや秘密鍵が自動で用意されるわけではありません。現在の検証範囲は[Beta-7.0記録](epistesys-7.0.0-beta.1-release-notes-2026-11-06.md)、pluginの最小起動は[接続契約](plugin-host-integration.md)、CLI/SDKの実行条件は[DGCL実行契約](dgcl-operating-profile-and-closure.md)をご覧ください。
+まず診断で元の要求と未確認事項を確認し、実ファイルを変更する修復へ進むときだけ、権限・対象の版・検証計画を用意します。配布済みbinary、モデルweight、receiptや秘密鍵が自動で用意されるわけではありません。現在の検証範囲は[Beta-7.1記録](epistesys-7.1.0-beta.1-release-notes-2026-11-06.md)、pluginの最小起動は[接続契約](plugin-host-integration.md)、CLI/SDKの実行条件は[DGCL実行契約](dgcl-operating-profile-and-closure.md)をご覧ください。
 
 ### 診断
 
@@ -78,7 +78,7 @@ schema不適合、source/config drift、stale/expired evidence、未対応backen
 
 ### Preconditions
 
-Start with a diagnostic to inspect the original requirements and outstanding checks. Prepare authority, the target revision, and a validation plan before attempting a repair that changes a real file. Distribution binaries, model weights, receipts, and private keys are not provisioned automatically. See the [Beta-7.0 record](epistesys-7.0.0-beta.1-release-notes-2026-11-06.md) for current scope, the [plugin contract](plugin-host-integration.md) for minimal invocation, and the [DGCL execution contract](dgcl-operating-profile-and-closure.md) for CLI/SDK preconditions.
+Start with a diagnostic to inspect the original requirements and outstanding checks. Prepare authority, the target revision, and a validation plan before attempting a repair that changes a real file. Distribution binaries, model weights, receipts, and private keys are not provisioned automatically. See the [Beta-7.1 record](epistesys-7.1.0-beta.1-release-notes-2026-11-06.md) for current scope, the [plugin contract](plugin-host-integration.md) for minimal invocation, and the [DGCL execution contract](dgcl-operating-profile-and-closure.md) for CLI/SDK preconditions.
 
 ### Diagnostics
 

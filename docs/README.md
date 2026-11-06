@@ -4,7 +4,7 @@
 
 開発でEpistesysを使いたい方は、[コーディング支援の概要](../README.md#coding-assistance-ja)から[実行ガイド](execution-guide.md)へお進みください。要求を確認する方法、テスト結果の読み方、修復や再開に必要な条件を順にたどれます。
 
-現在の版はBeta-7.0（`7.0.0-beta.1`）です。[今回の検証記録](epistesys-7.0.0-beta.1-release-notes-2026-11-06.md)に、検証済みの範囲と未完了点をまとめています。Alpha.3の記録は以前の版の履歴です。設計の評価案や前身のベンチマークは、日常の利用手順とは分けて下に掲載しています。
+現在の版はBeta-7.1（`7.1.0-beta.1`）です。[今回の検証記録](epistesys-7.1.0-beta.1-release-notes-2026-11-06.md)に、検証済みの範囲と未完了点をまとめています。Alpha.3の記録は以前の版の履歴です。設計の評価案や前身のベンチマークは、日常の利用手順とは分けて下に掲載しています。
 
 TLCXの数式・適用条件は[測定契約](tlcx-tl-screative-measurement-contract-v1-2026-10-29.md)、依存順と完成条件は[ロードマップ](epistesys-tlcx-contextual-multilogic-loss-creativity-roadmap-2026-10-28.md)にまとめています。計画に項目があることを、その実装・配布・host接続の完了とは扱いません。
 
@@ -18,7 +18,7 @@ TLCXの数式・適用条件は[測定契約](tlcx-tl-screative-measurement-cont
 | 測定式を確認する | [EpiMapLoss](epimaploss-epirecompscore-formulas.md#map-ja) → [EpiRecompScore F1・F2](epimaploss-epirecompscore-formulas.md#score-ja) → [全40成分](epimaploss-epirecompscore-formulas.md#catalog-ja) | 記号、計算法、値を出せない条件、基準との差 |
 | interfaceを統合する | [wire互換性](dgcl-wire-compatibility.md) → [schema契約](../schemas/closure-and-receipt-contract.md) | field・stage・consumer view、失効と互換性 |
 | 開発上の効果を確かめる | [設計仮説と評価項目](research-hypotheses.md) → [前向き評価案](research/epistesys-prospective-evaluation-plan.md) | 比較条件、計算予算、未使用の評価データ、採点、欠測 |
-| 現行状態を確認する | [Beta-7.0検証記録](epistesys-7.0.0-beta.1-release-notes-2026-11-06.md) → [既知の制約](known-limitations.md) | 今回検証したこと、配布・実ホストで未確認のこと |
+| 現行状態を確認する | [Beta-7.1検証記録](epistesys-7.1.0-beta.1-release-notes-2026-11-06.md) → [既知の制約](known-limitations.md) | 今回検証したこと、配布・実ホストで未確認のこと |
 
 ### 文書の役割
 
@@ -85,7 +85,7 @@ Coding支援の説明と実装範囲を照合した今回の所見・修正・�
 
 To use Epistesys in development, start with [Coding assistance](../README.md#coding-assistance-en), then follow the [execution guide](execution-guide.md). These pages cover how to inspect a requirement, interpret a test result, and determine what is needed for repair or resume.
 
-The current version is Beta-7.0 (`7.0.0-beta.1`). Its [verification record](epistesys-7.0.0-beta.1-release-notes-2026-11-06.md) identifies what has been checked and what is still open. Alpha.3 records describe an earlier version. Evaluation proposals and predecessor benchmarks appear below, separately from instructions for everyday use.
+The current version is Beta-7.1 (`7.1.0-beta.1`). Its [verification record](epistesys-7.1.0-beta.1-release-notes-2026-11-06.md) identifies what has been checked and what is still open. Alpha.3 records describe an earlier version. Evaluation proposals and predecessor benchmarks appear below, separately from instructions for everyday use.
 
 The [measurement contract](tlcx-tl-screative-measurement-contract-v1-2026-10-29.md) defines TLCX formulas and applicability; the [roadmap](epistesys-tlcx-contextual-multilogic-loss-creativity-roadmap-2026-10-28.md) defines dependencies and completion criteria. Listing an item in a plan does not establish implementation, distribution, or host closure.
 
@@ -99,7 +99,7 @@ The [measurement contract](tlcx-tl-screative-measurement-contract-v1-2026-10-29.
 | Check the measurement equations | [EpiMapLoss](epimaploss-epirecompscore-formulas.md#map-en) → [EpiRecompScore F1/F2](epimaploss-epirecompscore-formulas.md#score-en) → [all 40 components](epimaploss-epirecompscore-formulas.md#catalog-en) | Symbols, calculations, conditions for no numeric value, differences from baseline |
 | Integrate interfaces | [Wire compatibility](dgcl-wire-compatibility.md) → [schema contract](../schemas/closure-and-receipt-contract.md) | Fields/stages/consumer views, invalidation, compatibility |
 | Evaluate effects on development work | [Design hypotheses and evaluation criteria](research-hypotheses.md) → [Prospective plan](research/epistesys-prospective-evaluation-plan.md) | Comparison conditions, compute budgets, holdouts, grading, missing data |
-| Check current status | [Beta-7.0 verification record](epistesys-7.0.0-beta.1-release-notes-2026-11-06.md) → [Known limitations](known-limitations.md) | Checks performed for this checkpoint and unverified distribution or real-host behavior |
+| Check current status | [Beta-7.1 verification record](epistesys-7.1.0-beta.1-release-notes-2026-11-06.md) → [Known limitations](known-limitations.md) | Checks performed for this checkpoint and unverified distribution or real-host behavior |
 
 ### Document roles
 

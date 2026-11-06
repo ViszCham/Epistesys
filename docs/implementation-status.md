@@ -2,7 +2,7 @@
 
 ## 日本語
 
-これは初回alpha.1の履歴記録です。現行の状況は[Beta-7.0検証記録](epistesys-7.0.0-beta.1-release-notes-2026-11-06.md)、現在の指標は[数式一覧](epimaploss-epirecompscore-formulas.md#map-ja)を参照してください。[アーキテクチャ](system-architecture.md)と[alpha.3検証記録](../validation/epr-release-verification-2026-10-27.md)は、途中の版で追加された機構を確認するための資料です。
+これは初回alpha.1の履歴記録です。現行の状況は[Beta-7.1検証記録](epistesys-7.1.0-beta.1-release-notes-2026-11-06.md)、現在の指標は[数式一覧](epimaploss-epirecompscore-formulas.md#map-ja)を参照してください。[アーキテクチャ](system-architecture.md)と[alpha.3検証記録](../validation/epr-release-verification-2026-10-27.md)は、途中の版で追加された機構を確認するための資料です。
 
 この作業ツリーは、Labyrinth-Codex v6.3.1の選択source snapshotをEpistesys（エピステシス）として独立起動できる形へ移植した初回alphaです。receipt検証、TL/TLDG、256×8 world materialization、RPA、candidate-only Media、Host replay v2を実装面として継承しています。内部の`lc631-*` crate・command・schema IDは、移植による挙動差を抑えるため互換識別子として保持します。製品identity、manifest、Cargo version、launcher、hook表示はEpistesysへ変更します。
 
@@ -12,7 +12,7 @@ EPI-05のsource build、feature-reduced/default test、strict clippy、locked re
 
 ## English
 
-This is a historical record of the first alpha.1 snapshot. For current status see the [Beta-7.0 verification record](epistesys-7.0.0-beta.1-release-notes-2026-11-06.md); for the current measures see the [formula reference](epimaploss-epirecompscore-formulas.md#map-en). The [architecture](system-architecture.md) and [alpha.3 verification record](../validation/epr-release-verification-2026-10-27.md) describe mechanisms added in an intervening version.
+This is a historical record of the first alpha.1 snapshot. For current status see the [Beta-7.1 verification record](epistesys-7.1.0-beta.1-release-notes-2026-11-06.md); for the current measures see the [formula reference](epimaploss-epirecompscore-formulas.md#map-en). The [architecture](system-architecture.md) and [alpha.3 verification record](../validation/epr-release-verification-2026-10-27.md) describe mechanisms added in an intervening version.
 
 This worktree is the first Epistesys (エピステシス) alpha, migrating the selected Labyrinth-Codex v6.3.1 source snapshot for independent startup. It inherits executable receipt verification, TL/TLDG, 256×8 world materialization, RPA, candidate-only Media, and Host replay v2 surfaces. Internal `lc631-*` crate, command, and schema IDs remain compatibility identifiers to reduce migration behavior drift. Product identity, manifest, Cargo version, launcher, and hook display are changed to Epistesys.
 

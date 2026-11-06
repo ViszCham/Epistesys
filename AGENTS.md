@@ -2,7 +2,7 @@
 
 ## 日本語
 
-Epistesys Beta-7.0（`7.0.0-beta.1`）は、要求追跡・検証・修復を支援する開発ツールです。[移行契約](docs/migration-contract.md)と[現在の検証範囲](docs/epistesys-7.0.0-beta.1-release-notes-2026-11-06.md)を保持してください。
+Epistesys Beta-7.1（`7.1.0-beta.1`）は、要求追跡・検証・修復を支援する開発ツールです。[移行契約](docs/migration-contract.md)と[現在の検証範囲](docs/epistesys-7.1.0-beta.1-release-notes-2026-11-06.md)を保持してください。
 
 - coding・test・reviewにはcoding facade、説明・設計にはconversation facadeを一つだけ使います。利用者の選択とhost設定を優先し、別lineとの二重起動はしません。
 - 元のsource、Program IR、EpiMapLoss、candidate、evidence、authorityを区別し、Unavailable・Hold・Clarify・未観測を成功に変えません。診断は権限を作らず、許可された作業を禁止するものでもありません。
@@ -13,7 +13,7 @@ Epistesys Beta-7.0（`7.0.0-beta.1`）は、要求追跡・検証・修復を支
 
 ## English
 
-Epistesys Beta-7.0 (`7.0.0-beta.1`) is a development tool for requirement traceability, validation and repair. Preserve the [migration contract](docs/migration-contract.md) and [current verification scope](docs/epistesys-7.0.0-beta.1-release-notes-2026-11-06.md).
+Epistesys Beta-7.1 (`7.1.0-beta.1`) is a development tool for requirement traceability, validation and repair. Preserve the [migration contract](docs/migration-contract.md) and [current verification scope](docs/epistesys-7.1.0-beta.1-release-notes-2026-11-06.md).
 
 - Use exactly one facade: coding for code/tests/review, conversation for explanation/design. Respect user selection and host configuration; do not double-run another line.
 - Separate original source, Program IR, EpiMapLoss, candidates, evidence and authority. Keep Unavailable, Hold, Clarify and unobserved states. Diagnostics neither grant permission nor prohibit authorized work.

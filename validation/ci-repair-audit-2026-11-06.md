@@ -4,6 +4,8 @@
 
 対象はBeta-7.0のCI断線と、実際に表面化した障害です。中央セッションだけで修復し、全コードの再読や一般的な安全性の証明は行っていません。
 
+利用者の追加指示により、修復結果はBeta-7.1（`7.1.0-beta.1`）でまとめ、同じplugin IDを更新します。最終CIはこのidentityで判定します。
+
 | 所見 | 修復と確認方法 |
 | --- | --- |
 | Windowsの整形commandが引数長上限を超える | Cargo metadataの全targetを短い引数単位へ分割。editionとout-of-line moduleを保持。空対象・対象漏れ・先行失敗の隠蔽に対する負例を追加 |
@@ -22,6 +24,8 @@
 ## English
 
 Scope is Beta-7.0 CI disconnections and failures actually surfaced during verification. Repairs use only the central session, without another complete-code reading or a general safety proof.
+
+Per the additional user instruction, release the repairs as Beta-7.1 (`7.1.0-beta.1`) under the same plugin ID. Judge final CI under this identity.
 
 | Finding | Repair and verification |
 | --- | --- |
