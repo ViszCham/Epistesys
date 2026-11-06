@@ -67,13 +67,21 @@ fn root() -> PathBuf {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_nanos();
-    let path = base.join(format!(
-        "epistesys-tlcx30-worker-{}-{stamp}",
-        std::process::id()
-    ));
-    std::fs::create_dir(&path).unwrap();
-    eprintln!("retained owned worker fixture: {}", path.display());
-    path
+    for attempt in 0..64 {
+        let path = base.join(format!(
+            "epistesys-tlcx30-worker-{}-{stamp}-{attempt}",
+            std::process::id()
+        ));
+        match std::fs::create_dir(&path) {
+            Ok(()) => {
+                eprintln!("retained owned worker fixture: {}", path.display());
+                return path;
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => panic!("worker fixture directory: {error}"),
+        }
+    }
+    panic!("worker fixture directory collision budget exhausted");
 }
 
 #[test]
