@@ -19,9 +19,14 @@
 
 ### 文書の役割
 
-- [TLCXロードマップ](epistesys-tlcx-contextual-multilogic-loss-creativity-roadmap-2026-10-28.md)は、実装の依存関係と各段階の完了条件をまとめたものです。[用語表](system-architecture.md#terminology-ja)では、解析候補、検証済みの結果、実行権限、出力の受領を区別しています。
-- [設計の評価項目](research-hypotheses.md)、[評価用データの収集手順](dgcl-gold-collection-protocol.md)、[前向き評価案](research/epistesys-prospective-evaluation-plan.md)は、開発での効果を今後どう確かめるかを説明しています。
-- 実装の由来は[移行契約](migration-contract.md)、[採用一覧](adoption-manifest.md)、[初期コピーの検証](clone-verification.md)を参照してください。監査ごとの対象範囲は[Assurance](assurance-compiler-status.md)、[RepoSeiri](reposeiri-audit.md)、[コーディング支援の文書監査](../validation/coding-documentation-adversarial-review.md)で確認できます。
+| 種別 | 参照先と読み方 |
+| --- | --- |
+| 仕様・実行条件 | [アーキテクチャ](system-architecture.md#日本語)、[DGCL実行契約](dgcl-operating-profile-and-closure.md#日本語)、[wire互換性](dgcl-wire-compatibility.md)で、型・状態・操作の条件を確認する。 |
+| 現行版の検証記録 | [Beta-7.1の記録](epistesys-7.1.0-beta.1-release-notes-2026-11-06.md#日本語)で、対象の版・環境・結果・未確認点を確認する。以前の版は下の履歴資料へ分けている。 |
+| 実装計画・評価案 | [TLCXロードマップ](epistesys-tlcx-contextual-multilogic-loss-creativity-roadmap-2026-10-28.md)は依存関係と完了条件を、[設計の評価項目](research-hypotheses.md)・[評価用データの収集手順](dgcl-gold-collection-protocol.md)・[前向き評価案](research/epistesys-prospective-evaluation-plan.md)は今後の評価方法を示す。 |
+| 由来・除外範囲 | [移行契約](migration-contract.md)、[採用一覧](adoption-manifest.md)、[初期コピーの検証](clone-verification.md)で、継承した実装と除外した情報を確認する。 |
+
+計画に項目があることを、実装・検証・配布・host接続の完了とは扱いません。解析候補・検証結果・権限・受領の違いは[用語表](system-architecture.md#terminology-ja)にまとめています。監査ごとの対象範囲は[Assurance](assurance-compiler-status.md)、[RepoSeiri](reposeiri-audit.md)、[コーディング支援の文書監査](../validation/coding-documentation-adversarial-review.md)で確認できます。
 
 ### GB-CC75：前身システムのベンチマーク
 
@@ -29,7 +34,7 @@ Labyrinth-Codexを対象とした当時の集計・評価です。[評価報告]
 
 ### 履歴資料
 
-各記録は、その版の実装や検証について記述しています。[Beta 7.0](epistesys-7.0.0-beta.1-release-notes-2026-11-06.md) · [Beta 6.9](epistesys-6.9.0-beta.1-source-snapshot-2026-11-05.md) · [alpha.3の変更](epistesys-6.3.2-alpha.3-release-notes-2026-10-27.md) · [alpha.3の検証](../validation/epr-release-verification-2026-10-27.md)
+各記録は、その版の実装や検証について記述しています。過去の合格・保留・完了状態を、現行版の観測へ読み替えません。[Beta 7.0](epistesys-7.0.0-beta.1-release-notes-2026-11-06.md) · [Beta 6.9](epistesys-6.9.0-beta.1-source-snapshot-2026-11-05.md) · [alpha.3の変更](epistesys-6.3.2-alpha.3-release-notes-2026-10-27.md) · [alpha.3の検証](../validation/epr-release-verification-2026-10-27.md)
 
 <details>
 <summary>Epistesysのclone・DGCL・alpha.2の実装履歴</summary>
@@ -73,9 +78,14 @@ For a first example, start with [conversation and coding assistance](coding-and-
 
 ### Document roles
 
-- The [TLCX roadmap](epistesys-tlcx-contextual-multilogic-loss-creativity-roadmap-2026-10-28.md) sets out dependencies and completion conditions for each stage. The [glossary](system-architecture.md#terminology-en) distinguishes analysis candidates, validated results, execution authority and output receipt.
-- The [evaluation criteria](research-hypotheses.md), [reference-data collection protocol](dgcl-gold-collection-protocol.md) and [prospective evaluation plan](research/epistesys-prospective-evaluation-plan.md) describe how effects on development could be measured.
-- For implementation provenance, see the [migration contract](migration-contract.md), [adoption manifest](adoption-manifest.md) and [initial clone verification](clone-verification.md). For the scope of specific audits, see [Assurance](assurance-compiler-status.md), [RepoSeiri](reposeiri-audit.md) and the [coding assistance documentation review](../validation/coding-documentation-adversarial-review.md).
+| Category | Reference and interpretation |
+| --- | --- |
+| Specification and execution conditions | Use the [architecture](system-architecture.md#english), [DGCL operating contract](dgcl-operating-profile-and-closure.md#english) and [wire compatibility](dgcl-wire-compatibility.md) for types, states and operation preconditions. |
+| Current verification record | The [Beta-7.1 record](epistesys-7.1.0-beta.1-release-notes-2026-11-06.md#english) identifies the revision, environment, results and unverified scope. Earlier versions are listed below as historical records. |
+| Implementation plans and evaluation proposals | The [TLCX roadmap](epistesys-tlcx-contextual-multilogic-loss-creativity-roadmap-2026-10-28.md) sets dependencies and completion conditions. The [evaluation criteria](research-hypotheses.md), [reference-data collection protocol](dgcl-gold-collection-protocol.md) and [prospective plan](research/epistesys-prospective-evaluation-plan.md) describe future evaluation methods. |
+| Provenance and exclusions | Use the [migration contract](migration-contract.md), [adoption manifest](adoption-manifest.md) and [initial clone verification](clone-verification.md) to identify inherited implementation and excluded information. |
+
+An item in a plan does not establish completed implementation, validation, distribution or host integration. The [glossary](system-architecture.md#terminology-en) distinguishes analysis candidates, validation results, authority and receipt. For specific audit scopes, see [Assurance](assurance-compiler-status.md), [RepoSeiri](reposeiri-audit.md) and the [coding assistance documentation review](../validation/coding-documentation-adversarial-review.md).
 
 ### GB-CC75: predecessor benchmark
 
@@ -83,7 +93,7 @@ These records evaluate the predecessor, Labyrinth-Codex. The [study](research/gb
 
 ### Historical records
 
-Each record describes implementation or verification for the version it names. [Beta 7.0](epistesys-7.0.0-beta.1-release-notes-2026-11-06.md) · [Beta 6.9](epistesys-6.9.0-beta.1-source-snapshot-2026-11-05.md) · [alpha.3 changes](epistesys-6.3.2-alpha.3-release-notes-2026-10-27.md) · [alpha.3 verification](../validation/epr-release-verification-2026-10-27.md)
+Each record describes implementation or verification for the version it names. Historical passes, holds and completion states are not observations for the current version. [Beta 7.0](epistesys-7.0.0-beta.1-release-notes-2026-11-06.md) · [Beta 6.9](epistesys-6.9.0-beta.1-source-snapshot-2026-11-05.md) · [alpha.3 changes](epistesys-6.3.2-alpha.3-release-notes-2026-10-27.md) · [alpha.3 verification](../validation/epr-release-verification-2026-10-27.md)
 
 <details>
 <summary>Epistesys clone, DGCL, and alpha.2 implementation history</summary>

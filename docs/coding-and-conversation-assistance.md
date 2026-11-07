@@ -12,7 +12,15 @@
 
 この相談で決まっているのは「出力形式を維持する」「有効なときだけ使う」の二つです。設定名は次に相談する事項として残せます。実装へ進む場合は、合意した条件を次の依頼にも書き添えます。
 
-この例は相談の進め方を示しています。解析器は、対応する日英の指示文法で読み取れた条件を原文の該当箇所に結び付けます。条件や例外を読み取れなかった場合や、複数の解釈が残った場合は、依頼文と照合して補えます。
+この例は相談の進め方を示しており、そのままの文を解析器が受理したという記録ではありません。解析器は、対応する日英の指示文法で読み取れた条件を原文の該当箇所に結び付けます。条件や例外を読み取れなかった場合や、複数の解釈が残った場合は、依頼文と照合して補えます。要件を抽出できなかったことを、要件を満たしたとは扱いません。
+
+別セッションや別ホストへ、会話全体が自動共有されるわけではありません。相談から実装へ移る際も、引き継ぐ条件を明示します。
+
+### 依頼に添えること
+
+- 実現したい動作と、変えてはいけない動作。
+- 既に決めたことと、仮定・未決定のこと。
+- 対象のファイルや版、使える検査、実行してほしくない操作。
 
 <a id="checks-ja"></a>
 
@@ -39,11 +47,13 @@ C/C++はDeepGrammarの設計書で、コンパイラのフロントエンドとT
 
 設計を相談するときは、まず各案で必ず守る条件を揃えます。たとえば「既存の出力形式を維持する」が必須なら、その条件を固定して、案ごとに得られる動作と変更コストを比較します。
 
-有限モデルと測定入力を用意できる場合は、[EpiMapLossとEpiRecompScore](epimaploss-epirecompscore-formulas.md#日本語)を比較に使えます。たとえば `design_measurement` が扱うのは、スケジューリングの優先順位を変えたときの結果です。測れない項目は理由とともに残ります。
+有限モデルと測定入力を用意できる場合は、[EpiMapLossとEpiRecompScore](epimaploss-epirecompscore-formulas.md#日本語)を比較に使えます。たとえば `design_measurement` が扱うのは、スケジューリングの優先順位を変えたときの結果です。通常の会話から任意のプロジェクトを自動採点する機能ではありません。未測定・比較不能を0で埋めず、定義と値域が明確で観測だけが不足する場合は、測定契約に従って区間を保持できます。
 
 ### 変更後と再開時に、確認を更新する
 
 修復では、呼び出し側が渡した変更候補を許可されたファイルに適用し、変更後のソースで検証し直します。再開時に役立つのは、**どの版を変更したか、その版で何を検査したか、どの確認が残ったか**の記録です。進展なし、同じ状態の繰り返し、予算切れ、変更が適用されたか不明な失敗は、それぞれ別の結果として記録します。
+
+証拠は対象の版と有効期間に結び付いています。checkpointがあっても、再開時の権限・対象の版・証拠の有効性を再確認します。以前の成功だけで、変更後の検証を済ませたことにはしません。
 
 通常の `lc631-dgcl-run` で得られるのは診断と検証計画です。実際の検証や修復には登録ツールと権限が必要です。標準バイナリの `lc631-dgcl-coding-repair` と `lc631-dgcl-coding-resume` は、外部の実行先が未接続のため `Hold`（保留）を返します。SDKやパッケージ操作を使う手順は[実行ガイド](execution-guide.md#日本語)にあります。
 
@@ -57,6 +67,8 @@ C/C++はDeepGrammarの設計書で、コンパイラのフロントエンドとT
 | 証拠の更新・修復 | [evidence lifecycle](../scripts/lc631/crates/lc631-analysis/src/evidence_lifecycle.rs)、[repair loop](../scripts/lc631/crates/lc631-analysis/src/repair_loop.rs) |
 | 有限モデルの比較 | [design measurement](../scripts/lc631/crates/lc631-runtime/src/design_measurement.rs)、[joint selection](../scripts/lc631/crates/lc631-runtime/src/joint_selection.rs) |
 
+現在の試験範囲は[Beta-7.1の記録](epistesys-7.1.0-beta.1-release-notes-2026-11-06.md#日本語)、未対応・未観測の範囲は[既知の制約](known-limitations.md#日本語)で確認できます。
+
 ## English
 
 Choose **Conversation Projector** to ask for an explanation, think through a question or discuss a specification. Choose **Coding Projector** for implementation, tests or review.
@@ -67,7 +79,15 @@ Choose **Conversation Projector** to ask for an explanation, think through a que
 
 Two decisions have been made: preserve the output format and require the setting to be on. The setting name can remain an open question. If you move on to implementation, include the agreed conditions in the next request.
 
-This example illustrates a discussion. The parser links conditions it can read under its supported Japanese and English instruction grammar to their place in the original request. Refer to that text to fill in a missed exception or resolve an ambiguous condition.
+This illustrates a discussion, not an observation that the parser accepted the example verbatim. The parser links conditions it can read under its supported Japanese and English instruction grammar to their place in the original request. Refer to that text to fill in a missed exception or resolve an ambiguous condition. Failure to extract a requirement is not evidence that it was satisfied.
+
+Complete conversations are not automatically shared across sessions or hosts. Explicitly carry forward the relevant constraints when moving from discussion to implementation.
+
+### What to include in a request
+
+- Desired behavior and behavior that must remain unchanged.
+- Decisions already made, assumptions and open questions.
+- Target files and revisions, available checks and actions not to perform.
 
 <a id="checks-en"></a>
 
@@ -94,11 +114,13 @@ The DeepGrammar design lists a compiler frontend and Tree-sitter as candidate ba
 
 Begin with the constraints every proposal must satisfy. For example, if the existing output format must be preserved, keep it fixed while comparing the behavior each proposal adds and the cost of making the change.
 
-With a finite model and measurement inputs, you can use [EpiMapLoss and EpiRecompScore](epimaploss-epirecompscore-formulas.md#english) in that comparison. For example, `design_measurement` evaluates what happens when scheduling priorities change. Items that cannot be measured retain the reason.
+With a finite model and measurement inputs, you can use [EpiMapLoss and EpiRecompScore](epimaploss-epirecompscore-formulas.md#english) in that comparison. For example, `design_measurement` evaluates what happens when scheduling priorities change. It does not automatically score arbitrary projects from ordinary conversation. Do not fill unmeasured or incomparable items with zero; when the definition and range are clear but observations are missing, the measurement contract may allow an interval.
 
 ### Refresh checks after changes and on resume
 
 Repair applies a caller-supplied candidate to an authorized file and validates the changed source. For a handoff, record **which revision changed, what was checked against it and which checks remain open**. The repair process records lack of progress, repeated states, exhausted budgets and failures with uncertain effects separately.
+
+Evidence is bound to a revision and validity period. A checkpoint does not remove the need to recheck authority, the current revision and evidence validity when resuming. Earlier success does not establish validation of changed source.
 
 Ordinary `lc631-dgcl-run` returns diagnostics and a validation plan. Running checks or applying repairs requires registered tools and authority. In the standard binary, `lc631-dgcl-coding-repair` and `lc631-dgcl-coding-resume` return `Hold` because the external provider is unconnected. The [execution guide](execution-guide.md#english) covers the SDK and package operations.
 
@@ -111,3 +133,5 @@ Ordinary `lc631-dgcl-run` returns diagnostics and a validation plan. Running che
 | Registered invocation observations | [Production connection](../scripts/lc631/crates/lc631-analysis/src/production_connection.rs) |
 | Evidence refresh and repair | [Evidence lifecycle](../scripts/lc631/crates/lc631-analysis/src/evidence_lifecycle.rs), [repair loop](../scripts/lc631/crates/lc631-analysis/src/repair_loop.rs) |
 | Finite-model comparison | [Design measurement](../scripts/lc631/crates/lc631-runtime/src/design_measurement.rs), [joint selection](../scripts/lc631/crates/lc631-runtime/src/joint_selection.rs) |
+
+See the [Beta-7.1 record](epistesys-7.1.0-beta.1-release-notes-2026-11-06.md#english) for current test scope, and [known limitations](known-limitations.md#english) for unsupported and unobserved areas.

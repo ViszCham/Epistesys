@@ -4,7 +4,7 @@
 
 ## 日本語
 
-Epistesys（エピステシス）は、AIとの対話とコーディングを支援するツールです。相談では「何を守りたいか」「何がまだ決まっていないか」を原文に沿って整理します。コードを変更するときは、元の要求と検証結果を結び付けて「どの版で、何を確かめたか」を追えます。
+Epistesys（エピステシス）は、AIとの対話で整理した条件を、実装・検証・修復につなぐ支援ツールです。原文の条件、対応するコード、どの版で何を確かめたかを追いやすくします。相談では、守りたい条件と、まだ決まっていない点を分けて整理します。
 
 **Beta-7.1**（`7.1.0-beta.1`） · [具体的な使い方](docs/coding-and-conversation-assistance.md#日本語) · [起動手順](docs/execution-guide.md#日本語) · [文書索引](docs/README.md#日本語)
 
@@ -19,7 +19,7 @@ Epistesys（エピステシス）は、AIとの対話とコーディングを支
 | 機能を追加してレビューする | Coding Projectorで、どのコードが要求に対応するか、ビルドが通るか、登録されたテストから公開APIを呼べるか、受入条件を確かめたかを追う。 |
 | 修正後に作業を再開する | ソースの版と検証結果を照合し、変更後にやり直す検査を確認する。 |
 
-要求を構造化し、確認項目を作り、変更後に証拠を更新する手順をRustの型と状態遷移で実装しています。解析できなかった条件や検証結果が足りない項目は、未確認として残ります。[公開APIの検証例](docs/coding-and-conversation-assistance.md#checks-ja) · [対応する言語と操作](docs/coding-and-conversation-assistance.md#languages-ja)
+要求の構造化や検証結果の更新など、**開発手順の一部をRustの型と状態遷移で実装**しています。解析できなかった条件や検証結果が足りない項目は、未確認として残ります。[公開APIの検証例](docs/coding-and-conversation-assistance.md#checks-ja) · [対応する言語と操作](docs/coding-and-conversation-assistance.md#languages-ja)
 
 ### 実行例
 
@@ -31,9 +31,22 @@ Epistesys（エピステシス）は、AIとの対話とコーディングを支
 
 結果には、原文に対応する要求の候補、未解決事項、検証計画が含まれます。この例の「テストして」「公開しないで」は解析する依頼文です。実際にテストを実行する条件や修復・再開の手順は[実行ガイド](docs/execution-guide.md#日本語)、Codexでの選択と起動は[プラグイン接続契約](docs/plugin-host-integration.md#日本語)にあります。
 
+<a id="制御対象とアーキテクチャ"></a>
+
+### 主な機構
+
+| 機構 | 役割 |
+| --- | --- |
+| Conversation／Coding Projector | 説明・設計相談と、実装・テスト・レビューの入口を分ける。 |
+| DGCL・Program IR | 原文から読み取れた条件を要求の中間表現へ結び付け、要求別の検証計画を作る。 |
+| EpiMapLoss・EpiRecompScore | 条件を固定した有限モデルで、損失・利得・コストを比較する。 |
+| 証拠の更新・修復・再開 | 対象の版、実行した検査、残る確認を追い、変更後に再評価する。 |
+
+型・データフロー・実行条件は[アーキテクチャ](docs/system-architecture.md#日本語)と[DGCL実行契約](docs/dgcl-operating-profile-and-closure.md#日本語)で確認できます。
+
 ### TLCXの実装と測定
 
-[EpiMapLoss（写像保存損失）](docs/epimaploss-epirecompscore-formulas.md#map-ja)は、表現を変えたときに保存すべき性質がどれだけ失われたかを扱います。[EpiRecompScore（構造再編評価値）](docs/epimaploss-epirecompscore-formulas.md#score-ja)は、候補が何を組み替え、その変更で何を得て、何を失ったかを比較します。
+[EpiMapLoss（写像保存損失）](docs/epimaploss-epirecompscore-formulas.md#map-ja)は、表現を変えたときに保存すべき性質がどれだけ失われたかを扱います。[EpiRecompScore（構造再編評価値）](docs/epimaploss-epirecompscore-formulas.md#score-ja)は、候補が何を組み替えたかと、その変更による利得・損失・コストを比較します。
 
 同じ条件で比べる候補を $`z`$ とし、適用する軸 $`\mathcal A`$ と正の重み $`\rho_a`$ を先に固定します。
 
@@ -50,7 +63,19 @@ L=\operatorname{EpiMapLoss}(z)
 \end{aligned}
 ```
 
-各項の定義と計算例は[全40成分](docs/epimaploss-epirecompscore-formulas.md#catalog-ja)、[区間演算](docs/epimaploss-epirecompscore-formulas.md#kernels-ja)、[候補の選択と探索](docs/epimaploss-epirecompscore-formulas.md#policy-ja)にあります。未測定の項目には数値を割り当てません。操作の許可と完了判定には、それぞれ権限と検証結果を確認します。数値を使える条件は[測定契約](docs/tlcx-tl-screative-measurement-contract-v1-2026-10-29.md)に定めています。
+各項の定義と計算例は[全40成分](docs/epimaploss-epirecompscore-formulas.md#catalog-ja)、[区間演算](docs/epimaploss-epirecompscore-formulas.md#kernels-ja)、[候補の選択と探索](docs/epimaploss-epirecompscore-formulas.md#policy-ja)にあります。未測定・比較不能を0で埋めません。測る量と値域が定義され、観測だけが不足する場合は、契約に従って区間として扱えます。得点だけで実行許可や完了を決めません。適用条件は[測定契約](docs/tlcx-tl-screative-measurement-contract-v1-2026-10-29.md)をご覧ください。
+
+<a id="検証状態を読むための区別"></a>
+
+### 検証状態の読み方
+
+- **候補と検証結果**：候補は確認前の提案です。検証済みとするには、対象の版と条件に対応する証拠が必要です。
+- **証拠と権限**：テスト成功や得点、hash一致は、操作の許可を発行しません。
+- **出力確定と配信**：出力候補の確定、hostへの送信、受領は別の確認です。ここでの出力確定はGit commitとは異なります。
+
+詳しい定義は[用語表](docs/system-architecture.md#terminology-ja)にあります。
+
+<a id="開発で確かめたいこと"></a>
 
 ### 現在の位置付け
 
@@ -58,7 +83,9 @@ Beta-7.1の[検証記録](docs/epistesys-7.1.0-beta.1-release-notes-2026-11-06.m
 
 ### 前身システムの探索的評価：GB-CC75
 
-前身のLabyrinth-Codexでは、ComplexConstraints由来の課題で、65問を等しく重み付けした平均適合度が74.38%から94.10%（+19.71ポイント）、167組の比較で全基準を満たした割合が39.52%から48.50%（+8.98ポイント）でした。これは当時の課題と評価器に限った結果です。[評価方法と限界](docs/research/gb-cc75-study.md) · [再計算用の集計](benchmarks/gb-cc75/2026-08-18/README.md)
+前身のLabyrinth-Codexでは、ComplexConstraints由来の課題で、65問を等しく重み付けした平均適合度が74.38%から94.10%（+19.71ポイント）、167組の比較で全基準を満たした割合が39.52%から48.50%（+8.98ポイント）でした。差は丸め前の値から算出しています。
+
+これは前身システムの後ろ向き・探索的な集計であり、現在のEpistesysの性能や、写像損失の因果的な効果を示すものではありません。[評価方法と限界](docs/research/gb-cc75-study.md) · [再計算用の集計](benchmarks/gb-cc75/2026-08-18/README.md)
 
 ### 文書の読み順
 
@@ -70,7 +97,7 @@ Beta-7.1の[検証記録](docs/epistesys-7.1.0-beta.1-release-notes-2026-11-06.m
 
 ## English
 
-Epistesys assists with AI conversations and coding. In a discussion, it helps you refer back to the original wording to identify constraints and open questions. When changing code, it links requirements to validation results so you can see what was checked and against which revision.
+Epistesys connects constraints clarified in AI conversations to implementation, validation and repair. It helps you trace the original conditions, corresponding code, and what was checked against which revision. In a discussion, it separates constraints to preserve from open questions.
 
 **Beta-7.1** (`7.1.0-beta.1`) · [Examples](docs/coding-and-conversation-assistance.md#english) · [Run Epistesys](docs/execution-guide.md#english) · [Documentation index](docs/README.md#english)
 
@@ -85,7 +112,7 @@ Epistesys assists with AI conversations and coding. In a discussion, it helps yo
 | Add and review a feature | Use Coding Projector to track which code addresses the requirement, whether it builds, whether a registered test calls the public API, and which acceptance conditions were checked. |
 | Resume after a change | Match validation results to the source revision and identify which checks to repeat. |
 
-Rust types and state transitions implement the steps for representing requirements, planning checks and refreshing evidence after a change. Unparsed conditions and items with missing evidence remain open. [Public API example](docs/coding-and-conversation-assistance.md#checks-en) · [Language and operation coverage](docs/coding-and-conversation-assistance.md#languages-en)
+It implements **parts of the development procedure as Rust types and state transitions**, including requirement structure and validation-evidence refresh. Unparsed conditions and items with missing evidence remain open. [Public API example](docs/coding-and-conversation-assistance.md#checks-en) · [Language and operation coverage](docs/coding-and-conversation-assistance.md#languages-en)
 
 ### Execution examples
 
@@ -96,6 +123,19 @@ In a package that includes the matching Windows binary, open PowerShell at the p
 ```
 
 The result includes candidate requirements tied to the original text, unresolved items and a validation plan. The request to test the package and the instruction to keep it unpublished are inputs to this diagnostic. See the [execution guide](docs/execution-guide.md#english) for running tests, applying a repair or resuming work, and the [plugin integration contract](docs/plugin-host-integration.md#english) for selecting and invoking Epistesys in Codex.
+
+<a id="control-scope-and-architecture"></a>
+
+### Main mechanisms
+
+| Mechanism | Role |
+| --- | --- |
+| Conversation / Coding Projector | Separate explanation and design discussions from implementation, tests and review. |
+| DGCL and Program IR | Link conditions read from the original text to requirement IR and create per-requirement validation plans. |
+| EpiMapLoss and EpiRecompScore | Compare losses, gains and costs within finite models under fixed conditions. |
+| Evidence refresh, repair and resume | Track the relevant revision, checks performed and remaining checks, then reevaluate after changes. |
+
+See the [architecture](docs/system-architecture.md#english) and [DGCL operating contract](docs/dgcl-operating-profile-and-closure.md#english) for types, dataflow and execution conditions.
 
 ### TLCX implementation and measures
 
@@ -116,7 +156,19 @@ L=\operatorname{EpiMapLoss}(z)
 \end{aligned}
 ```
 
-The reference covers [all 40 components](docs/epimaploss-epirecompscore-formulas.md#catalog-en), [interval arithmetic](docs/epimaploss-epirecompscore-formulas.md#kernels-en) and [candidate selection and search](docs/epimaploss-epirecompscore-formulas.md#policy-en). Unmeasured items have no numeric value. Operations require explicit authority, and completion requires validation evidence. The [measurement contract](docs/tlcx-tl-screative-measurement-contract-v1-2026-10-29.md) defines when each value applies.
+The reference covers [all 40 components](docs/epimaploss-epirecompscore-formulas.md#catalog-en), [interval arithmetic](docs/epimaploss-epirecompscore-formulas.md#kernels-en) and [candidate selection and search](docs/epimaploss-epirecompscore-formulas.md#policy-en). Do not fill unmeasured or incomparable items with zero. When the quantity and range are defined but observations are missing, the contract may allow an interval. A score alone neither authorizes execution nor establishes completion. See the [measurement contract](docs/tlcx-tl-screative-measurement-contract-v1-2026-10-29.md) for applicability.
+
+<a id="interpreting-verification-states"></a>
+
+### Reading verification states
+
+- **Candidates and validation results:** a candidate is a proposal awaiting checks. Validation requires evidence for the relevant revision and conditions.
+- **Evidence and authority:** passing tests, scores and matching hashes do not issue operation permissions.
+- **Finalization and delivery:** finalizing a candidate, sending it to a host and observing receipt are separate checks. Output finalization here is not a Git commit.
+
+See the [glossary](docs/system-architecture.md#terminology-en) for detailed definitions.
+
+<a id="what-we-want-to-check-in-development"></a>
 
 ### Current status
 
@@ -124,7 +176,9 @@ The [Beta-7.1 verification record](docs/epistesys-7.1.0-beta.1-release-notes-202
 
 ### Exploratory predecessor evaluation: GB-CC75
 
-For the predecessor, Labyrinth-Codex, mean adherence on tasks derived from ComplexConstraints rose from 74.38% to 94.10% (+19.71 points) with 65 questions weighted equally. The share meeting every criterion went from 39.52% to 48.50% (+8.98 points) over 167 paired observations. These results apply to the tasks and evaluator used at the time. [Methods and limitations](docs/research/gb-cc75-study.md) · [Recomputable aggregates](benchmarks/gb-cc75/2026-08-18/README.md)
+For the predecessor, Labyrinth-Codex, mean adherence on tasks derived from ComplexConstraints rose from 74.38% to 94.10% (+19.71 points) with 65 questions weighted equally. The share meeting every criterion went from 39.52% to 48.50% (+8.98 points) over 167 paired observations. Differences use unrounded values.
+
+This is a retrospective exploratory summary for the predecessor, not evidence of current Epistesys performance or a causal effect of mapping loss. [Methods and limitations](docs/research/gb-cc75-study.md) · [Recomputable aggregates](benchmarks/gb-cc75/2026-08-18/README.md)
 
 ### Documentation routes
 
