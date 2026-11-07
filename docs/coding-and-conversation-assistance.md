@@ -1,54 +1,61 @@
 # 会話とコーディングの支援 / Conversation and coding assistance
 
+[日本語](#日本語) · [English](#english)
+
 ## 日本語
 
-Epistesysは、相談で整理した要件を、実装・検証・修復につなぐための開発支援ツールです。要求の扱い方、検証項目の分け方、証拠の更新、修復・再開といった**開発手順の一部をRustの型と状態遷移で実装**しています。モデルに代わってコードを書く仕組みではありません。
-
-### どんな場面で使うか
-
-| 場面 | 整理・確認したいこと |
-| --- | --- |
-| 仕様を相談する | 守る条件、仮定、例外、まだ決めていない点 |
-| 既存機能を変更する | 新しい動作、呼び出し経路、従来の互換性 |
-| レビューする | 確認済みの事実、推測、足りない検証 |
-| 複数の案を比べる | 共通の必須条件、利点、損失、コスト、比較できない項目 |
-| 中断した作業を再開する | 変更した版、実行した検査、その後に変わった条件 |
+説明を聞きたいとき、考えを整理したいとき、仕様を相談したいときには **Conversation Projector** を選びます。実装・テスト・レビューの依頼には **Coding Projector** を選びます。
 
 ### 相談を、確認できる要件へ
 
-Conversation Projectorは説明・設計相談を、Coding Projectorは実装・テスト・レビューを扱う入口です。共通の解析経路で原文との対応を保持し、引用やコード片などの領域を分けます。対応する指示文法の範囲で、否定・条件・例外・適用範囲・依存関係を要求へ結び付け、解釈が一つに決まらない箇所は未解決事項として残します。要件を抽出できなかったことを、要件を満たしたとは扱いません。
+> 今の出力形式は維持したい。新機能は設定を有効にしたときだけ使いたい。設定の名前はまだ決めていない。
 
-例えば「既存の出力形式は維持したい。新機能は設定を有効にしたときだけ使いたい」という相談なら、出力互換性と有効化条件を別の確認項目として扱います。これは相談の意図の例であり、この日本語がそのままパーサーに受理される保証ではありません。解析できなかった条件は明示して補う必要があります。
+この相談で決まっているのは「出力形式を維持する」「有効なときだけ使う」の二つです。設定名は次に相談する事項として残せます。実装へ進む場合は、合意した条件を次の依頼にも書き添えます。
 
-相談から実装へ移るときは、合意した条件を次の依頼にも含めます。会話の全内容が、別セッションや別ホストへ自動共有されるわけではありません。
+この例は相談の進め方を示しており、そのままの文を解析器が受理したという記録ではありません。解析器は、対応する日英の指示文法で読み取れた条件を原文の該当箇所に結び付けます。条件や例外を読み取れなかった場合や、複数の解釈が残った場合は、依頼文と照合して補えます。要件を抽出できなかったことを、要件を満たしたとは扱いません。
 
-### 「できた」の根拠を分ける
+別セッションや別ホストへ、会話全体が自動共有されるわけではありません。相談から実装へ移る際も、引き継ぐ条件を明示します。
 
-要求別の検証計画では、実装対象との対応、コンパイラ検査、実行時テスト、登録された公開APIの直接呼出し、受入条件を分けます。ビルドが通っても、計画に必要な呼出しや互換性の確認が欠けていれば、その項目は未確認です。
-
-レビューでは、登録された検証結果から「どの版で、何を実行し、何が分かったか」を追えます。対象は検証用のプログラムと指定した検査条件の範囲です。リポジトリ内の全呼出し経路や、依頼から漏れなく要件を抽出できたことまで保証するものではありません。
-
-### 変更後と再開時に、確認を更新する
-
-証拠には対象の版や有効期間があり、変更前の成功をそのまま流用しません。修復経路は、呼出し側が渡した候補を許可された対象へ適用し、変更後のソースと証拠で再評価します。進展なし・循環・予算不足・失効・作用が不明な失敗を区別します。
-
-引継ぎには、**変更内容・実行した検査・残る課題**をまとめると役立ちます。checkpointがあっても、再開時の権限や対象の版は再確認します。修復候補の生成や検証内容の妥当性まで、自動的に保証されるわけではありません。
-
-### 設計案を同じ条件で比べる
-
-設計相談では、必須条件を先に揃え、各案の利点・損失・コストを分けて考えます。利用者や呼出し側が有限モデルと測定入力を用意した場合は、EpiMapLoss、EpiRecompScoreや候補選択APIを比較材料に使えます。未測定・比較不能をゼロ扱いせず、理由とともに残します。
-
-これらは、通常の会話から任意の設計を自動採点する機能ではありません。例えば`design_measurement`は有限のスケジューリングモデルを扱い、任意のRustプロジェクトの設計品質を判定するものではありません。巨大ファイルの防止や、常に最良のモジュール分割が得られるという説明はしません。
-
-### まず何を渡せばよいか
-
-相談や修正依頼には、次の内容を添えると確認項目を作りやすくなります。
+### 依頼に添えること
 
 - 実現したい動作と、変えてはいけない動作。
 - 既に決めたことと、仮定・未決定のこと。
 - 対象のファイルや版、使える検査、実行してほしくない操作。
 
-通常の`lc631-dgcl-run`は解析候補と検証計画を返す診断です。外部ツールの実行やファイル修復まで一括で行いません。実際の修復・再開には、対応する権限、登録ツール、検証計画と、SDKまたはpackage操作への接続が必要です。現在の標準実行ファイルでは、`lc631-dgcl-coding-repair`／`lc631-dgcl-coding-resume`は外部provider未接続としてHold（保留）を返します。引数や環境変数だけで有効化するものではありません。[実行ガイド](execution-guide.md)と[DGCL実行契約](dgcl-operating-profile-and-closure.md)をご覧ください。
+<a id="checks-ja"></a>
+
+### 「できた」の根拠を分ける
+
+リポジトリの検証用パッケージには、2個の整数を足す公開関数 `checked_add` があります。同じ関数に対して、次のテストはそれぞれ別の問いに答えます。
+
+| 確かめたいこと | テストに書かれている確認 |
+| --- | --- |
+| 関数は境界値を正しく扱うか | [ライブラリ内の単体テスト](../fixtures/dgcl/producer-package/src/lib.rs)では `2 + 2` が `Some(4)`、`u32::MAX + 1` が `None` になることを確認する。 |
+| 利用側から公開APIを呼べるか | [接続テスト](../fixtures/dgcl/producer-package/tests/connection.rs)ではテスト側から `dgcl_producer_fixture::checked_add(3, 7)` を呼び、戻り値が `Some(10)` であることを確認する。 |
+
+Epistesysの検証計画では、コンパイル、実行時テスト、登録された検証用プログラムからの公開API呼び出し、受入条件を要求ごとに扱います。ビルドの成功だけが記録されている段階では、公開APIの呼び出しは未確認です。接続テストの結果が示す範囲は、登録した呼び出しと、そこで調べた戻り値や条件までです。[検証の種類と実行条件](dgcl-operating-profile-and-closure.md#日本語)
+
+<a id="languages-ja"></a>
+
+### 言語ごとの対応範囲
+
+プログラム解析の対象は **Rust・Python・Assembly** です。登録ツールでビルドとテストを実行する経路はRust/Cargo向けで、ファイル修復は許可された既存のRustファイルが対象です。[解析対象の言語定義](../scripts/lc631/crates/lc631-analysis/src/model.rs) · [検証・修復の範囲](known-limitations.md#日本語)
+
+C/C++はDeepGrammarの設計書で、コンパイラのフロントエンドとTree-sitterを使う候補に挙がっています。Beta-7.1ではC/C++専用の解析・ビルド・修復は未対応です。[設計書のバックエンド候補](v6.3.1-deepgrammar-parser-engine-research-and-design-2026-08-25.md#14-backend配置)
+
+### 設計案を同じ条件で比べる
+
+設計を相談するときは、まず各案で必ず守る条件を揃えます。たとえば「既存の出力形式を維持する」が必須なら、その条件を固定して、案ごとに得られる動作と変更コストを比較します。
+
+有限モデルと測定入力を用意できる場合は、[EpiMapLossとEpiRecompScore](epimaploss-epirecompscore-formulas.md#日本語)を比較に使えます。たとえば `design_measurement` が扱うのは、スケジューリングの優先順位を変えたときの結果です。通常の会話から任意のプロジェクトを自動採点する機能ではありません。未測定・比較不能を0で埋めず、定義と値域が明確で観測だけが不足する場合は、測定契約に従って区間を保持できます。
+
+### 変更後と再開時に、確認を更新する
+
+修復では、呼び出し側が渡した変更候補を許可されたファイルに適用し、変更後のソースで検証し直します。再開時に役立つのは、**どの版を変更したか、その版で何を検査したか、どの確認が残ったか**の記録です。進展なし、同じ状態の繰り返し、予算切れ、変更が適用されたか不明な失敗は、それぞれ別の結果として記録します。
+
+証拠は対象の版と有効期間に結び付いています。checkpointがあっても、再開時の権限・対象の版・証拠の有効性を再確認します。以前の成功だけで、変更後の検証を済ませたことにはしません。
+
+通常の `lc631-dgcl-run` で得られるのは診断と検証計画です。実際の検証や修復には登録ツールと権限が必要です。標準バイナリの `lc631-dgcl-coding-repair` と `lc631-dgcl-coding-resume` は、外部の実行先が未接続のため `Hold`（保留）を返します。SDKやパッケージ操作を使う手順は[実行ガイド](execution-guide.md#日本語)にあります。
 
 ### 実装を追う入口
 
@@ -60,57 +67,62 @@ Conversation Projectorは説明・設計相談を、Coding Projectorは実装・
 | 証拠の更新・修復 | [evidence lifecycle](../scripts/lc631/crates/lc631-analysis/src/evidence_lifecycle.rs)、[repair loop](../scripts/lc631/crates/lc631-analysis/src/repair_loop.rs) |
 | 有限モデルの比較 | [design measurement](../scripts/lc631/crates/lc631-runtime/src/design_measurement.rs)、[joint selection](../scripts/lc631/crates/lc631-runtime/src/joint_selection.rs) |
 
-実装と試験の状況は[Beta-7.1の記録](epistesys-7.1.0-beta.1-release-notes-2026-11-06.md)、数式は[測定式の一覧](epimaploss-epirecompscore-formulas.md)、未観測の範囲は[既知の制約](known-limitations.md)へ分けています。一般的な精度向上、手戻り削減率、長期会話の保持率を実証したという説明はしていません。
+現在の試験範囲は[Beta-7.1の記録](epistesys-7.1.0-beta.1-release-notes-2026-11-06.md#日本語)、未対応・未観測の範囲は[既知の制約](known-limitations.md#日本語)で確認できます。
 
 ## English
 
-Epistesys helps connect requirements discussed in conversation to implementation, validation and repair. It implements **parts of the development procedure as Rust types and state transitions**: requirement handling, distinct validation obligations, evidence refresh, repair and resume. It does not replace the model that writes code.
-
-### When to use it
-
-| Situation | Questions to clarify or check |
-| --- | --- |
-| Discuss a specification | Constraints, assumptions, exceptions and undecided points |
-| Modify existing behavior | New behavior, invocation paths and compatibility |
-| Review a change | Observed facts, inferences and missing validation |
-| Compare alternatives | Shared hard requirements, benefits, losses, cost and incomparable items |
-| Resume interrupted work | Changed revision, checks performed and conditions changed since then |
+Choose **Conversation Projector** to ask for an explanation, think through a question or discuss a specification. Choose **Coding Projector** for implementation, tests or review.
 
 ### From discussion to checkable requirements
 
-Conversation Projector is the entry for explanation/design discussions; Coding Projector handles implementation, testing and review. Their common analysis path retains source correspondence and separates regions such as quotes and code. Supported controlled-grammar negation, conditions, exceptions, scopes and dependencies are linked to requirements; ambiguous interpretations remain unresolved. Failure to extract requirements is not treated as satisfying them.
+> Keep the existing output format. Enable the new feature only when its setting is on. We haven't chosen a name for the setting yet.
 
-For example, a discussion about preserving an output format while enabling a new feature only through a setting has separate compatibility and enablement checks. This illustrates the intent, not guaranteed parser acceptance of the Japanese example. Conditions that were not parsed must be made explicit and supplemented.
+Two decisions have been made: preserve the output format and require the setting to be on. The setting name can remain an open question. If you move on to implementation, include the agreed conditions in the next request.
 
-Carry agreed constraints into the implementation request. Complete conversations are not automatically shared across sessions or hosts.
+This illustrates a discussion, not an observation that the parser accepted the example verbatim. The parser links conditions it can read under its supported Japanese and English instruction grammar to their place in the original request. Refer to that text to fill in a missed exception or resolve an ambiguous condition. Failure to extract a requirement is not evidence that it was satisfied.
+
+Complete conversations are not automatically shared across sessions or hosts. Explicitly carry forward the relevant constraints when moving from discussion to implementation.
+
+### What to include in a request
+
+- Desired behavior and behavior that must remain unchanged.
+- Decisions already made, assumptions and open questions.
+- Target files and revisions, available checks and actions not to perform.
+
+<a id="checks-en"></a>
 
 ### Separate the evidence for completion
 
-Per-requirement plans distinguish implementation bindings, compiler checks, runtime tests, registered direct public-API calls and acceptance conditions. A successful build leaves an item open when a required invocation or compatibility check is missing.
+The repository's verification fixture exposes a function called `checked_add` that adds two integers. Two tests ask different questions about that function.
 
-Review can trace registered validation results to the revision, execution and observations they describe. The scope is the validation program and specified assertions, not every repository call path or exhaustive extraction of all intended requirements.
+| What do you want to know? | What the test checks |
+| --- | --- |
+| Does the function handle boundary values? | The [library unit test](../fixtures/dgcl/producer-package/src/lib.rs) checks that `2 + 2` returns `Some(4)` and `u32::MAX + 1` returns `None`. |
+| Can a caller use the public API? | The [connection test](../fixtures/dgcl/producer-package/tests/connection.rs) calls `dgcl_producer_fixture::checked_add(3, 7)` from outside the library and checks for `Some(10)`. |
 
-### Refresh checks after changes and on resume
+For each requirement, the validation plan distinguishes compilation, runtime tests, public API calls from a registered driver, and acceptance conditions. When only a successful build has been recorded, the API call is still unverified. The connection test provides evidence for the registered call and its specific assertions. [Validation types and operating conditions](dgcl-operating-profile-and-closure.md#english)
 
-Evidence is revision- and validity-bound; earlier success is not automatically reusable. The repair path applies a caller-supplied candidate to an authorized target and reevaluates it with a new snapshot and evidence. It separates no progress, cycles, budget exhaustion, expiry and failures with uncertain effects.
+<a id="languages-en"></a>
 
-A useful handoff records **changes, checks performed and remaining work**. A checkpoint does not remove the need to recheck authority and current revisions. Candidate generation and the adequacy of validation are not automatically guaranteed.
+### Language coverage
+
+The program analysis module handles **Rust, Python and Assembly**. The registered build and test path targets Rust/Cargo. File repair applies to authorized, existing Rust files. [Analysis language definitions](../scripts/lc631/crates/lc631-analysis/src/model.rs) · [Validation and repair scope](known-limitations.md#english)
+
+The DeepGrammar design lists a compiler frontend and Tree-sitter as candidate backends for C/C++. Dedicated C/C++ analysis, build and repair are outside the Beta-7.1 implementation. [Backend candidates in the design](v6.3.1-deepgrammar-parser-engine-research-and-design-2026-08-25.md#14-backend-placement)
 
 ### Compare designs under shared conditions
 
-In design discussions, establish hard requirements first and separate benefits, loss and cost. With finite models and measurement inputs provided by the user or caller, EpiMapLoss, EpiRecompScore and selection APIs can supply comparison material. Unmeasured or incomparable items remain explicit rather than becoming zero.
+Begin with the constraints every proposal must satisfy. For example, if the existing output format must be preserved, keep it fixed while comparing the behavior each proposal adds and the cost of making the change.
 
-These APIs do not automatically score arbitrary designs from ordinary conversation. For example, `design_measurement` uses a finite scheduling model, not an oracle for arbitrary Rust-project architecture. There is no guarantee of preventing large files or always producing the best module split.
+With a finite model and measurement inputs, you can use [EpiMapLoss and EpiRecompScore](epimaploss-epirecompscore-formulas.md#english) in that comparison. For example, `design_measurement` evaluates what happens when scheduling priorities change. It does not automatically score arbitrary projects from ordinary conversation. Do not fill unmeasured or incomparable items with zero; when the definition and range are clear but observations are missing, the measurement contract may allow an interval.
 
-### What to provide first
+### Refresh checks after changes and on resume
 
-The following information helps identify checks for a discussion or change request:
+Repair applies a caller-supplied candidate to an authorized file and validates the changed source. For a handoff, record **which revision changed, what was checked against it and which checks remain open**. The repair process records lack of progress, repeated states, exhausted budgets and failures with uncertain effects separately.
 
-- Desired behavior and behavior that must stay unchanged.
-- Decisions already made, assumptions and undecided points.
-- Target files/revisions, available checks and actions not to perform.
+Evidence is bound to a revision and validity period. A checkpoint does not remove the need to recheck authority, the current revision and evidence validity when resuming. Earlier success does not establish validation of changed source.
 
-Ordinary `lc631-dgcl-run` returns analysis candidates and a validation plan; it does not automatically execute external tools or repair files. Actual repair/resume requires relevant authority, registered tools, validation plans and an SDK or package-operation connection. In the current standard binary, `lc631-dgcl-coding-repair` / `lc631-dgcl-coding-resume` returns Hold because the external provider is not connected; arguments or environment variables alone do not enable it. See the [execution guide](execution-guide.md) and [DGCL contract](dgcl-operating-profile-and-closure.md).
+Ordinary `lc631-dgcl-run` returns diagnostics and a validation plan. Running checks or applying repairs requires registered tools and authority. In the standard binary, `lc631-dgcl-coding-repair` and `lc631-dgcl-coding-resume` return `Hold` because the external provider is unconnected. The [execution guide](execution-guide.md#english) covers the SDK and package operations.
 
 ### Implementation entry points
 
@@ -122,4 +134,4 @@ Ordinary `lc631-dgcl-run` returns analysis candidates and a validation plan; it 
 | Evidence refresh and repair | [Evidence lifecycle](../scripts/lc631/crates/lc631-analysis/src/evidence_lifecycle.rs), [repair loop](../scripts/lc631/crates/lc631-analysis/src/repair_loop.rs) |
 | Finite-model comparison | [Design measurement](../scripts/lc631/crates/lc631-runtime/src/design_measurement.rs), [joint selection](../scripts/lc631/crates/lc631-runtime/src/joint_selection.rs) |
 
-Implementation/tests are recorded in the [Beta-7.1 notes](epistesys-7.1.0-beta.1-release-notes-2026-11-06.md), equations in the [formula reference](epimaploss-epirecompscore-formulas.md), and unobserved scope in [known limitations](known-limitations.md). No general accuracy improvement, rework-reduction rate or long-conversation retention rate is established here.
+See the [Beta-7.1 record](epistesys-7.1.0-beta.1-release-notes-2026-11-06.md#english) for current test scope, and [known limitations](known-limitations.md#english) for unsupported and unobserved areas.
